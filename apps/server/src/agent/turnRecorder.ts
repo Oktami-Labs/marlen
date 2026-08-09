@@ -10,7 +10,7 @@ import { db, schema, sqlite } from "../db/index.js";
 import { serializeRefs } from "./emailRefs.js";
 import { applyConversationFocus, focusFromCard, focusFromRefs } from "./focus.js";
 import { buildTurnPrompt } from "./prompt.js";
-import { isRateLimitFailure, type RunHandlers } from "./run.js";
+import { ContextOverflowError, isRateLimitFailure, type RunHandlers } from "./run.js";
 import { type AgentSession, createEphemeralSession, getOrCreateSession } from "./sessionCache.js";
 
 /**
@@ -30,6 +30,33 @@ function stripDashes(text: string): string {
     .replace(/(\d)[—–―](\d)/g, "$1-$2")
     .replace(/^[ \t]*[—–―][ \t]*/gm, "- ")
     .replace(/[ \t]*[—–―][ \t]*/g, ", ");
+}
+
+/**
+ * The transcript row for a failed turn. The failures a user can act on say what
+ * to do about them; anything else carries the provider's own words, which is the
+ * most useful thing available for a one-off.
+ */
+function failureRow(error: unknown, failure: string): string {
+  if (isRateLimitFailure(failure)) {
+    return (
+      "This turn was stopped by the AI provider's rate limit. Wait a moment and send your " +
+      "message again, or switch providers in Settings."
+    );
+  }
+  // An overflow compaction could not reduce is not about this conversation:
+  // the system prompt and tool definitions alone exceed the window, so a new
+  // chat fails identically and telling the user to start one wastes their time.
+  // The levers that do help are the ones that shrink the fixed part.
+  if (error instanceof ContextOverflowError && error.irreducible) {
+    return (
+      "This turn was refused by the AI provider: this model's context window is too small for " +
+      "Marlen's own instructions and connected-account tools, before any conversation. A new " +
+      "chat will fail the same way. Pick a model with a larger context window in Settings, " +
+      "disconnect accounts you don't need, or tidy up a large memory under Knowledge."
+    );
+  }
+  return `This turn failed: ${failure}`;
 }
 
 function collectTurnActivity(conversationId: string): {
@@ -371,14 +398,11 @@ export function beginTurn(conversationId: string): Turn {
             await recordOutcome("This reply was cancelled before it finished.");
             throw new Error("turn cancelled: the signal was aborted before the turn finished");
           }
-          // Failed: the agent threw on its own. A rate-limit rejection gets a
-          // plain-language row; the raw provider JSON helps nobody in a transcript.
+          // Failed: the agent threw on its own. A rate-limit rejection and a
+          // refused-for-size request each get a plain-language row naming the
+          // way out; the raw provider text helps nobody in a transcript.
           const failure = errorMessage(error);
-          await recordOutcome(
-            isRateLimitFailure(failure)
-              ? "This turn was stopped by the AI provider's rate limit. Wait a moment and send your message again, or switch providers in Settings."
-              : `This turn failed: ${failure}`,
-          );
+          await recordOutcome(failureRow(error, failure));
           throw error;
         }
 

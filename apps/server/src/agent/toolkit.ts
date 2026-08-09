@@ -27,6 +27,25 @@ export function textResult(value: string, card?: AgentCard) {
   };
 }
 
+/**
+ * Ceiling for one tool result's text, about 10k tokens. A result stays in the
+ * transcript for the rest of the conversation and compaction keeps the recent
+ * tail verbatim, so one unbounded result pushes every later turn of that
+ * conversation past the model's context window — and there is nothing left for
+ * compaction to trim, because the tail it keeps is the oversized result itself.
+ * Every tool that returns an upstream payload verbatim goes through this.
+ */
+const TOOL_TEXT_MAX_CHARS = 40_000;
+
+/** `text` bounded to TOOL_TEXT_MAX_CHARS, `hint` telling the model how to ask for less. */
+export function clampToolText(text: string, hint: string): string {
+  if (text.length <= TOOL_TEXT_MAX_CHARS) return text;
+  return (
+    `${text.slice(0, TOOL_TEXT_MAX_CHARS)}\n\n` +
+    `[Output truncated at ${TOOL_TEXT_MAX_CHARS} characters. ${hint}]`
+  );
+}
+
 export interface ToolCtx {
   toolCallId: string;
   signal?: AbortSignal;

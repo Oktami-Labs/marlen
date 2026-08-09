@@ -1,5 +1,6 @@
 import {
   type AgentMessage,
+  estimateContextTokens,
   estimateTokens,
   serializeConversation,
 } from "@earendil-works/pi-agent-core";
@@ -29,16 +30,71 @@ const MIN_PREFIX_MESSAGES = 4;
 
 const MAX_SERIALIZED_CHARS = 120_000;
 
+/**
+ * Per-message ceiling for the kept tail. findCutIndex works between messages,
+ * so it cannot cut into one, and a single message larger than the window would
+ * otherwise be kept verbatim by every pass — compaction reporting success while
+ * shrinking nothing, and the conversation failing forever. Matches the tool
+ * ceiling (toolkit.ts TOOL_TEXT_MAX_CHARS): new results arrive already bounded,
+ * so this is what brings a transcript recorded before that cap back inside it.
+ */
+const KEEP_MESSAGE_MAX_CHARS = 40_000;
+
 const DROPPED_NOTE =
   "[Note: earlier content in this range was dropped to fit the summarizer's input limit.]";
+
+const TRUNCATED_NOTE =
+  "\n\n[This content was truncated here to keep the conversation inside the model's context window. " +
+  "Run the tool again for a narrower slice if you still need the rest.]";
 
 const SUMMARY_PREFIX =
   "[Summary of the earlier conversation — older turns were compacted to fit the context window:]";
 
+/**
+ * Context cost of one conversation state. The provider's own input count for
+ * the last assistant turn covers the system prompt and every tool definition —
+ * the two parts a character estimate cannot see, and on an install with several
+ * connected accounts the larger share of the request. Anchor on it wherever the
+ * transcript carries one (pi records usage per assistant message) and fall back
+ * to characters plus the prompt for a transcript rebuilt from the message log,
+ * which records no usage (history.ts).
+ */
 function estimateStateTokens(systemPrompt: string, messages: AgentMessage[]): number {
-  let total = Math.ceil(systemPrompt.length / 4);
-  for (const message of messages) total += estimateTokens(message);
-  return total;
+  const { tokens, usageTokens } = estimateContextTokens(messages);
+  return usageTokens > 0 ? tokens : tokens + Math.ceil(systemPrompt.length / 4);
+}
+
+function clampText(text: string): string {
+  return text.length <= KEEP_MESSAGE_MAX_CHARS
+    ? text
+    : text.slice(0, KEEP_MESSAGE_MAX_CHARS) + TRUNCATED_NOTE;
+}
+
+/**
+ * The same message with its text bounded to KEEP_MESSAGE_MAX_CHARS, or the
+ * message itself when it already fits. Returned by identity when nothing
+ * changed, which is how the caller tells whether a forced pass found anything
+ * to shrink. Content is a string or a block list across pi's message union, so
+ * both shapes are handled structurally; each branch puts back the shape it took
+ * out, which is what makes the widening casts sound.
+ */
+function clampMessage(message: AgentMessage): AgentMessage {
+  const content = (message as { content?: unknown }).content;
+  if (typeof content === "string") {
+    const clamped = clampText(content);
+    return clamped === content ? message : ({ ...message, content: clamped } as AgentMessage);
+  }
+  if (!Array.isArray(content)) return message;
+  let clampedAny = false;
+  const blocks = content.map((block: unknown) => {
+    const b = block as { type?: unknown; text?: unknown };
+    if (b.type !== "text" || typeof b.text !== "string") return block;
+    const clamped = clampText(b.text);
+    if (clamped === b.text) return block;
+    clampedAny = true;
+    return { ...b, text: clamped };
+  });
+  return clampedAny ? ({ ...message, content: blocks } as AgentMessage) : message;
 }
 
 /**
@@ -142,14 +198,45 @@ export async function compactedMessages(
   try {
     const { systemPrompt, model, messages } = state;
     const estimatedTokens = estimateStateTokens(systemPrompt, messages);
-    if (!options.force && estimatedTokens <= COMPACT_TRIGGER_FRACTION * model.contextWindow) {
-      return null;
+    if (!options.force) {
+      if (estimatedTokens <= COMPACT_TRIGGER_FRACTION * model.contextWindow) return null;
+    } else {
+      // A forced pass only happens after the provider refused the request for
+      // size, so this pairs what we believed the request cost with the window we
+      // believed it had. An estimate far under the window means the refusal did
+      // not come from the transcript at all, and no amount of trimming will
+      // clear it — the model's catalogued window is wrong for this account, or
+      // the provider rejected the request for another reason and said "context".
+      log.warn(
+        {
+          estimatedTokens,
+          contextWindow: model.contextWindow,
+          messages: messages.length,
+        },
+        "provider refused a request for size; compacting before the retry",
+      );
     }
 
     const cutIndex = findCutIndex(messages);
     const prefix = messages.slice(0, cutIndex);
-    if (prefix.length < MIN_PREFIX_MESSAGES) return null;
-    const kept = messages.slice(cutIndex);
+    // The kept tail is bounded per message on the way through, so a result
+    // bigger than the window can't ride out every pass untouched.
+    const kept = messages.slice(cutIndex).map(clampMessage);
+    const clamped = kept.some((message, i) => message !== messages[cutIndex + i]);
+
+    if (prefix.length < MIN_PREFIX_MESSAGES) {
+      // Too little history to be worth the summarizer round trip. A forced pass
+      // is recovering from a request the provider already refused, so it still
+      // reports the one thing it managed to shrink; without this the transcript
+      // comes back unchanged and every later turn of the conversation fails the
+      // same way, with nothing the user can do but abandon it.
+      if (!options.force || !clamped) return null;
+      log.info(
+        { messages: messages.length },
+        "compaction truncated oversized messages in the kept tail",
+      );
+      return [...prefix, ...kept];
+    }
 
     const summary = await summarizePrefix(prefix, options.signal);
     if (!summary) {

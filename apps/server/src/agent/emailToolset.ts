@@ -21,6 +21,7 @@ import { isWhatsAppLinked } from "../integrations/whatsapp/session.js";
 import { buildListAttachmentsTool, buildSaveAttachmentTool } from "./attachmentTool.js";
 import { buildDraftTool, buildUpdateDraftTool } from "./draftTools.js";
 import { type ActionGrants, NO_GRANTS, registeredCategory, sessionGrants } from "./toolAccess.js";
+import { clampToolText } from "./toolkit.js";
 
 const log = moduleLogger("emailToolset");
 
@@ -57,6 +58,16 @@ function claimLocalToolName(
   seenNames.add(name);
   return name;
 }
+
+/**
+ * Steering for a truncated MCP result. A Pipedream action returns the app's own
+ * API response verbatim, so one wide call (a mail search over a month, a folder
+ * listing) can carry every matched record in full — orders of magnitude past
+ * what the transcript can hold.
+ */
+const MCP_TRUNCATION_HINT =
+  "Ask for less and retry — a smaller max-results/limit, a narrower date range, or a more " +
+  "specific query — then read individual records by id.";
 
 function mcpContentToText(content: unknown): string {
   if (!Array.isArray(content)) return JSON.stringify(content ?? "");
@@ -150,7 +161,7 @@ function buildAccountTools(
           isRead,
           signal,
         );
-        const text = mcpContentToText(result.content);
+        const text = clampToolText(mcpContentToText(result.content), MCP_TRUNCATION_HINT);
         if (result.isError) {
           throw new Error(text || `Tool ${mcpTool.name} failed`);
         }

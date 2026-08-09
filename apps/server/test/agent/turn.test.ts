@@ -256,6 +256,43 @@ describe("an agent turn", () => {
     expect(assistant?.content).toContain("This turn failed: model exploded");
   });
 
+  it("tells the user a new chat won't help when the request's fixed part is what overflows", async () => {
+    const run = await import("../../src/agent/run.js");
+    turnRecorder._setSessionsForTest({
+      ...unusedSessions,
+      pooled: async () =>
+        fakeSession(async () => {
+          // What run.ts throws once a forced compaction reports it had nothing
+          // left to shrink: the prompt and tool definitions alone don't fit.
+          throw new run.ContextOverflowError(
+            "Codex error: Your input exceeds the context window of this model.",
+            true,
+          );
+        }),
+    });
+
+    const turn = turnRecorder.beginTurn("overflow-1");
+    await expect(
+      turn.run({
+        prompt: "kannst du befehle annehmen?",
+        session: "pooled",
+        conversation: { type: "chat", title: "kannst du befehle annehmen?" },
+        log: silentLog,
+      }),
+    ).rejects.toThrow("exceeds the context window");
+
+    const { db, schema } = dbModule;
+    const rows = await db
+      .select()
+      .from(schema.messages)
+      .where(eq(schema.messages.conversationId, "overflow-1"));
+    const assistant = rows.find((row) => row.role === "assistant");
+    // The advice has to name a lever that exists. "Start a new chat" is the one
+    // answer that is always wrong here, and it is what a user tries first.
+    expect(assistant?.content).toContain("A new chat will fail the same way");
+    expect(assistant?.content).not.toContain("This turn failed:");
+  });
+
   it("stops a running turn and keeps what it had already said", async () => {
     let streaming: () => void = () => {};
     const started = new Promise<void>((resolve) => {

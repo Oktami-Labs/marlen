@@ -1,4 +1,4 @@
-import { Agent } from "@earendil-works/pi-agent-core";
+import { Agent, type AgentTool } from "@earendil-works/pi-agent-core";
 import type { Message } from "@earendil-works/pi-ai";
 import type { ThinkingLevel } from "@marlen/shared";
 import { moduleLogger } from "../core/logger.js";
@@ -34,6 +34,15 @@ async function resolveThinkingLevel(model: { reasoning: boolean }): Promise<Thin
   return model.reasoning ? getThinkingLevel() : "off";
 }
 
+/** Roughly what a tool costs on the wire: its name, description and JSON schema. */
+function toolSchemaChars(tools: AgentTool[]): number {
+  let chars = 0;
+  for (const tool of tools) {
+    chars += tool.name.length + tool.description.length + JSON.stringify(tool.parameters).length;
+  }
+  return chars;
+}
+
 export async function buildAgent(
   toolset: EmailToolset,
   history: Message[],
@@ -63,9 +72,10 @@ export async function buildAgent(
   // it gets the read-only set and the whole-filesystem grants are never
   // consulted (fileTools.ts owns both rules).
   const fileTools = await buildFileTools(caps.interactive);
+  const systemPrompt = await buildSystemPrompt(caps);
   const agent = new Agent({
     initialState: {
-      systemPrompt: await buildSystemPrompt(caps),
+      systemPrompt,
       model,
       thinkingLevel: await resolveThinkingLevel(model),
       tools: [
@@ -121,6 +131,21 @@ export async function buildAgent(
     streamFn: streamViaModelRegistry,
     sessionId,
   });
+  // The part of a request that grows with the install rather than the
+  // conversation: the prompt and every tool definition ride on every turn, and
+  // neither is anything compaction can trim, so together they are the floor
+  // under which no conversation can fit. Recorded per session build so a
+  // context-window refusal can be read off the log instead of guessed at.
+  log.info(
+    {
+      tools: agent.state.tools.length,
+      promptTokens: Math.ceil(systemPrompt.length / 4),
+      toolTokens: Math.ceil(toolSchemaChars(agent.state.tools) / 4),
+      contextWindow: model.contextWindow,
+    },
+    "agent session built",
+  );
+
   // A tool-heavy run can outgrow the context window between the turns of one
   // run, where runPrompt's pre-prompt compaction can't reach. This hook trims
   // mid-run: hand the loop a compacted replacement and mirror it onto agent

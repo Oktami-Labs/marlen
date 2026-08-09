@@ -1,6 +1,6 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import { type TProperties, Type } from "@sinclair/typebox";
-import { textResult, tool } from "../../agent/toolkit.js";
+import { clampToolText, textResult, tool } from "../../agent/toolkit.js";
 import type { OnOfficeClient, OnOfficeResponse } from "./client.js";
 import { resultsOf } from "./client.js";
 import { getOnOfficeClient } from "./config.js";
@@ -92,16 +92,12 @@ function buildReadParameters(p: ReadRest): Record<string, unknown> {
   return params;
 }
 
-const OK_TEXT_MAX_CHARS = 40_000;
-
 function okText(resp: OnOfficeResponse): string {
   const results = resultsOf(resp);
-  const json = JSON.stringify(results.length > 0 ? results : resp);
-  if (json.length <= OK_TEXT_MAX_CHARS) return json;
-  return (
-    `${json.slice(0, OK_TEXT_MAX_CHARS)}\n\n` +
-    `[Output truncated at ${OK_TEXT_MAX_CHARS} characters. Narrow the query and retry — ` +
-    `lower listlimit, request fewer fields via the data parameter, or use a tighter filter.]`
+  return clampToolText(
+    JSON.stringify(results.length > 0 ? results : resp),
+    "Narrow the query and retry — lower listlimit, request fewer fields via the data parameter, " +
+      "or use a tighter filter.",
   );
 }
 

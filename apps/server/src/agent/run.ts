@@ -1,5 +1,9 @@
 import type { Agent } from "@earendil-works/pi-agent-core";
-import { type AssistantMessage, isRetryableAssistantError } from "@earendil-works/pi-ai";
+import {
+  type AssistantMessage,
+  isContextOverflow,
+  isRetryableAssistantError,
+} from "@earendil-works/pi-ai";
 import type { AgentCard } from "@marlen/shared";
 import { moduleLogger, type TurnLogger } from "../core/logger.js";
 import { parseAgentCard } from "./cards.js";
@@ -38,9 +42,21 @@ const defaultLog = moduleLogger("agent");
 const MAX_TRANSIENT_RETRIES = 2;
 const RETRY_BASE_DELAY_MS = 2_000;
 
-/** Provider context-overflow errors, which retry cleanly only after the transcript shrinks. */
-const CONTEXT_OVERFLOW_PATTERN =
-  /prompt is too long|maximum context length|context window|input token count exceeds/i;
+/**
+ * A request the provider refused for size. `irreducible` means compaction had
+ * nothing left to give: the system prompt and tool definitions alone don't fit,
+ * so every conversation on this install fails the same way and a new chat is not
+ * the way out.
+ */
+export class ContextOverflowError extends Error {
+  constructor(
+    message: string,
+    readonly irreducible: boolean,
+  ) {
+    super(message);
+    this.name = "ContextOverflowError";
+  }
+}
 
 /** Provider throttle rejections (429s); waiting or switching provider is the remedy. */
 const RATE_LIMIT_PATTERN = /rate.?limit|too many requests|\b429\b/i;
@@ -83,25 +99,32 @@ async function retryTransientFailures(
   log: TurnLogger,
   signal?: AbortSignal,
   compact?: RunOptions["compact"],
-): Promise<void> {
+): Promise<boolean> {
+  const irreducible = false;
   for (let attempt = 1; attempt <= MAX_TRANSIENT_RETRIES; attempt++) {
     const failure = agent.state.errorMessage;
-    if (!failure || signal?.aborted) return;
+    if (!failure || signal?.aborted) return irreducible;
     const last = agent.state.messages[agent.state.messages.length - 1];
-    if (last?.role !== "assistant") return;
+    if (last?.role !== "assistant") return irreducible;
     const errored = last as AssistantMessage;
     // "aborted" is the caller's own cancellation, never retried.
-    if (errored.stopReason !== "error") return;
-    if (streamedVisibleText(errored)) return;
+    if (errored.stopReason !== "error") return irreducible;
+    if (streamedVisibleText(errored)) return irreducible;
 
-    const overflow = CONTEXT_OVERFLOW_PATTERN.test(failure);
-    if (!overflow && !isRetryableAssistantError(errored)) return;
+    // pi maintains the overflow signatures for every provider it supports, plus
+    // the exclusions that keep a throttling message ("too many tokens") from
+    // reading as one. Passing the window also catches the providers that accept
+    // an oversized request instead of refusing it.
+    const overflow = isContextOverflow(errored, agent.state.model.contextWindow);
+    if (!overflow && !isRetryableAssistantError(errored)) return irreducible;
 
     if (overflow) {
       // Compact before touching the transcript tail: when nothing can be
       // compacted, the errored message stays in place and the failure
-      // surfaces as-is rather than retrying into the same overflow.
-      if (!compact || !(await compact({ force: true }))) return;
+      // surfaces as-is rather than retrying into the same overflow. That case
+      // is the diagnosis worth keeping — the request's fixed part is what does
+      // not fit, so no conversation on this install can succeed.
+      if (!compact || !(await compact({ force: true }))) return true;
     }
 
     // continue() resumes from a user/toolResult tail: drop the errored
@@ -110,11 +133,12 @@ async function retryTransientFailures(
 
     if (!overflow) {
       await backoff(attempt, signal);
-      if (signal?.aborted) return;
+      if (signal?.aborted) return irreducible;
     }
     log.warn({ attempt, failure }, "retrying turn after transient provider failure");
     await agent.continue();
   }
+  return irreducible;
 }
 
 export async function runPrompt(
@@ -134,6 +158,7 @@ export async function runPrompt(
   const toolStarts = new Map<string, number>();
   let toolCalls = 0;
   let toolErrors = 0;
+  let irreducibleOverflow = false;
 
   const unsubscribe = session.agent.subscribe((event) => {
     switch (event.type) {
@@ -215,7 +240,7 @@ export async function runPrompt(
     // Transient provider failures are retried in place while the subscription
     // above is still attached, so a successful retry streams through the same
     // handlers.
-    await retryTransientFailures(session.agent, log, signal, compact);
+    irreducibleOverflow = await retryTransientFailures(session.agent, log, signal, compact);
   } finally {
     signal?.removeEventListener("abort", onAbort);
     if (typeof unsubscribe === "function") unsubscribe();
@@ -227,7 +252,13 @@ export async function runPrompt(
   // requests); it records them on the state. Surface them to the caller.
   const failure = session.agent.state.errorMessage;
   if (failure) {
-    log.warn({ durationMs, toolCalls, toolErrors, failure }, "agent turn failed");
+    log.warn(
+      { durationMs, toolCalls, toolErrors, failure, irreducibleOverflow },
+      "agent turn failed",
+    );
+    // Typed, so the transcript row can tell the two overflows apart without
+    // re-classifying prose: one is fixed by a new chat, the other never is.
+    if (irreducibleOverflow) throw new ContextOverflowError(failure, true);
     throw new Error(failure);
   }
 
