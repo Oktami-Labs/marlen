@@ -13,6 +13,26 @@ export type ChangelogEntry = {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.4.7",
+    date: "2026-08-09",
+    notes: {
+      en: [
+        "You can now see which version you are running: it sits under the chat box. Worth a look before reporting anything, because a problem already fixed in a newer version looks exactly like one that is still there.",
+        "Marlen tells you when a newer version exists, instead of waiting until it has one ready to install. On macOS it cannot replace itself yet, so it says so and offers the download; on Windows updates continue to install on their own. A waiting update now opens its notes by itself the first time, and comes back the next time you start the app if you set it aside.",
+        "A chat that hit the assistant's size limit could stay broken for good, refusing every following message however short. One oversized result from a wide search or a folder listing was enough, and starting a new chat was the only way out. Those results are now trimmed to a sensible length when they come in, an affected chat repairs itself on its next message, and the assistant is told how to ask for a narrower slice.",
+        "When a chat does hit that limit, the message says which of the two causes it was and what actually helps. Where the size comes from the setup itself rather than the conversation, it no longer suggests starting a new chat, which would fail the same way.",
+        "The chat box no longer cuts its own placeholder in half in the narrow side panel.",
+      ],
+      de: [
+        "Sie sehen jetzt, welche Version Sie verwenden: Sie steht unter dem Eingabefeld im Chat. Ein Blick lohnt sich, bevor Sie etwas melden, denn ein Problem, das in einer neueren Version schon behoben ist, sieht genauso aus wie eines, das es noch gibt.",
+        "Marlen sagt Ihnen, wenn eine neuere Version vorliegt, und wartet nicht mehr, bis sie fertig installiert bereitsteht. Unter macOS kann sich die App noch nicht selbst ersetzen, sie sagt das und bietet den Download an; unter Windows installieren sich Updates weiterhin von selbst. Ein wartendes Update öffnet seine Notizen jetzt beim ersten Mal von selbst und meldet sich beim nächsten Start wieder, wenn Sie es zur Seite gelegt haben.",
+        "Ein Chat, der an die Größengrenze des Assistenten stieß, konnte dauerhaft unbrauchbar bleiben und jede weitere Nachricht ablehnen, so kurz sie auch war. Ein einziges übergroßes Ergebnis aus einer weiten Suche oder einer Ordnerliste genügte, und nur ein neuer Chat half. Solche Ergebnisse werden jetzt beim Eintreffen auf eine sinnvolle Länge gekürzt, ein betroffener Chat repariert sich mit seiner nächsten Nachricht selbst, und der Assistent erfährt, wie er einen kleineren Ausschnitt anfordert.",
+        "Stößt ein Chat doch an diese Grenze, nennt die Meldung jetzt, welche der beiden Ursachen es war und was wirklich hilft. Kommt die Größe aus der Einrichtung selbst und nicht aus dem Gespräch, wird kein neuer Chat mehr vorgeschlagen, der genauso scheitern würde.",
+        "Das Eingabefeld im Chat schneidet seinen eigenen Platzhaltertext in der schmalen Seitenspalte nicht mehr ab.",
+      ],
+    },
+  },
+  {
     version: "0.4.6",
     date: "2026-08-06",
     notes: {
