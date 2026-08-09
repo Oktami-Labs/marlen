@@ -36,9 +36,9 @@ import {
 import {
   checkForUpdatesNow,
   installUpdate,
-  pendingUpdateVersion,
   startUpdater,
   type UpdateCheckStatus,
+  updateState,
 } from "./updater";
 
 /**
@@ -396,7 +396,7 @@ if (!hasLock) {
     return app.getLoginItemSettings().openAtLogin;
   });
 
-  ipcMain.handle("marlen:get-pending-update", () => pendingUpdateVersion());
+  ipcMain.handle("marlen:get-update-state", () => updateState());
   ipcMain.handle("marlen:get-app-info", () => ({
     version: app.getVersion(),
     platform: process.platform,
@@ -424,9 +424,9 @@ if (!hasLock) {
       startNotifications(port, { onOpenRequest: focusOrCreateWindow });
       // Dev runs have no update feed baked in: app-update.yml only exists in a packaged build.
       if (app.isPackaged) {
-        startUpdater((version) => {
+        startUpdater((state) => {
           for (const window of BrowserWindow.getAllWindows()) {
-            window.webContents.send("marlen:update-ready", version);
+            window.webContents.send("marlen:update-state", state);
           }
         });
       }

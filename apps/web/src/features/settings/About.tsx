@@ -2,16 +2,16 @@ import { Check, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { ChangelogDialog } from "@/components/ChangelogDialog";
+import { useUpdateState } from "@/components/UpdatePill";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { ListRow } from "@/components/ui/list-row";
 import { Spinner } from "@/components/ui/spinner";
 import { type DesktopAppInfo, desktopBridge, type UpdateCheckStatus } from "@/lib/desktop";
+import { RELEASES_URL, REPO_SLUG, REPO_URL } from "@/lib/repo";
 import { cn, openExternal } from "@/lib/utils";
 
-const REPO_SLUG = "Oktami-Labs/marlen";
-const REPO_URL = `https://github.com/${REPO_SLUG}`;
 /** Mirrors appId in apps/desktop/electron-builder.yml. */
 const BUNDLE_ID = "email.marlen.desktop";
 
@@ -46,20 +46,17 @@ type CheckState =
 export function AboutPanel() {
   const { t } = useTranslation();
   const bridge = desktopBridge();
+  // One source for what the shell knows about the newest release, shared with
+  // the sidebar pill, so this panel can never disagree with it.
+  const update = useUpdateState();
   const [info, setInfo] = React.useState<DesktopAppInfo | null>(null);
   const [check, setCheck] = React.useState<CheckState>({ phase: "idle" });
   const [changelogOpen, setChangelogOpen] = React.useState(false);
 
   React.useEffect(() => {
-    const shell = desktopBridge();
-    if (!shell) return;
-    const showReady = (ready: string) =>
-      setCheck({ phase: "done", result: { status: "downloaded", version: ready } });
-    shell.getAppInfo().then(setInfo, () => {});
-    void shell.getPendingUpdate().then((pending) => {
-      if (pending) showReady(pending);
-    });
-    return shell.onUpdateReady(showReady);
+    desktopBridge()
+      ?.getAppInfo()
+      .then(setInfo, () => {});
   }, []);
 
   const runCheck = async () => {
@@ -73,7 +70,8 @@ export function AboutPanel() {
   };
 
   const result = check.phase === "done" ? check.result : null;
-  const readyVersion = result?.status === "downloaded" ? result.version : null;
+  const readyVersion = update?.ready ? update.version : null;
+  const manualVersion = update && !update.ready && update.manual ? update.version : null;
   const platform = info ? (PLATFORM_LABELS[info.platform] ?? info.platform) : null;
 
   return (
@@ -141,6 +139,10 @@ export function AboutPanel() {
               >
                 {t("app.updateRestart")}
               </Button>
+            ) : manualVersion ? (
+              <Button size="sm" className="shrink-0" onClick={() => openExternal(RELEASES_URL)}>
+                {t("app.updateDownload")}
+              </Button>
             ) : (
               <Button
                 variant="secondary"
@@ -156,7 +158,11 @@ export function AboutPanel() {
         </div>
         {bridge && (
           <div className="flex h-4 items-center justify-end gap-1.5 text-xs text-muted-foreground">
-            <CheckOutcome result={result} readyVersion={readyVersion} />
+            <CheckOutcome
+              result={result}
+              readyVersion={readyVersion}
+              manualVersion={manualVersion}
+            />
           </div>
         )}
       </div>
@@ -164,7 +170,7 @@ export function AboutPanel() {
       <ChangelogDialog
         open={changelogOpen}
         onOpenChange={setChangelogOpen}
-        pendingVersion={readyVersion}
+        pending={update}
         currentVersion={info?.version}
       />
     </ListRow>
@@ -195,16 +201,22 @@ function MetaRow({
 function CheckOutcome({
   result,
   readyVersion,
+  manualVersion,
 }: {
   result: UpdateCheckStatus | null;
   readyVersion: string | null;
+  manualVersion: string | null;
 }) {
   const { t } = useTranslation();
-  if (!result) return null;
-
+  // The shell's own state outranks a finished check: it is the newer fact, and
+  // "cannot install this" has to win over "downloading".
   if (readyVersion) {
     return <span>{t("settings.about.downloaded", { version: readyVersion })}</span>;
   }
+  if (manualVersion) {
+    return <span>{t("settings.about.manual", { version: manualVersion })}</span>;
+  }
+  if (!result) return null;
   switch (result.status) {
     case "downloading":
       return (

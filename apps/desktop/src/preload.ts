@@ -1,6 +1,6 @@
 import { contextBridge, ipcRenderer } from "electron";
 import { TITLEBAR_HEIGHT, titleBarMode } from "./titlebar";
-import type { UpdateCheckStatus } from "./updater";
+import type { UpdateCheckStatus, UpdateState } from "./updater";
 
 /**
  * window.marlenDesktop — the web app's only view of the shell: the update flow
@@ -29,15 +29,15 @@ contextBridge.exposeInMainWorld("marlenDesktop", {
     ipcRenderer.invoke("marlen:get-launch-at-login") as Promise<boolean>,
   setLaunchAtLogin: (enabled: boolean): Promise<boolean> =>
     ipcRenderer.invoke("marlen:set-launch-at-login", enabled) as Promise<boolean>,
-  getPendingUpdate: (): Promise<string | null> =>
-    ipcRenderer.invoke("marlen:get-pending-update") as Promise<string | null>,
+  getUpdateState: (): Promise<UpdateState> =>
+    ipcRenderer.invoke("marlen:get-update-state") as Promise<UpdateState>,
   checkForUpdates: (): Promise<UpdateCheckStatus> =>
     ipcRenderer.invoke("marlen:check-for-updates") as Promise<UpdateCheckStatus>,
-  onUpdateReady: (callback: (version: string) => void): (() => void) => {
-    const listener = (_event: Electron.IpcRendererEvent, version: string) => callback(version);
-    ipcRenderer.on("marlen:update-ready", listener);
+  onUpdateState: (callback: (state: UpdateState) => void): (() => void) => {
+    const listener = (_event: Electron.IpcRendererEvent, state: UpdateState) => callback(state);
+    ipcRenderer.on("marlen:update-state", listener);
     return () => {
-      ipcRenderer.removeListener("marlen:update-ready", listener);
+      ipcRenderer.removeListener("marlen:update-state", listener);
     };
   },
   installUpdate: (): void => {

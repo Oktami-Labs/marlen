@@ -11,11 +11,19 @@ stays on your computer.
 ## Download
 
 Grab the macOS or Windows installer from the
-[latest release](https://github.com/Oktami-Labs/marlen/releases/latest). The app
-updates itself when a new release is published.
+[latest release](https://github.com/Oktami-Labs/marlen/releases/latest).
 
-(macOS, until builds are signed: allow the app once via System Settings →
-Privacy & Security → "Open Anyway".)
+Builds are not code-signed yet, which shapes both installing and updating:
+
+- **macOS** — allow the app once via System Settings → Privacy & Security →
+  "Open Anyway". Updates then have to be **installed by hand**: download the new
+  release and replace the app. macOS refuses to swap an unsigned bundle, so the
+  in-app updater can find a new version but not install it — when that happens
+  the app says so and links to the release.
+- **Windows** — SmartScreen warns on first run (More info → Run anyway). Updates
+  after that install themselves when a new release is published.
+
+What turns macOS self-updating on: [apps/desktop/README.md → Signing](apps/desktop/README.md#signing).
 
 ## Run from source
 

@@ -26,6 +26,7 @@ import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { useAutoGrow } from "@/lib/useAutoGrow";
 import { cn, errorMessage } from "@/lib/utils";
+import { useAppVersion } from "@/lib/version";
 
 /** Renders one of every agent card locally. Never reaches the agent or the DB. */
 const SHOWCASE_COMMAND = "/showcase";
@@ -379,7 +380,15 @@ export function ChatPanel({
             }}
             placeholder={t("chat.placeholder")}
             rows={1}
-            className="max-h-40 min-h-9 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-base md:text-sm leading-relaxed [scrollbar-width:none] [-webkit-scrollbar]:hidden placeholder:text-muted-foreground focus:outline-none"
+            className={cn(
+              "max-h-40 min-h-9 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-base md:text-sm leading-relaxed [scrollbar-width:none] [-webkit-scrollbar]:hidden placeholder:text-muted-foreground focus:outline-none",
+              // While empty the box stays one line tall on purpose (useAutoGrow
+              // leaves it to CSS rather than measuring the wrapped placeholder),
+              // so a placeholder long enough to wrap would show its second line
+              // sliced in half. Hold it on one line; wrapping returns with the
+              // first character the user types.
+              !input && "overflow-x-hidden whitespace-nowrap",
+            )}
             aria-busy={runs.busy}
           />
           <ModelControl conversationId={runs.conversationId} className="mb-1 shrink-0" />
@@ -417,7 +426,32 @@ export function ChatPanel({
           )}
         </div>
       </div>
+
+      <VersionLine isPage={isPage} />
     </div>
+  );
+}
+
+/**
+ * The running version under the composer. It is here because this is the one
+ * screen every user has open, so a support screenshot carries the build number
+ * without anyone having to be walked into Settings → About — and a stale install
+ * is a cause of failures that look like bugs. Untranslated: a version number
+ * reads the same in every language, and Settings → About writes it this way too.
+ */
+function VersionLine({ isPage }: { isPage: boolean }) {
+  const version = useAppVersion();
+  if (!version) return null;
+
+  return (
+    <p
+      className={cn(
+        "shrink-0 text-center font-mono text-2xs tabular-nums text-muted-foreground",
+        isPage && "mx-auto w-full max-w-4xl @7xl:max-w-5xl",
+      )}
+    >
+      v{version}
+    </p>
   );
 }
 

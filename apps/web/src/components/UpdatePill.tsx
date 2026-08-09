@@ -3,7 +3,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { ChangelogDialog } from "@/components/ChangelogDialog";
 import { Button } from "@/components/ui/button";
-import { desktopBridge } from "@/lib/desktop";
+import { desktopBridge, type UpdateState } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 
 /* DEV showcase override — delete with the /showcase route. The sidebar fills
@@ -25,34 +25,54 @@ function subscribeShowcase(onChange: () => void) {
 }
 
 /**
- * The version downloaded and waiting for a restart, or null. Desktop shell
- * only: without a bridge (the browser, the dev server) it stays null.
+ * What the shell knows about the newest release, or null when no newer version
+ * exists. Desktop shell only: without a bridge (the browser, the dev server) it
+ * stays null.
  */
-export function usePendingUpdate() {
-  const [version, setVersion] = React.useState<string | null>(null);
+export function useUpdateState(): UpdateState | null {
+  const [state, setState] = React.useState<UpdateState | null>(null);
   const showcase = React.useSyncExternalStore(subscribeShowcase, () => showcaseVersion);
 
   React.useEffect(() => {
     const bridge = desktopBridge();
     if (!bridge) return;
-    void bridge.getPendingUpdate().then((pending) => {
-      if (pending) setVersion(pending);
+    void bridge.getUpdateState().then((current) => {
+      if (current.version) setState(current);
     });
-    return bridge.onUpdateReady(setVersion);
+    return bridge.onUpdateState(setState);
   }, []);
 
-  return showcase ?? version;
+  if (showcase) return { version: showcase, ready: true, manual: false };
+  return state?.version ? state : null;
 }
 
+/* Versions already announced this launch. An update the user dismissed should
+ * not reopen on every remount of the sidebar, but it does come back on the next
+ * launch: an install that stays behind is the failure mode worth being pushy
+ * about, and the dialog is one Escape away. */
+const announced = new Set<string>();
+
 /**
- * Sidebar footer CTA for an update that is waiting for a restart. It opens the
- * changelog, where the new version's notes sit above the restart CTA. Collapses
- * to its icon with the sidebar, on the same md breakpoint as the nav links.
+ * Sidebar footer CTA for a waiting update. It opens the changelog, where the new
+ * version's notes sit above the restart (or, when the shell cannot install the
+ * update itself, the download) CTA. Collapses to its icon with the sidebar, on
+ * the same md breakpoint as the nav links.
+ *
+ * It also opens itself the first time each version is seen. Nothing else tells
+ * the user they are running an old build, and a pill in a collapsed sidebar is
+ * easy to never notice.
  */
-export function UpdatePill({ version, isCollapsed }: { version: string; isCollapsed: boolean }) {
+export function UpdatePill({ state, isCollapsed }: { state: UpdateState; isCollapsed: boolean }) {
   const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
-  const label = t("app.updateAvailable");
+  const label = t(state.ready ? "app.updateAvailable" : "app.updateWaiting");
+
+  const version = state.version ?? "";
+  React.useEffect(() => {
+    if (!version || announced.has(version)) return;
+    announced.add(version);
+    setOpen(true);
+  }, [version]);
 
   return (
     <>
@@ -68,7 +88,7 @@ export function UpdatePill({ version, isCollapsed }: { version: string; isCollap
         <Sparkles />
         <span className={cn(isCollapsed && "md:hidden")}>{label}</span>
       </Button>
-      <ChangelogDialog open={open} onOpenChange={setOpen} pendingVersion={version} />
+      <ChangelogDialog open={open} onOpenChange={setOpen} pending={state} />
     </>
   );
 }

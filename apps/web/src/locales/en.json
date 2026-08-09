@@ -7,7 +7,10 @@
     "expandChat": "Expand chat",
     "collapseChat": "Collapse chat",
     "updateAvailable": "Update ready",
-    "updateRestart": "Restart & update Marlen"
+    "updateRestart": "Restart & update Marlen",
+    "updateWaiting": "Update available",
+    "updateDownload": "Download update",
+    "updateManualHint": "This build cannot update itself."
   },
   "desktop": {
     "tray": {
@@ -823,7 +826,8 @@
       "downloading": "Downloading version {{version}}…",
       "downloaded": "Version {{version}} ready to install",
       "unavailable": "Update checks aren't available in this build",
-      "checkFailed": "Couldn't check for updates"
+      "checkFailed": "Couldn't check for updates",
+      "manual": "Version {{version}} is available — download it to install"
     },
     "provider": "Provider",
     "model": "Model",

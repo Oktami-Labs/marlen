@@ -7,7 +7,10 @@
     "expandChat": "Chat ausklappen",
     "collapseChat": "Chat einklappen",
     "updateAvailable": "Update bereit",
-    "updateRestart": "Marlen neu starten & aktualisieren"
+    "updateRestart": "Marlen neu starten & aktualisieren",
+    "updateWaiting": "Update verfügbar",
+    "updateDownload": "Update herunterladen",
+    "updateManualHint": "Diese Version kann sich nicht selbst aktualisieren."
   },
   "desktop": {
     "tray": {
@@ -95,7 +98,7 @@
     "working": "Der Assistent arbeitet",
     "emptyTitle": "Fragen Sie alles zu Ihrem Postfach",
     "emptyBody": "Der Assistent durchsucht Ihre verbundenen Konten, versieht E-Mails mit Labels und schreibt Entwürfe.",
-    "placeholder": "Schreiben Sie Ihrem E-Mail-Assistenten…",
+    "placeholder": "Ihren Assistenten fragen…",
     "send": "Nachricht senden",
     "stop": "Antwort stoppen",
     "resize": "Breite des Chat-Bereichs anpassen",
@@ -823,7 +826,8 @@
       "downloading": "Version {{version}} wird geladen…",
       "downloaded": "Version {{version}} bereit zur Installation",
       "unavailable": "Diese Version kann nicht nach Updates suchen",
-      "checkFailed": "Updates konnten nicht geprüft werden"
+      "checkFailed": "Updates konnten nicht geprüft werden",
+      "manual": "Version {{version}} ist verfügbar — zum Installieren herunterladen"
     },
     "provider": "Anbieter",
     "model": "Modell",

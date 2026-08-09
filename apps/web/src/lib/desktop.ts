@@ -7,15 +7,28 @@
 /**
  * Outcome of a user-initiated update check (mirrors UpdateCheckStatus in
  * apps/desktop/src/updater.ts). "downloading" means a newer release is being
- * fetched in the background — completion arrives via onUpdateReady.
+ * fetched in the background — completion arrives via onUpdateState.
  * "unsupported" is an unpackaged dev run with no update feed.
  */
 export type UpdateCheckStatus =
   | { status: "downloaded"; version: string }
   | { status: "downloading"; version: string }
+  | { status: "manual"; version: string }
   | { status: "current" }
   | { status: "unsupported" }
   | { status: "error"; message: string };
+
+/**
+ * What the shell knows about the newest release (mirrors UpdateState in
+ * apps/desktop/src/updater.ts). `manual` means a newer version exists that this
+ * build cannot install itself — macOS refuses to swap an unsigned bundle — so
+ * the only way forward is downloading the release by hand.
+ */
+export type UpdateState = {
+  version: string | null;
+  ready: boolean;
+  manual: boolean;
+};
 
 /** Identity of the installed shell build: app version plus the host platform/arch. */
 export type DesktopAppInfo = {
@@ -45,12 +58,12 @@ type DesktopBridge = {
   getLaunchAtLogin: () => Promise<boolean>;
   /** Set the login item; resolves to what the OS actually reports afterwards. */
   setLaunchAtLogin: (enabled: boolean) => Promise<boolean>;
-  /** Version of an update already downloaded and waiting for a restart, if any. */
-  getPendingUpdate: () => Promise<string | null>;
+  /** What the shell currently knows about the newest release. */
+  getUpdateState: () => Promise<UpdateState>;
   /** Check the release feed now; a found update starts downloading in the background. */
   checkForUpdates: () => Promise<UpdateCheckStatus>;
-  /** Fires when an update finishes downloading in the background; returns unsubscribe. */
-  onUpdateReady: (callback: (version: string) => void) => () => void;
+  /** Fires whenever the shell learns something new about the newest release; returns unsubscribe. */
+  onUpdateState: (callback: (state: UpdateState) => void) => () => void;
   /** Quit and relaunch into the downloaded update. */
   installUpdate: () => void;
 };

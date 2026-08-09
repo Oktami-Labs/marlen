@@ -2,7 +2,7 @@ import { type AppStatus, isSetupComplete } from "@marlen/shared";
 import { ChevronLeft, ChevronRight, type LucideIcon, TriangleAlert, X } from "lucide-react";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
-import { UpdatePill, usePendingUpdate } from "@/components/UpdatePill";
+import { UpdatePill, useUpdateState } from "@/components/UpdatePill";
 import { Button } from "@/components/ui/button";
 import { visibleNavItems } from "@/lib/nav";
 import { cn, withViewTransition } from "@/lib/utils";
@@ -75,7 +75,7 @@ function SidebarNavLink({
 export function Sidebar({ status, onClose, isCollapsed, onCollapsedChange }: SidebarProps) {
   const { t } = useTranslation();
   const location = useLocation();
-  const pendingUpdate = usePendingUpdate();
+  const update = useUpdateState();
   const setupIncomplete = status !== null && !isSetupComplete(status);
 
   return (
@@ -175,7 +175,7 @@ export function Sidebar({ status, onClose, isCollapsed, onCollapsedChange }: Sid
           {isCollapsed ? <ChevronRight className="h-4 w-4" /> : <ChevronLeft className="h-4 w-4" />}
         </Button>
 
-        {pendingUpdate && <UpdatePill version={pendingUpdate} isCollapsed={isCollapsed} />}
+        {update && <UpdatePill state={update} isCollapsed={isCollapsed} />}
       </div>
     </aside>
   );
