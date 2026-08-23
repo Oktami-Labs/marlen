@@ -44,6 +44,19 @@ function actionOf(mcpToolName: string): string {
 }
 
 /**
+ * Send and reply actions Marlen's own draft tool replaces for an app whose
+ * DraftProvider can send: the account's signature and the humanizer pass are
+ * applied where a draft is saved, so a provider action that dispatches mail on
+ * its own is a second path around both. Sending is create-draft with
+ * send=true; forwarding, which has no local equivalent, keeps its action.
+ */
+const SUBSTITUTED_SEND_VERBS = /^(send|reply)(-|$)/;
+
+export function isSubstitutedSendAction(mcpToolName: string): boolean {
+  return SUBSTITUTED_SEND_VERBS.test(actionOf(mcpToolName));
+}
+
+/**
  * The category one MCP tool registers under, or null when the policy above
  * skips it. `granted` is the session's effective grant set, so an unattended
  * run's dropped write/delete grants take effect here.

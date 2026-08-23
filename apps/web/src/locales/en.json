@@ -410,7 +410,7 @@
     },
     "signature": {
       "title": "Email signature",
-      "hint": "Paste your signature straight from Gmail or Outlook, or write and format it here. The preview shows it the way recipients will see it, and the assistant puts it under every email it drafts from this account.",
+      "hint": "Paste your whole signature straight from Gmail or Outlook, its logo is copied along and stored with it. Click an image and drag a corner to resize it. The preview shows the signature the way recipients will see it, and the assistant puts it under every email it drafts from this account.",
       "save": "Save signature",
       "saved": "Signature saved.",
       "removed": "Signature removed.",
@@ -422,7 +422,12 @@
       "linkPlaceholder": "https://example.com",
       "linkApply": "Apply",
       "image": "Insert image",
-      "imageTooLarge": "The image is too large, up to 300 KB works."
+      "imageTooLarge": "That image is too large, even scaled down it doesn't fit a signature.",
+      "resize": "Resize image",
+      "pasting": "Copying images…",
+      "imagesDropped_one": "1 image could not be copied along, add it with the image button.",
+      "imagesDropped_other": "{{count}} images could not be copied along, add them with the image button.",
+      "tooLarge": "This signature is too large to save. Use a smaller logo."
     },
     "noAccounts": "No email accounts connected yet. Use the buttons above, you can connect several accounts per provider.",
     "finishConnecting": "Complete the connection in the browser tab that just opened, the account appears here automatically once it's linked.",
@@ -827,7 +832,7 @@
       "downloaded": "Version {{version}} ready to install",
       "unavailable": "Update checks aren't available in this build",
       "checkFailed": "Couldn't check for updates",
-      "manual": "Version {{version}} is available — download it to install"
+      "manual": "Version {{version}} is available, download it to install"
     },
     "provider": "Provider",
     "model": "Model",
@@ -902,5 +907,10 @@
     "description": "This screen ran into a rendering error. You can try again, or reload the app.",
     "tryAgain": "Try again",
     "reload": "Reload"
+  },
+  "notFound": {
+    "title": "This page doesn't exist",
+    "description": "That address isn't part of Marlen. An old link or bookmark can end up here.",
+    "goHome": "Go to Home"
   }
 }

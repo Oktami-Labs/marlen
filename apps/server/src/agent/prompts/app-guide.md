@@ -132,7 +132,14 @@ Settings / Einstellungen (sections in order)
 - Permissions are per account and per category — "Create & change / Anlegen & Ändern",
   "Send / Senden", "Delete / Löschen" — armed on the account's row behind a confirm; reading
   and drafting are always allowed. onOffice separately grants chat writes and whether
-  automations may create records. Email accounts also get a signature editor here.
+  automations may create records.
+- Email accounts also get a signature editor on that same expanded row. The whole signature can
+  be pasted in from Gmail or Outlook — layout, fonts and logo come along, and images the copy
+  only points at are downloaded and stored with it, so recipients see them instead of a blocked
+  placeholder. A logo can also be inserted from a file, and is resized by clicking it and
+  dragging any of its corners. An image the clipboard does not actually carry (an
+  Outlook copy sometimes references a temp file) is reported as not copied along and has to be
+  inserted from a file.
 - File access / Dateizugriff: what the assistant may do outside its own folder — read files,
   write files, run commands; all off by default.
 - Preferences / Darstellung & Sprache: appearance (light/dark/system), language (German or

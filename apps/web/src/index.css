@@ -244,6 +244,16 @@
   A `.surface` is the ONE allowed elevated block — never nest one inside another.
 */
 @layer components {
+  /* The signature editor's page. Everything inside it renders on the browser's
+     own defaults instead of this app's reset, because a mail client has no
+     reset either: with `p { margin: 0 }` applied here and 1em applied there, a
+     preview that claims to show what recipients get would be showing the one
+     layout they never see. The paste resolves a signature's stylesheet into
+     inline styles, which outrank this and survive. */
+  .email-paper :where(*) {
+    all: revert;
+  }
+
   .surface {
     background: var(--surface);
     border-radius: var(--radius);

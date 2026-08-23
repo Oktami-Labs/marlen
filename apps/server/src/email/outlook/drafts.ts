@@ -5,6 +5,7 @@ import { draftsMutated } from "../draftsCache.js";
 import {
   type CreateDraftInput,
   DRAFTS_LIST_LIMIT,
+  type DraftDetail,
   type DraftProvider,
   type SendDraftResult,
   type UpdateDraftPatch,
@@ -110,15 +111,16 @@ async function listOutlookDrafts(account: ConnectedAccount): Promise<EmailDraft[
 async function getOutlookDraftDetail(
   account: ConnectedAccount,
   draftId: string,
-): Promise<{ body: string; cc: string; bcc: string }> {
+): Promise<DraftDetail> {
   const message = (await proxyRequest(account.id, "get", `${GRAPH_API}/messages/${draftId}`, {
     params: { $select: "body,ccRecipients,bccRecipients" },
   })) as GraphMessage;
 
   const raw = message.body?.content ?? "";
-  const body = message.body?.contentType?.toLowerCase() === "html" ? stripHtml(raw) : raw.trim();
+  const isHtml = message.body?.contentType?.toLowerCase() === "html";
   return {
-    body,
+    body: isHtml ? stripHtml(raw) : raw.trim(),
+    ...(isHtml && raw ? { bodyHtml: raw } : {}),
     cc: addressListOf(message.ccRecipients),
     bcc: addressListOf(message.bccRecipients),
   };
@@ -248,9 +250,11 @@ async function updateOutlookDraft(
 
   await proxyRequest(account.id, "patch", `${GRAPH_API}/messages/${draftId}`, { body });
 
-  // A replaced body carries fresh cid references, so the inline set syncs with it.
-  if (patch.body !== undefined && patch.inlineImages) {
-    await syncOutlookInlineImages(account, draftId, patch.inlineImages);
+  // A replaced body carries fresh cid references, so the inline set syncs with
+  // it — and an absent set clears them, since an inline part no cid points at
+  // reaches the recipient as a stray file attachment.
+  if (patch.body !== undefined) {
+    await syncOutlookInlineImages(account, draftId, patch.inlineImages ?? []);
   }
 
   draftsMutated(account.id);

@@ -59,9 +59,14 @@ function decodeBody(data: string): string {
 export function plainTextBody(payload: MessagePart | undefined): string {
   const plain = findPart(payload, "text/plain");
   if (plain?.body?.data) return decodeBody(plain.body.data);
+  const html = htmlBody(payload);
+  return html ? stripHtml(html) : "";
+}
+
+/** The message's text/html part, decoded, when it has one. */
+export function htmlBody(payload: MessagePart | undefined): string | undefined {
   const html = findPart(payload, "text/html");
-  if (!html?.body?.data) return "";
-  return stripHtml(decodeBody(html.body.data));
+  return html?.body?.data ? decodeBody(html.body.data) : undefined;
 }
 
 /** Decode the HTML entities Gmail escapes in `message.snippet`; non-breaking spaces become plain spaces. */

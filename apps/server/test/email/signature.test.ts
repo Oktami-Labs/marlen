@@ -1,4 +1,5 @@
 import { describe, expect, it } from "vitest";
+import { detachAccountSignature } from "../../src/email/signature.js";
 import {
   detachSignature,
   htmlBodyWithSignature,
@@ -49,12 +50,38 @@ describe("stripDuplicateSignoff", () => {
  * images are blocked by receiving clients, so both invariants get pinned.
  */
 describe("htmlBodyWithSignature", () => {
-  it("wraps body and signature in one font-styled container, escaping the body", () => {
+  it("gives body and signature the same face, escaping the body", () => {
     const { html, images } = htmlBodyWithSignature("Termin <morgen>?\nViele Grüße", "<p>Max</p>");
     expect(images).toEqual([]);
     expect(html).toMatch(/^<div style="font-family:[^"]+">/);
-    expect(html).toContain("Termin &lt;morgen&gt;?<br>Viele Grüße<br><br><p>Max</p>");
+    expect(html).toContain("Termin &lt;morgen&gt;?<br>Viele Grüße<br><br>");
+    expect(html).toContain("<p>Max</p>");
     expect(html.endsWith("</div>")).toBe(true);
+  });
+
+  /**
+   * A signature is laid out by the client it was copied from, and its own
+   * spacing is most of what makes it recognizable. Nesting it under the body's
+   * line-height stretched every pasted signature to about twice its height.
+   */
+  it("keeps the body's line spacing out of the signature", () => {
+    const { html } = htmlBodyWithSignature("Hallo", "<p>Max</p><p>Musterstadt</p>");
+    const [body, signature] = html.split("<p>Max</p>");
+    expect(body).toContain("line-height:1.5");
+    expect(body, "the signature is a block of its own, not nested in the body").toContain("</div>");
+    expect(html).toMatch(/<div style="[^"]*line-height:normal">(<p>Max<\/p>)/);
+    expect(signature).not.toContain("line-height:1.5");
+  });
+
+  it("leaves a logo's size alone while swapping its src for a cid reference", () => {
+    const pixel = "iVBORw0KGgoAAAANSUhEUg==";
+    const { html, images } = htmlBodyWithSignature(
+      "Hallo",
+      `<img src="data:image/png;base64,${pixel}" width="180" style="width: 180px; height: auto">`,
+    );
+    expect(html).toContain(`src="cid:${images[0]?.contentId}"`);
+    expect(html).toContain('width="180"');
+    expect(html).toContain("width: 180px");
   });
 
   it("extracts data-URI images to cid references, deduplicating identical bytes", () => {
@@ -111,5 +138,39 @@ describe("detachSignature", () => {
 
   it("detaches a draft that is nothing but the signature to an empty body", () => {
     expect(detachSignature(signatureText(), signatureText())?.body).toBe("");
+  });
+});
+
+/**
+ * A signature that is only a logo (no text at all) has nothing for the line
+ * match to find, so the provider body's cid references stand in for it.
+ * Getting this wrong is silent and destructive: the signature reads as absent,
+ * and the next in-app edit saves the body over it.
+ */
+describe("detachAccountSignature with an image-only signature", () => {
+  const PIXEL = "iVBORw0KGgoAAAANSUhEUg==";
+  const SIGNATURE_HTML = `<div><img src="data:image/png;base64,${PIXEL}"></div>`;
+
+  /** The draft as a provider hands it back: text for the editor, html as stored. */
+  function storedDraft(signatureHtml: string) {
+    const { html } = htmlBodyWithSignature("Hallo Frau Beispiel,\n\ngerne morgen.", signatureHtml);
+    return { body: stripHtml(html), bodyHtml: html, cc: "", bcc: "" };
+  }
+
+  it("recognizes the signature by its cid images and leaves the prose whole", () => {
+    const detached = detachAccountSignature(storedDraft(SIGNATURE_HTML), SIGNATURE_HTML);
+    expect(detached?.body).toBe("Hallo Frau Beispiel,\n\ngerne morgen.");
+    // Nothing to render as text; the draft still counts as carrying it.
+    expect(detached?.signature).toBe("");
+  });
+
+  it("returns null for a draft written before the signature existed", () => {
+    const plain = { body: "Hallo,\n\nbis morgen.", cc: "", bcc: "" };
+    expect(detachAccountSignature(plain, SIGNATURE_HTML)).toBe(null);
+  });
+
+  it("returns null when the draft carries a different image", () => {
+    const other = `<div><img src="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAA"></div>`;
+    expect(detachAccountSignature(storedDraft(other), SIGNATURE_HTML)).toBe(null);
   });
 });

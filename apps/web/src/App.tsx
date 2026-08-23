@@ -14,6 +14,7 @@ import {
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { NotFound } from "@/components/NotFound";
 import { SearchPalette } from "@/components/SearchPalette";
 import { Sidebar } from "@/components/Sidebar";
 import { Button, type ButtonProps } from "@/components/ui/button";
@@ -37,7 +38,14 @@ import { SetupGate } from "@/features/setup/SetupGate";
 import { ShowcasePanel } from "@/features/showcase/ShowcasePanel"; // DEV showcase — delete with its route
 import { api } from "@/lib/api";
 import { rememberLanguage } from "@/lib/i18n";
-import { NAV_VIEWS, openSearch, registerNavigate, SHOWCASE_NAV, type View } from "@/lib/nav";
+import {
+  NAV_ITEMS,
+  NAV_VIEWS,
+  openSearch,
+  registerNavigate,
+  SHOWCASE_NAV,
+  type View,
+} from "@/lib/nav";
 import { useDesktopChrome, useWaitingBadge } from "@/lib/useDesktopChrome";
 import { useResizableWidth } from "@/lib/useResizableWidth";
 import { useRunNotifications } from "@/lib/useRunNotifications";
@@ -56,6 +64,16 @@ const CHAT_WIDTH_MAX = 960;
 /** Narrows a raw route segment to a known nav view, for typed `t()` lookups. */
 function isNavView(path: string): path is View {
   return (NAV_VIEWS as readonly string[]).includes(path);
+}
+
+/** Whether a path is one the `<Routes>` below render a view for; everything else
+ *  reaches the catch-all, which the header has to name as missing rather than
+ *  falling back to the Home (or parent segment's) title. */
+function isKnownPath(pathname: string): boolean {
+  const path = pathname.replace(/\/+$/, "") || "/";
+  // DEV showcase — remove this line with the route.
+  if (import.meta.env.DEV && path === SHOWCASE_NAV.path) return true;
+  return NAV_ITEMS.some((item) => item.path === path);
 }
 
 /** Adopt the server's language setting; on first run, seed it from the client's initial language (the German default unless localStorage says otherwise). */
@@ -297,8 +315,11 @@ export default function App() {
     );
   }
 
-  const meta =
-    import.meta.env.DEV && currentPath === "showcase" // DEV showcase — remove this branch with the route
+  const meta = !isKnownPath(location.pathname)
+    ? // The path that matched nothing stands in for the description, so the
+      // missing address is named once, in the chrome that always shows it.
+      { title: t("notFound.title"), description: location.pathname }
+    : import.meta.env.DEV && currentPath === "showcase" // DEV showcase — remove this branch with the route
       ? { title: SHOWCASE_NAV.title, description: SHOWCASE_NAV.description }
       : {
           title: t(`views.${view}.title`),
@@ -464,7 +485,7 @@ export default function App() {
                   />
                 }
               />
-              <Route path="*" element={<Navigate to="/" replace />} />
+              <Route path="*" element={<NotFound />} />
             </Routes>
           </div>
         </div>

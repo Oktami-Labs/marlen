@@ -45,8 +45,20 @@ export interface UpdateDraftPatch {
   /** Format of `body`; meaningless without it. */
   bodyFormat?: "text" | "html";
   subject?: string;
-  /** Full replacement set of cid images for the new body; providers drop inline parts not in it. Meaningless without `body`. */
+  /** Full replacement set of cid images for the new body; providers drop inline parts not in it, so an absent set clears them. Meaningless without `body`. */
   inlineImages?: InlineImage[];
+}
+
+/** One draft as the app reads it back: plain text for the editor, plus the html the provider stores when it has any. */
+export interface DraftDetail {
+  body: string;
+  /**
+   * The stored body's html. The appended signature's cid references live only
+   * here, which is how a signature made of images alone is recognized at all.
+   */
+  bodyHtml?: string;
+  cc: string;
+  bcc: string;
 }
 
 export const DRAFTS_LIST_LIMIT = 15;
@@ -58,10 +70,7 @@ export interface SendDraftResult {
 
 export interface DraftProvider {
   listDrafts(account: ConnectedAccount): Promise<EmailDraft[]>;
-  getDraftDetail(
-    account: ConnectedAccount,
-    draftId: string,
-  ): Promise<{ body: string; cc: string; bcc: string }>;
+  getDraftDetail(account: ConnectedAccount, draftId: string): Promise<DraftDetail>;
   createDraft(account: ConnectedAccount, input: CreateDraftInput): Promise<CreatedDraft>;
   deleteDraft(account: ConnectedAccount, draftId: string): Promise<void>;
   /** Optional: absent means "not supported for this account" and the route replies 400, provider-neutral. */

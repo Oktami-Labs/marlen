@@ -181,6 +181,9 @@ export const api = {
   setAccountColors: (colors: AccountColor[]) =>
     http<{ colors: AccountColor[] }>("PUT", "/api/settings/account-colors", { colors }),
 
+  /** Bytes for an image a pasted signature only points at; the browser cannot read a cross-origin response itself. */
+  signatureImage: (url: string) =>
+    http<{ dataUri: string }>("POST", "/api/settings/signature-image", { url }),
   accountSignatures: () =>
     get<{ signatures: AccountSignature[] }>("/api/settings/account-signatures"),
   setAccountSignatures: (signatures: AccountSignature[]) =>

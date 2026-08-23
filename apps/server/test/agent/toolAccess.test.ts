@@ -1,6 +1,7 @@
 import { describe, expect, it } from "vitest";
 import {
   type ActionGrants,
+  isSubstitutedSendAction,
   NO_GRANTS,
   registeredCategory,
   sessionGrants,
@@ -54,5 +55,21 @@ describe("account grant policy", () => {
       expect(registers("gmail-send-email", writeOnly)).toBe(false);
       expect(registers("gmail-archive-thread", writeOnly)).toBe(interactive);
     }
+  });
+});
+
+/**
+ * Mail an account can send itself goes out through the local draft tool, which
+ * is where the signature and the humanizer pass are applied. If a provider's
+ * own send action came back, outgoing mail would silently lose both — so the
+ * substituted verbs are pinned, and forwarding, which has no local
+ * equivalent, must stay registered.
+ */
+describe("send actions the local draft tool replaces", () => {
+  it("covers send and reply verbs, not forward or reads", () => {
+    expect(isSubstitutedSendAction("gmail-send-email")).toBe(true);
+    expect(isSubstitutedSendAction("microsoft_outlook-reply-to-email")).toBe(true);
+    expect(isSubstitutedSendAction("gmail-forward-email")).toBe(false);
+    expect(isSubstitutedSendAction("gmail-find-email")).toBe(false);
   });
 });

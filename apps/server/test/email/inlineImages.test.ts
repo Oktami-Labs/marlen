@@ -8,6 +8,8 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
  */
 
 const proxyCalls: { method: string; url: string; body?: unknown }[] = [];
+/** Response for the next `get` (a drafts.get payload), when a test needs one. */
+let draftGetResponse: unknown = { id: "draft-1", message: { id: "msg-1", threadId: "thread-1" } };
 
 vi.mock("../../src/integrations/pipedream/connect.js", () => ({
   proxyRequest: async (
@@ -17,6 +19,7 @@ vi.mock("../../src/integrations/pipedream/connect.js", () => ({
     opts?: { body?: unknown },
   ) => {
     proxyCalls.push({ method, url, ...(opts?.body !== undefined ? { body: opts.body } : {}) });
+    if (method === "get") return draftGetResponse;
     return { id: "draft-1", message: { id: "msg-1", threadId: "thread-1" } };
   },
 }));
@@ -26,10 +29,10 @@ import { htmlBodyWithSignature } from "../../src/email/textUtils.js";
 
 const account = { id: "acc-1", app: "gmail", name: "user@example.com" } as ConnectedAccount;
 
-function sentRawMime(): string {
-  const create = proxyCalls.find((call) => call.method === "post");
-  if (!create) throw new Error("no draft create call was proxied");
-  const raw = (create.body as { message: { raw: string } }).message.raw;
+function sentRawMime(method = "post"): string {
+  const call = proxyCalls.find((c) => c.method === method);
+  if (!call) throw new Error(`no draft ${method} call was proxied`);
+  const raw = (call.body as { message: { raw: string } }).message.raw;
   return Buffer.from(raw, "base64url").toString("utf8");
 }
 
@@ -85,5 +88,83 @@ describe("gmail drafts with inline signature images", () => {
     expect(mime).toContain('Content-Type: multipart/related; boundary="');
     expect(mime.indexOf("multipart/mixed")).toBeLessThan(mime.indexOf("multipart/related"));
     expect(mime).toContain('Content-Disposition: attachment; filename="expose.pdf"');
+  });
+});
+
+/**
+ * Gmail's drafts.update replaces the whole message, so everything the caller
+ * does not override has to be carried over verbatim. An edit that touches only
+ * the subject must leave the html body and the signature's inline images
+ * exactly as they were — rebuilding them from the plain-text reading would
+ * strip the signature's formatting and drop its images for good.
+ */
+describe("gmail draft updates", () => {
+  const PIXEL = "iVBORw0KGgoAAAANSUhEUg==";
+  const CONTENT_ID = "abc123@marlen";
+
+  /** A drafts.get payload shaped like a draft this app created with a signature. */
+  function signedDraftPayload(html: string) {
+    return {
+      message: {
+        id: "msg-1",
+        threadId: "thread-1",
+        payload: {
+          mimeType: "multipart/related",
+          headers: [
+            { name: "To", value: "empfaenger@example.com" },
+            { name: "Subject", value: "Alter Betreff" },
+            { name: "MIME-Version", value: "1.0" },
+          ],
+          parts: [
+            {
+              mimeType: "text/html",
+              body: { data: Buffer.from(html, "utf8").toString("base64url") },
+            },
+            {
+              mimeType: "image/png",
+              filename: "signature-1.png",
+              headers: [
+                { name: "Content-ID", value: `<${CONTENT_ID}>` },
+                { name: "Content-Disposition", value: 'inline; filename="signature-1.png"' },
+              ],
+              body: { data: Buffer.from(PIXEL, "base64").toString("base64url") },
+            },
+          ],
+        },
+      },
+    };
+  }
+
+  beforeEach(() => {
+    proxyCalls.length = 0;
+    draftGetResponse = signedDraftPayload(
+      `<div style="font-family:x">Hallo<br><br><p>Max Mustermann</p><img src="cid:${CONTENT_ID}"></div>`,
+    );
+  });
+
+  it("keeps the html body and its inline images when only the subject changes", async () => {
+    await gmailDraftProvider.updateDraft?.(account, "draft-1", { subject: "Neuer Betreff" });
+
+    const mime = sentRawMime("put");
+    expect(mime).toContain("Content-Type: text/html; charset=UTF-8");
+    expect(mime).toContain(`Content-ID: <${CONTENT_ID}>`);
+    expect(mime).toContain('Content-Type: multipart/related; boundary="');
+    expect(mime).not.toContain("Content-Type: text/plain");
+    // The signature image stays an inline part, never a file attachment.
+    expect(mime).not.toContain("Content-Disposition: attachment");
+  });
+
+  it("replaces the body and its inline images when the caller sends a new one", async () => {
+    const { html, images } = htmlBodyWithSignature("Neuer Text", "<p>Max</p>");
+    await gmailDraftProvider.updateDraft?.(account, "draft-1", {
+      body: html,
+      bodyFormat: "html",
+      inlineImages: images,
+    });
+
+    const mime = sentRawMime("put");
+    expect(mime).toContain(Buffer.from(html, "utf8").toString("base64"));
+    // The old signature image is gone with the body that referenced it.
+    expect(mime).not.toContain(`Content-ID: <${CONTENT_ID}>`);
   });
 });

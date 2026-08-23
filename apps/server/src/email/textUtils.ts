@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { EMAIL_BODY_FONT_FAMILY } from "@marlen/shared";
+import { EMAIL_BODY_STYLE, EMAIL_SIGNATURE_STYLE, styleAttribute } from "@marlen/shared";
 import addrs from "email-addresses";
 import { type HtmlToTextOptions, htmlToText } from "html-to-text";
 import type { InlineImage } from "./providers.js";
@@ -21,9 +21,6 @@ export function stripHtml(html: string): string {
   return htmlToText(html, STRIP_HTML_OPTIONS).trim();
 }
 
-/** Unstyled HTML falls back to per-client serif defaults (Times in classic Outlook), so body and signature share one wrapper style. */
-const EMAIL_BODY_STYLE = `font-family:${EMAIL_BODY_FONT_FAMILY};font-size:14px;line-height:1.5`;
-
 const DATA_URI_IMG =
   /(<img\b[^>]*?\bsrc\s*=\s*)(["'])data:(image\/[a-z0-9.+-]+);base64,([^"']*)\2/gi;
 
@@ -33,7 +30,7 @@ const DATA_URI_IMG =
  * Content ids hash the bytes: identical images dedupe, and an unchanged
  * signature keeps stable ids across draft updates.
  */
-function extractInlineImages(html: string): { html: string; images: InlineImage[] } {
+export function withCidImages(html: string): { html: string; images: InlineImage[] } {
   const byContentId = new Map<string, InlineImage>();
   const replaced = html.replace(
     DATA_URI_IMG,
@@ -57,9 +54,11 @@ function extractInlineImages(html: string): { html: string; images: InlineImage[
 
 /**
  * Plain agent prose and the account's signature as one outgoing HTML body:
- * escaped body above the signature (mirroring a mail client's placement), both
- * in one styled wrapper, the signature's data-URI images extracted to cid
- * references the caller must pass on as inlineImages.
+ * escaped body above the signature, mirroring a mail client's placement. Each
+ * is its own block with its own typography, so the body's line spacing cannot
+ * reach into a signature that was laid out somewhere else. The signature's
+ * data-URI images are extracted to cid references the caller must pass on as
+ * inlineImages.
  */
 export function htmlBodyWithSignature(
   body: string,
@@ -70,9 +69,11 @@ export function htmlBodyWithSignature(
     .replace(/</g, "&lt;")
     .replace(/>/g, "&gt;")
     .replace(/\n/g, "<br>");
-  const { html: signature, images } = extractInlineImages(signatureHtml);
+  const { html: signature, images } = withCidImages(signatureHtml);
   return {
-    html: `<div style="${EMAIL_BODY_STYLE}">${escaped}<br><br>${signature}</div>`,
+    html:
+      `<div style="${styleAttribute(EMAIL_BODY_STYLE)}">${escaped}<br><br></div>` +
+      `<div style="${styleAttribute(EMAIL_SIGNATURE_STYLE)}">${signature}</div>`,
     images,
   };
 }

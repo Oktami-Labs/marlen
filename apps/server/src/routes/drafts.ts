@@ -20,8 +20,7 @@ import {
 } from "../db/draftStore.js";
 import { listDraftsCached } from "../email/draftsCache.js";
 import { type DraftProvider, getDraftProvider } from "../email/providers.js";
-import { accountSignatureHtml, outgoingBody } from "../email/signature.js";
-import { detachSignature, stripHtml } from "../email/textUtils.js";
+import { accountSignatureHtml, detachAccountSignature, outgoingBody } from "../email/signature.js";
 import { listAccounts, pipedreamConfigured } from "../integrations/pipedream/connect.js";
 import { keepDraftProposal } from "../services/draftProposals.js";
 
@@ -123,11 +122,15 @@ export const draftRoutes: FastifyPluginAsyncTypebox = async (app) => {
         if (!found) throw notFound("account not found");
         const detail = await found.provider.getDraftDetail(found.account, req.params.draftId);
         const signatureHtml = await accountSignatureHtml(found.account.id);
-        if (!signatureHtml) return detail;
-        const detached = detachSignature(detail.body, stripHtml(signatureHtml));
-        return detached
-          ? { ...detail, body: detached.body, signature: detached.signature }
-          : detail;
+        const detached = signatureHtml ? detachAccountSignature(detail, signatureHtml) : null;
+        // Built field by field: the provider detail's html stays server-side,
+        // it exists only to recognize the signature.
+        return {
+          body: detached?.body ?? detail.body,
+          cc: detail.cc,
+          bcc: detail.bcc,
+          ...(detached?.signature ? { signature: detached.signature } : {}),
+        };
       } catch (error) {
         throw toProviderError(error, "draft not found");
       }
@@ -265,7 +268,7 @@ export const draftRoutes: FastifyPluginAsyncTypebox = async (app) => {
           const signatureHtml = await accountSignatureHtml(found.account.id);
           if (signatureHtml) {
             const current = await found.provider.getDraftDetail(found.account, req.params.draftId);
-            if (detachSignature(current.body, stripHtml(signatureHtml))) {
+            if (detachAccountSignature(current, signatureHtml)) {
               bodyPatch = outgoingBody(body, signatureHtml);
             }
           }

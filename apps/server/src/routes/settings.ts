@@ -23,6 +23,7 @@ import {
 import { rescheduleNightlyLearn } from "../email/learn/service.js";
 import { rescheduleAll } from "../services/automations/scheduler.js";
 import { rescheduleNightlySuggest } from "../services/automations/suggest.js";
+import { fetchInlineImage } from "../services/signatureImage.js";
 
 const languageBody = Type.Object({ language: Type.String() });
 
@@ -49,12 +50,17 @@ const accountColorsBody = Type.Object({
   colors: Type.Array(Type.Object({ accountId: Type.String(), hex: Type.String() })),
 });
 
-// Generous cap: a pasted signature can carry an inline data-URI image.
+// Generous cap: a pasted signature carries its images as inline data URIs,
+// which base64 inflates by a third. The editor downscales before it gets here
+// and refuses a signature that would exceed this, so the limit surfaces as its
+// own message rather than as a schema rejection.
 const accountSignaturesBody = Type.Object({
   signatures: Type.Array(
-    Type.Object({ accountId: Type.String(), html: Type.String({ maxLength: 500_000 }) }),
+    Type.Object({ accountId: Type.String(), html: Type.String({ maxLength: 1_500_000 }) }),
   ),
 });
+
+const signatureImageBody = Type.Object({ url: Type.String({ maxLength: 4096 }) });
 
 /** Tags whose content is never signature markup; both the element and what it wraps go. */
 const ACTIVE_ELEMENTS = "script|style|iframe|object|embed|form|template|noscript";
@@ -189,6 +195,14 @@ export const settingsRoutes: FastifyPluginAsyncTypebox = async (app) => {
     emitServerEvent("accounts");
     return { colors: req.body.colors };
   });
+
+  // The editor's paste path: an <img> the copied signature points at by URL,
+  // returned as a data URI so the stored signature owns its bytes.
+  app.post(
+    "/api/settings/signature-image",
+    { schema: { body: signatureImageBody } },
+    async (req) => ({ dataUri: await fetchInlineImage(req.body.url) }),
+  );
 
   app.get("/api/settings/account-signatures", async () => ({
     signatures: await getAccountSignatures(),

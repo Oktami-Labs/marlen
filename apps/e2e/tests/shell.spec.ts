@@ -18,6 +18,19 @@ test("a fresh install opens the app and navigates between views", async ({ page 
   }
 });
 
+test("an unknown address says so instead of quietly landing on Home", async ({ page }) => {
+  await openApp(page, "/gibt-es-nicht");
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(t("notFound.title"));
+  // The address that missed is named, and kept: a redirect would hide which
+  // link was wrong.
+  await expect(page.getByText("/gibt-es-nicht")).toBeVisible();
+  expect(new URL(page.url()).pathname).toBe("/gibt-es-nicht");
+
+  await page.getByRole("button", { name: t("notFound.goHome") }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(t("views.home.title"));
+});
+
 test("Leads stays hidden until a CRM is connected", async ({ page, request }) => {
   await openApp(page);
   const leads = page.getByRole("link", { name: t("views.leads.title"), exact: true });

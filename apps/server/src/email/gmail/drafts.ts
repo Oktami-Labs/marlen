@@ -9,6 +9,7 @@ import {
   type CreateDraftInput,
   DRAFTS_LIST_LIMIT,
   type DraftAttachment,
+  type DraftDetail,
   type DraftProvider,
   type InlineImage,
   type SendDraftResult,
@@ -21,6 +22,7 @@ import {
   forEachAttachmentPart,
   GMAIL_API,
   headerLookup,
+  htmlBody,
   type MessagePart,
   plainTextBody,
   type ThreadGetResponse,
@@ -96,7 +98,7 @@ async function listGmailDrafts(account: ConnectedAccount): Promise<EmailDraft[]>
 async function getGmailDraftDetail(
   account: ConnectedAccount,
   draftId: string,
-): Promise<{ body: string; cc: string; bcc: string }> {
+): Promise<DraftDetail> {
   const full = (await proxyRequest(account.id, "get", `${GMAIL_API}/drafts/${draftId}`, {
     params: { format: "full" },
   })) as {
@@ -104,7 +106,13 @@ async function getGmailDraftDetail(
   };
   const payload = full.message?.payload;
   const header = headerLookup(payload);
-  return { body: plainTextBody(payload), cc: header("Cc"), bcc: header("Bcc") };
+  const html = htmlBody(payload);
+  return {
+    body: plainTextBody(payload),
+    ...(html ? { bodyHtml: html } : {}),
+    cc: header("Cc"),
+    bcc: header("Bcc"),
+  };
 }
 
 async function deleteGmailDraft(account: ConnectedAccount, draftId: string): Promise<void> {
@@ -346,31 +354,39 @@ function requireResponseString(value: unknown, field: string): string {
 }
 
 /**
- * The draft's attachments with bytes resolved: inline base64url `body.data`
- * decoded, ref-only parts downloaded. updateGmailDraft re-embeds these because
+ * The draft's parts with bytes resolved (inline base64url `body.data` decoded,
+ * ref-only parts downloaded), split into files and the cid-referenced inline
+ * images a signature brings. updateGmailDraft re-embeds both, because
  * drafts.update replaces the whole message and would otherwise drop them.
  */
-async function fetchDraftAttachments(
+async function fetchDraftParts(
   account: ConnectedAccount,
   messageId: string,
   payload: MessagePart | undefined,
-): Promise<DraftAttachment[]> {
-  const parts: { filename: string; mimeType: string; data?: string; attachmentId?: string }[] = [];
+): Promise<{ attachments: DraftAttachment[]; inlineImages: InlineImage[] }> {
+  const parts: {
+    filename: string;
+    mimeType: string;
+    contentId?: string;
+    data?: string;
+    attachmentId?: string;
+  }[] = [];
   forEachAttachmentPart(payload, (part, filename) => {
-    // cid-referenced inline images (the signature's) are rebuilt from the
-    // update's own inlineImages; re-embedding them here would turn them into
-    // regular file attachments with dangling cid references.
     const header = headerLookup(part);
-    if (header("Content-ID") && /^inline/i.test(header("Content-Disposition"))) return;
+    const contentId = header("Content-ID");
+    const isInline = Boolean(contentId) && /^inline/i.test(header("Content-Disposition"));
     parts.push({
       filename,
       mimeType: part.mimeType ?? "application/octet-stream",
+      // Angle brackets belong to the header, not to the cid: reference.
+      ...(isInline ? { contentId: contentId.replace(/^<|>$/g, "") } : {}),
       ...(part.body?.data ? { data: part.body.data } : {}),
       ...(part.body?.attachmentId ? { attachmentId: part.body.attachmentId } : {}),
     });
   });
 
-  const resolved: DraftAttachment[] = [];
+  const attachments: DraftAttachment[] = [];
+  const inlineImages: InlineImage[] = [];
   for (const part of parts) {
     let content: Buffer;
     if (part.data) {
@@ -385,9 +401,11 @@ async function fetchDraftAttachments(
     } else {
       continue;
     }
-    resolved.push({ filename: part.filename, mimeType: part.mimeType, content });
+    const resolved = { filename: part.filename, mimeType: part.mimeType, content };
+    if (part.contentId) inlineImages.push({ contentId: part.contentId, ...resolved });
+    else attachments.push(resolved);
   }
-  return resolved;
+  return { attachments, inlineImages };
 }
 
 async function fetchGmailDraftFull(
@@ -398,10 +416,13 @@ async function fetchGmailDraftFull(
   cc: string;
   bcc: string;
   subject: string;
+  /** The stored body verbatim — html when the draft has an html part, so an update can carry it over unflattened. */
   body: string;
+  bodyFormat: "text" | "html";
   threadId: string;
   extraHeaders: string[];
   attachments: DraftAttachment[];
+  inlineImages: InlineImage[];
 }> {
   const full = (await proxyRequest(account.id, "get", `${GMAIL_API}/drafts/${draftId}`, {
     params: { format: "full" },
@@ -415,27 +436,33 @@ async function fetchGmailDraftFull(
   const payload = full.message?.payload;
   const header = headerLookup(payload);
   const messageId = full.message?.id;
+  const html = htmlBody(payload);
+  const parts = messageId
+    ? await fetchDraftParts(account, messageId, payload)
+    : { attachments: [], inlineImages: [] };
   return {
     to: header("To"),
     cc: header("Cc"),
     bcc: header("Bcc"),
     subject: header("Subject"),
-    body: plainTextBody(payload),
+    body: html ?? plainTextBody(payload),
+    bodyFormat: html ? "html" : "text",
     threadId: full.message?.threadId ?? "",
     extraHeaders: PRESERVED_HEADERS.filter((name) => header(name)).map(
       (name) => `${name}: ${header(name)}`,
     ),
-    attachments: messageId ? await fetchDraftAttachments(account, messageId, payload) : [],
+    ...parts,
   };
 }
 
 /**
  * Save body/subject as passed. Everything the caller doesn't override is
  * fetched from the current draft first, since Gmail's drafts.update replaces
- * the whole message rather than patching it. Without an explicit html
- * bodyFormat the rebuilt message is text/plain, so saving an edit to an HTML
- * draft composed in Gmail's web UI converts it to plain text: lossy for
- * markup, not for anything shown here.
+ * the whole message rather than patching it. A caller-supplied body brings its
+ * own format and cid images; without one the stored body is carried over
+ * verbatim with both, so changing only the subject can't flatten an html draft
+ * to plain text or drop the signature's inline images. A body edit is a
+ * plain-text replacement of html markup by design — the editor is plain text.
  */
 async function updateGmailDraft(
   account: ConnectedAccount,
@@ -443,18 +470,17 @@ async function updateGmailDraft(
   input: UpdateDraftPatch,
 ): Promise<void> {
   const current = await fetchGmailDraftFull(account, draftId);
+  const replacingBody = input.body !== undefined;
+  const bodyFormat = replacingBody ? input.bodyFormat : current.bodyFormat;
+  const inlineImages = replacingBody ? input.inlineImages : current.inlineImages;
   const raw = buildRawMessage({
     to: current.to,
     ...(current.cc ? { cc: current.cc } : {}),
     ...(current.bcc ? { bcc: current.bcc } : {}),
     subject: input.subject ?? current.subject,
     body: input.body ?? current.body,
-    // The fetched fallback body is stripped to plain text, so the format only
-    // ever applies to a caller-supplied body.
-    ...(input.body !== undefined && input.bodyFormat ? { bodyFormat: input.bodyFormat } : {}),
-    ...(input.body !== undefined && input.inlineImages?.length
-      ? { inlineImages: input.inlineImages }
-      : {}),
+    ...(bodyFormat ? { bodyFormat } : {}),
+    ...(inlineImages?.length ? { inlineImages } : {}),
     extraHeaders: current.extraHeaders,
     ...(current.attachments.length > 0 ? { attachments: current.attachments } : {}),
   });

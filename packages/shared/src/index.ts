@@ -93,8 +93,35 @@ export interface AccountSignature {
   html: string;
 }
 
-/** Font stack outgoing HTML bodies are wrapped in; the signature editor previews with the same stack so saved and sent match. */
+/** Font stack outgoing HTML is wrapped in: unstyled HTML falls back to per-client serif defaults (Times in classic Outlook). */
 export const EMAIL_BODY_FONT_FAMILY = "Arial, Helvetica, sans-serif";
+
+/** Typography of the agent-written part of an outgoing body. */
+export const EMAIL_BODY_STYLE = {
+  fontFamily: EMAIL_BODY_FONT_FAMILY,
+  fontSize: "14px",
+  lineHeight: "1.5",
+} as const;
+
+/**
+ * Typography of the signature block below it, and of the editor's preview of
+ * one, so that what is shown and what is sent cannot drift apart. The face and
+ * size are the body's, but the line spacing is deliberately the browser
+ * default: a pasted signature brings its own spacing, and a body line-height
+ * imposed on top of it is the difference between a signature that looks like
+ * the one in the mail client it came from and one stretched to twice its
+ * height.
+ */
+export const EMAIL_SIGNATURE_STYLE = { ...EMAIL_BODY_STYLE, lineHeight: "normal" } as const;
+
+/** One of those as a style attribute value, for the html the server assembles as text. */
+export function styleAttribute(style: Record<string, string>): string {
+  return Object.entries(style)
+    .map(
+      ([property, value]) => `${property.replace(/[A-Z]/g, (c) => `-${c.toLowerCase()}`)}:${value}`,
+    )
+    .join(";");
+}
 
 /** Reading is always allowed; an account with no record is read-only. */
 export interface AccountPermissions {

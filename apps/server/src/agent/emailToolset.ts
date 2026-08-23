@@ -20,7 +20,13 @@ import {
 import { isWhatsAppLinked } from "../integrations/whatsapp/session.js";
 import { buildListAttachmentsTool, buildSaveAttachmentTool } from "./attachmentTool.js";
 import { buildDraftTool, buildUpdateDraftTool } from "./draftTools.js";
-import { type ActionGrants, NO_GRANTS, registeredCategory, sessionGrants } from "./toolAccess.js";
+import {
+  type ActionGrants,
+  isSubstitutedSendAction,
+  NO_GRANTS,
+  registeredCategory,
+  sessionGrants,
+} from "./toolAccess.js";
 import { clampToolText } from "./toolkit.js";
 
 const log = moduleLogger("emailToolset");
@@ -125,12 +131,20 @@ function buildAccountTools(
   // the silent capability filtering is at least visible in debug logs.
   const skipped: string[] = [];
 
+  const draftProvider = getDraftProvider(account.app);
   for (const mcpTool of mcpTools) {
     // Pipedream's create-draft is gated behind a paid workspace on some apps
     // (Gmail needs File Stash); Marlen substitutes its own proxy-based tool
     // under the same slug for every app with a DraftProvider, so skip
     // Pipedream's version wherever ours takes over.
-    if (getDraftProvider(account.app) && mcpTool.name === `${account.app}-create-draft`) continue;
+    if (draftProvider && mcpTool.name === `${account.app}-create-draft`) continue;
+    // Same substitution for the app's own send/reply actions: the account
+    // signature and the humanizer pass live in the draft save path, so mail
+    // dispatched straight through the provider would carry neither.
+    if (draftProvider?.sendDraft && isSubstitutedSendAction(mcpTool.name)) {
+      skipped.push(mcpTool.name);
+      continue;
+    }
     const category = registeredCategory(mcpTool.name, granted);
     if (!category) {
       skipped.push(mcpTool.name);

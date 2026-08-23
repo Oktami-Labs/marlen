@@ -410,7 +410,7 @@
     },
     "signature": {
       "title": "E-Mail-Signatur",
-      "hint": "Fügen Sie Ihre Signatur direkt aus Gmail oder Outlook ein, oder schreiben und formatieren Sie sie hier. Die Vorschau zeigt sie so, wie Empfänger sie sehen, und der Assistent setzt sie unter jede E-Mail, die er aus diesem Konto entwirft.",
+      "hint": "Fügen Sie Ihre komplette Signatur direkt aus Gmail oder Outlook ein, das Logo wird mit übernommen und mitgespeichert. Klicken Sie ein Bild an und ziehen Sie an einer Ecke, um es in der Größe zu ändern. Die Vorschau zeigt die Signatur so, wie Empfänger sie sehen, und der Assistent setzt sie unter jede E-Mail, die er aus diesem Konto entwirft.",
       "save": "Signatur speichern",
       "saved": "Signatur gespeichert.",
       "removed": "Signatur entfernt.",
@@ -422,7 +422,12 @@
       "linkPlaceholder": "https://beispiel.de",
       "linkApply": "Übernehmen",
       "image": "Bild einfügen",
-      "imageTooLarge": "Das Bild ist zu groß, bis 300 KB funktioniert."
+      "imageTooLarge": "Dieses Bild ist zu groß, auch verkleinert passt es nicht in eine Signatur.",
+      "resize": "Bildgröße ändern",
+      "pasting": "Bilder werden übernommen…",
+      "imagesDropped_one": "1 Bild konnte nicht mit übernommen werden, fügen Sie es über die Bild-Schaltfläche ein.",
+      "imagesDropped_other": "{{count}} Bilder konnten nicht mit übernommen werden, fügen Sie sie über die Bild-Schaltfläche ein.",
+      "tooLarge": "Diese Signatur ist zu groß zum Speichern. Verwenden Sie ein kleineres Logo."
     },
     "noAccounts": "Noch keine E-Mail-Konten verbunden. Nutzen Sie die Knöpfe oben. Pro Anbieter geht auch mehr als ein Konto.",
     "finishConnecting": "Schließen Sie die Verbindung im neuen Browser-Tab ab. Das Konto erscheint dann automatisch hier.",
@@ -827,7 +832,7 @@
       "downloaded": "Version {{version}} bereit zur Installation",
       "unavailable": "Diese Version kann nicht nach Updates suchen",
       "checkFailed": "Updates konnten nicht geprüft werden",
-      "manual": "Version {{version}} ist verfügbar — zum Installieren herunterladen"
+      "manual": "Version {{version}} ist verfügbar, zum Installieren herunterladen"
     },
     "provider": "Anbieter",
     "model": "Modell",
@@ -902,5 +907,10 @@
     "description": "Bei der Darstellung ist ein Fehler aufgetreten. Sie können es erneut versuchen oder die App neu laden.",
     "tryAgain": "Erneut versuchen",
     "reload": "Neu laden"
+  },
+  "notFound": {
+    "title": "Diese Seite gibt es nicht",
+    "description": "Diese Adresse gehört nicht zu Marlen. Ein alter Link oder Bookmark kann hier landen.",
+    "goHome": "Zur Startseite"
   }
 }
