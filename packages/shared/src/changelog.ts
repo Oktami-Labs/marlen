@@ -13,6 +13,32 @@ export type ChangelogEntry = {
  */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.4.8",
+    date: "2026-08-23",
+    notes: {
+      en: [
+        "Your whole signature can now be pasted straight from Gmail or Outlook, logo included. Images a copied signature only points at are downloaded and stored with it, so recipients see the logo instead of a blocked placeholder, and an oversized one is scaled down to fit.",
+        "A logo can be resized where it sits: click it, then drag any corner. The size you give it is the size recipients see.",
+        "A pasted signature now keeps its own line spacing, so it arrives looking like the one in the mail client it was copied from instead of stretched to twice the height. Outlook and Word keep that spacing in a stylesheet the app cannot carry along, and it is now read out and written onto the signature itself.",
+        "Where an image cannot be copied along, the editor says how many were left out instead of leaving broken images behind. Those go in with the image button.",
+        "Editing a draft no longer costs it its signature. Changing just the subject keeps the formatted text and the signature's images exactly as they were, and a signature that is nothing but a logo is recognized as one.",
+        "The assistant now always sends mail the way that adds your signature. Some accounts offered a direct send action that skipped both the signature and the pass that puts a draft in your own wording; that route is closed.",
+        "The signature preview in Settings no longer applies the app's own styling to what you paste. It now shows the signature with the spacing recipients get, which is also how you can tell whether a paste came through right.",
+        "An address that does not exist says so and names it, instead of quietly putting you on Home.",
+      ],
+      de: [
+        "Ihre komplette Signatur lässt sich jetzt direkt aus Gmail oder Outlook einfügen, samt Logo. Bilder, auf die eine kopierte Signatur nur verweist, werden heruntergeladen und mitgespeichert, sodass Empfänger das Logo sehen und keinen leeren Platzhalter. Zu große Bilder werden dabei passend verkleinert.",
+        "Ein Logo lässt sich an Ort und Stelle in der Größe ändern: anklicken, dann an einer der Ecken ziehen. Die eingestellte Größe ist die, die Empfänger sehen.",
+        "Eine eingefügte Signatur behält jetzt ihren eigenen Zeilenabstand und kommt so an, wie sie im Mailprogramm aussah, statt auf die doppelte Höhe auseinandergezogen. Outlook und Word legen diesen Abstand in einem Stylesheet ab, das die App nicht mitnehmen kann, und er wird jetzt daraus ausgelesen und direkt in die Signatur geschrieben.",
+        "Lässt sich ein Bild nicht mit übernehmen, sagt der Editor, wie viele fehlen, statt kaputte Bilder zu hinterlassen. Diese fügen Sie über die Bild-Schaltfläche ein.",
+        "Das Bearbeiten eines Entwurfs kostet ihn nicht mehr seine Signatur. Wer nur den Betreff ändert, behält den formatierten Text und die Bilder der Signatur unverändert, und eine Signatur, die nur aus einem Logo besteht, wird als solche erkannt.",
+        "Der Assistent verschickt E-Mails jetzt immer auf dem Weg, der Ihre Signatur anfügt. Bei manchen Konten gab es eine direkte Sende-Aktion, die sowohl die Signatur als auch die Formulierung in Ihrer Sprache übersprang. Dieser Weg ist geschlossen.",
+        "Die Signatur-Vorschau in den Einstellungen legt nicht mehr die eigene Formatierung der App über das Eingefügte. Sie zeigt die Signatur jetzt mit den Abständen, die auch Empfänger sehen, und daran erkennen Sie, ob das Einfügen gepasst hat.",
+        "Eine Adresse, die es nicht gibt, sagt das jetzt und nennt sie, statt Sie stillschweigend auf der Startseite abzusetzen.",
+      ],
+    },
+  },
+  {
     version: "0.4.7",
     date: "2026-08-09",
     notes: {
