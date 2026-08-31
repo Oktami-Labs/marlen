@@ -62,7 +62,7 @@ async function fetchAnthropicWindows(): Promise<ProviderUsage | null> {
   }
 
   // Undocumented endpoint. The `limits` array is the authoritative modern
-  // shape — it also carries model-scoped weekly windows (Fable, Opus) that
+  // shape and carries model-scoped weekly windows (Fable, Opus) that
   // never appear as top-level keys. The top-level utilization records remain
   // as fallback for older response shapes.
   const body: unknown = await res.json();
@@ -88,7 +88,7 @@ async function fetchAnthropicWindows(): Promise<ProviderUsage | null> {
       });
     }
   }
-  // 5h first, then the plain week, then model-scoped weeks — the ring reads
+  // 5h first, then the plain week, then model-scoped weeks, the ring reads
   // the first meter's order and response order isn't guaranteed.
   return {
     windows: windows.sort((a, b) => windowRank(a.id) - windowRank(b.id)),
@@ -235,7 +235,8 @@ const WINDOW_ORDER: Record<string, number> = { "5h": 0, week: 1, month: 2 };
 /**
  * Codex windows are positional (primary ≈ 5h, secondary ≈ week), but some
  * plans report other spans (monthly credit windows), so the reported duration
- * — or failing that the reset distance — wins over position. Position only
+ * wins over position. The reset distance decides when duration is unavailable.
+ * Position only
  * sets the floor: a week never demotes to 5h just because it resets soon.
  */
 function codexWindowId(

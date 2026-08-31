@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 
-// Borderless filled control — see `.field` in index.css.
+// Borderless filled control, see `.field` in index.css.
 export function Textarea({ className, ref, ...props }: React.ComponentPropsWithRef<"textarea">) {
   return (
     <textarea

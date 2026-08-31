@@ -1,13 +1,17 @@
 # @marlen/desktop
 
-Electron shell around the Marlen server + web app. It runs the bundled
-`@marlen/server` as a utility child process on `127.0.0.1` (ports 43117+),
-opens a window on it, and auto-updates from the releases of the public
-`Oktami-Labs/marlen` repo (this source repo is private).
-All state (SQLite DB, library, logs) lives in Electron's per-user data
-directory (`~/Library/Application Support/Marlen` on macOS).
+This is the shipping Electron shell around the Marlen server and web app. It
+runs the bundled `@marlen/server` as a utility child process on `127.0.0.1`
+(ports 43117+), opens a window on it, and auto-updates from releases in the
+public `Oktami-Labs/marlen` repo. This source repo is private.
+The SQLite database, agent home (`wiki/` and `knowledge/`), WhatsApp session,
+and logs live under Electron's per-user data directory
+(`~/Library/Application Support/Marlen` on macOS).
 
-Day-to-day development doesn't involve this package — `pnpm dev` at the repo
+`apps/desktop-tauri` is a development preview only. Tagged releases and the
+auto-update feed still build this Electron package.
+
+Day-to-day development doesn't involve this package. `pnpm dev` at the repo
 root (browser + Vite) stays the loop. This shell only matters when working on
 the shell itself or cutting a release.
 
@@ -24,19 +28,15 @@ launches Electron. First run takes a few minutes (Electron headers +
 better-sqlite3 compile); later runs are incremental.
 
 `MARLEN_DESKTOP_SMOKE=1` makes the shell quit itself right after the window
-finishes loading — a boot smoke test for CI or a headless check.
+finishes loading. This is the boot smoke test for CI or a headless check.
 
-The `packageManager: "npm@…"` field in this package's package.json is
-load-bearing: it tells electron-builder's node-module collector that
-`build/app` is an npm-managed tree. Without it the collector detects pnpm
-(from the workspace / the `pnpm dist` user agent), fails to read
-`build/app/node_modules`, and silently packages only a fraction of the
-runtime deps — the app then dies on `Cannot find package 'fastify'`.
+Keep the `packageManager: "npm@…"` field in this package's `package.json`.
+electron-builder uses it to collect the npm-managed runtime tree in `build/app`.
 
 ## Cutting a release
 
 1. Bump `version` in `apps/desktop/package.json`.
-2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
+2. Tag the same version as `vX.Y.Z` and push the tag.
 3. The `release.yml` workflow builds macOS and Windows installers and
    uploads them to a **draft** release in the public `Oktami-Labs/marlen`
    repo. It authenticates with the `RELEASE_TOKEN` repo secret: a
@@ -60,7 +60,7 @@ release), and the issue tracker the About panel links to. Auto-update works
 anonymously out of the box.
 
 macOS quirk until builds are signed: a CI-built dmg downloaded from GitHub
-carries the quarantine flag — allow it once via System Settings → Privacy &
+carries the quarantine flag. Allow it once via System Settings → Privacy &
 Security → "Open Anyway" (and macOS auto-update stays off until signing).
 
 ## Signing
@@ -68,10 +68,10 @@ Security → "Open Anyway" (and macOS auto-update stays off until signing).
 Unsigned status quo: **Windows** installs and auto-updates fine (Windows
 shows a one-time SmartScreen warning on first install); **macOS** blocks
 unsigned builds at Gatekeeper and electron-updater won't apply updates there.
-`release.yml` is pre-wired — signing turns on by adding repo secrets, no
-workflow changes needed.
+`release.yml` currently forces unsigned builds. Signing requires
+platform-specific workflow configuration as well as repo secrets.
 
-**macOS** (Apple Developer Program, $99/yr — required for Mac distribution):
+**macOS** (Apple Developer Program, $99/yr, required for Mac distribution):
 
 1. Create a *Developer ID Application* certificate in the Apple Developer
    portal, export it from Keychain as `.p12`.
@@ -82,18 +82,20 @@ workflow changes needed.
    step with `if: runner.os == 'macOS'` / `'Windows'`) and set the env vars
    only there: `CSC_LINK`, `CSC_KEY_PASSWORD`, `APPLE_ID`,
    `APPLE_APP_SPECIFIC_PASSWORD`, `APPLE_TEAM_ID`. Never set them to empty
-   values on the other platform — electron-builder treats an empty
+   values on the other platform. electron-builder treats an empty
    `CSC_LINK` as a certificate path and the build fails on it.
-4. Done — the next tagged release is signed + notarized, and macOS
+4. Remove the unsigned-only setting from the macOS package step. The next
+   tagged release is signed and notarized, and macOS
    auto-updates start working.
 
-**Windows** (optional — removes SmartScreen; updates work without it):
+**Windows** (optional, removes SmartScreen; updates work without it):
 Azure Trusted Signing (~$10/mo): create a Trusted Signing account +
 identity validation + certificate profile in Azure, plus an app
 registration with the *Trusted Signing Certificate Profile Signer* role.
-Then set the `AZURE_*` secrets and uncomment the two marked blocks
-(`release.yml`, `electron-builder.yml`). Once Windows builds ship signed,
-keep signing — dropping back to unsigned makes the updater reject updates.
+Then set the `AZURE_*` secrets, configure `azureSignOptions` in
+`electron-builder.yml`, and pass the Azure credentials only to the Windows
+package step in `release.yml`. Once Windows builds ship signed, keep signing.
+Dropping back to unsigned makes the updater reject updates.
 
 The app icon lives in `resources/`: `icon.svg` (the web logo centered on an
 Apple-grid rounded tile) is the editable source, `icon.png` (1024²) is what

@@ -5,10 +5,12 @@ import { AudioLines, BookmarkCheck, Paperclip, PenLine } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { DraftActionDialog, useDraftActions } from "@/components/draftActions";
+import { MessageHeader, RecipientLine } from "@/components/MessageHeader";
 import { ThreadHistory } from "@/components/ThreadHistory";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { OpenExternalButton } from "@/components/ui/open-external-button";
+import { parseAddress } from "@/lib/addresses";
 import { api, isNotFound } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { CardBodyText, CardShell } from "./CardShell";
@@ -16,19 +18,19 @@ import { CardBodyText, CardShell } from "./CardShell";
 type EmailDraftData = Extract<AgentCard, { kind: "email_draft" }>;
 
 /** The draft's fate as this card knows it. `open` covers both "still a live
- *  draft" and "we haven't checked yet" — the status fetch is a local DB read
+ *  draft" and "we haven't checked yet", the status fetch is a local DB read
  *  that resolves fast enough that a separate loading state isn't worth it.
  *  `gone` is a 404 hit while sending/discarding: the draft vanished upstream
  *  outside this card's own action. */
 type DraftCardStatus = "open" | "kept" | "sent" | "discarded" | "gone";
 
-/** localStorage flag for a card manually collapsed via Keep — cleared by
+/** localStorage flag for a card manually collapsed via Keep, cleared by
  *  clicking the collapsed line back open. */
 function keepStorageKey(draftId: string): string {
   return `marlen-draft-keep:${draftId}`;
 }
 
-/** The create-draft preview — the card most worth getting right, since it's what actually gets sent. */
+/** The create-draft preview, the card most worth getting right, since it's what actually gets sent. */
 export function EmailDraftCard({ card, color }: { card: EmailDraftData; color?: string }) {
   const { t } = useTranslation();
   const { account, draft } = card;
@@ -66,7 +68,7 @@ export function EmailDraftCard({ card, color }: { card: EmailDraftData; color?: 
       return api.draftStatus(accountId as string, draft.draftId as string);
     },
     enabled: canAct && !kept,
-    // 404 (no snapshot — the draft wasn't agent-written) or any other
+    // 404 (no snapshot, the draft wasn't agent-written) or any other
     // failure: treat as unknown, keep live actions.
     retry: false,
   });
@@ -132,11 +134,9 @@ export function EmailDraftCard({ card, color }: { card: EmailDraftData; color?: 
     },
   });
 
-  const recipients: Array<[string, string[] | undefined]> = [
-    [t("chat.cards.draft.to"), draft.to],
-    [t("chat.cards.draft.cc"), draft.cc],
-    [t("chat.cards.draft.bcc"), draft.bcc],
-  ];
+  // The card fronts the person the mail goes to; the rest of the To list, and
+  // any Cc/Bcc, follow underneath.
+  const primary = parseAddress(draft.to[0] ?? "");
 
   return (
     <CardShell
@@ -185,8 +185,8 @@ export function EmailDraftCard({ card, color }: { card: EmailDraftData; color?: 
           </button>
         </div>
       ) : status === "kept" ? (
-        // A kept proposal became a real mailbox draft: terminal here, it now
-        // lives in the approval list on Home (and the mailbox).
+        // A kept proposal is now a mailbox draft. It lives in the Home approval
+        // list and in the mailbox, so this card is terminal.
         <div className="px-4 pb-4 pt-0.5">
           <span className="flex w-fit items-center gap-1.5 text-xs font-medium text-muted-foreground">
             <BookmarkCheck className="h-3.5 w-3.5 shrink-0" />
@@ -206,27 +206,24 @@ export function EmailDraftCard({ card, color }: { card: EmailDraftData; color?: 
           <Badge variant="muted">{t("chat.cards.draft.goneLabel")}</Badge>
         </div>
       ) : (
-        <div className="flex flex-col gap-3 px-4 pb-4 pt-0.5">
-          {/* Recipient header, set like a real mail header: mono labels, plain values. */}
-          <div className="grid grid-cols-[auto_1fr] items-baseline gap-x-3 gap-y-1">
-            {recipients.map(
-              ([label, list]) =>
-                list &&
-                list.length > 0 && (
-                  <React.Fragment key={label}>
-                    <span className="font-mono text-2xs text-muted-foreground">{label}</span>
-                    <span className="truncate text-xs text-foreground/90">{list.join(", ")}</span>
-                  </React.Fragment>
-                ),
-            )}
+        <div className="flex flex-col gap-4 px-4 pb-4 pt-0.5">
+          {/* Mail header over a hairline, then the prose, the same shape the
+              Home approval row opens to. */}
+          <div className="border-b border-border pb-3.5">
+            <MessageHeader name={primary.name} detail={primary.address} tone="tint-accent">
+              {draft.to.length > 1 && (
+                <RecipientLine kind="to" addresses={draft.to} self={account?.name} />
+              )}
+              <RecipientLine kind="cc" addresses={draft.cc} self={account?.name} />
+              <RecipientLine kind="bcc" addresses={draft.bcc} self={account?.name} />
+            </MessageHeader>
           </div>
 
           <CardBodyText text={draft.body} />
 
-          {/* The signature the server appends on send — shown so the card reads
-              like the outgoing mail, visually set off as the fixed block it is. */}
+          {/* Preview the fixed signature block that the server appends on send. */}
           {draft.signatureText && (
-            <p className="whitespace-pre-line border-t border-border/60 pt-2 text-sm leading-relaxed text-muted-foreground">
+            <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
               {draft.signatureText}
             </p>
           )}
@@ -244,7 +241,7 @@ export function EmailDraftCard({ card, color }: { card: EmailDraftData; color?: 
           )}
 
           {accountId && draft.threadId && (
-            <ThreadHistory accountId={accountId} threadId={draft.threadId} />
+            <ThreadHistory accountId={accountId} threadId={draft.threadId} self={account?.name} />
           )}
 
           {canAct && (

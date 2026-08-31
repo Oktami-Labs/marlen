@@ -18,7 +18,7 @@ import { errorMessage, toggleRowProps } from "@/lib/utils";
 
 type BriefingCardData = Extract<AgentCard, { kind: "briefing" }>;
 
-/** The run's structured briefing card, if its turn produced one — a run
+/** The run's structured briefing card, if its turn produced one, a run
  *  whose turn never called `compose_briefing` has no card and falls through. */
 export function findBriefingCard(run: RunFeedItem): BriefingCardData | undefined {
   const match = run.cards?.find((c) => c.card.kind === "briefing");
@@ -60,11 +60,11 @@ export function RunBody({
 }
 
 /**
- * The flagship "Today's briefing" card — the most recent successful,
+ * The flagship "Today's briefing" card, the most recent successful,
  * card-carrying automation run (see HomePanel's heroRun selection), shown
  * expanded above the rest of the activity feed. The body renders the
  * structured `BriefingCard` when the run's turn produced one, else the
- * generic plain-markdown render — a run whose turn skipped compose_briefing
+ * generic plain-markdown render, a run whose turn skipped compose_briefing
  * still renders, just without any briefing-shaped structure.
  */
 export function BriefingHero({
@@ -80,7 +80,7 @@ export function BriefingHero({
   onNavigate: (view: View) => void;
   /** Next scheduled run of this automation (Automation.nextRunAt), shown when this run isn't from today. */
   nextRunAt?: string | null;
-  /** HomePanel already fetches and caches these — no need for BriefingHero to fetch its own. */
+  /** HomePanel already fetches and caches these, no need for BriefingHero to fetch its own. */
   colors: AccountColor[];
 }) {
   const { t, i18n } = useTranslation();
@@ -92,7 +92,7 @@ export function BriefingHero({
   const urgentCount = React.useMemo(() => countUrgentItems(run), [run]);
 
   // Cover both "I just clicked refresh" and "a schedule/chat kicked off a run
-  // for this automation elsewhere" — either way the spinner should be lit.
+  // for this automation elsewhere", either way the spinner should be lit.
   const feedRunning = runs?.some(
     (r) => r.automationId === run.automationId && r.status === "running",
   );
@@ -103,7 +103,7 @@ export function BriefingHero({
     ? t("home.briefingToday", { time: dayTimeLabel(run.startedAt, i18n.language) })
     : dayTimeLabel(run.startedAt, i18n.language, "long");
 
-  // Only surface the next scheduled run when this one isn't from today — a
+  // Only surface the next scheduled run when this one isn't from today, a
   // fresh today's briefing doesn't need a "next" hint next to it.
   if (!startedToday && nextRunAt) {
     metaLabel += ` · ${t("home.briefingNext", { when: dayTimeLabel(nextRunAt, i18n.language) })}`;
@@ -116,7 +116,7 @@ export function BriefingHero({
     setRefreshing(true);
     try {
       // Fire-and-forget on the server (202): the run itself takes minutes.
-      // `refreshing` stays true past this await — the effect below hands the
+      // `refreshing` stays true past this await, the effect below hands the
       // spinner over once the runs feed reflects the running row, so there is
       // no dead moment between "queued" and "visibly running".
       await api.runAutomation(run.automationId);
@@ -127,8 +127,8 @@ export function BriefingHero({
   };
 
   // Hand-off (plus a stuck-spinner backstop): once the feed shows the run,
-  // feedRunning owns the spinner; if it never does — dropped event stream,
-  // failed run start — give up after a beat rather than spin forever.
+  // feedRunning owns the spinner; if it never does, dropped event stream,
+  // failed run start, give up after a beat rather than spin forever.
   React.useEffect(() => {
     if (!refreshing) return;
     if (feedRunning) {
@@ -146,13 +146,12 @@ export function BriefingHero({
 
   return (
     <Card as="section" padding="lg" className="animate-in-up flex flex-col gap-3">
-      {/* Toggles the card but wraps the real refresh/open-in-chat buttons below —
-          a native <button> can't contain them, hence the ARIA toggle-row spread. */}
+      {/* This toggle wraps nested actions, so it uses ARIA instead of a native button. */}
       <div
-        className="flex items-center justify-between gap-3 cursor-pointer"
+        className="flex flex-wrap items-center justify-between gap-3 cursor-pointer"
         {...toggleRowProps(expanded, () => setExpanded(!expanded))}
       >
-        <div className="flex min-w-0 items-center gap-2.5">
+        <div className="flex min-w-0 flex-1 basis-full items-center gap-2.5 @md:basis-auto">
           <IconChip>
             <Sunrise />
           </IconChip>
@@ -168,7 +167,7 @@ export function BriefingHero({
             <span className="text-xs text-muted-foreground">{metaLabel}</span>
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-1.5">
+        <div className="ml-auto flex shrink-0 items-center gap-1.5">
           <RunTriggerBadge trigger={run.trigger} />
           {/* The briefing card carries this same count in its own stat row, so
               the header badge would double it up. Keep it while collapsed —

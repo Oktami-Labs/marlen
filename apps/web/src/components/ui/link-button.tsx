@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 
-/** Underlined text-only action — advanced-mode toggles, skip links. */
+/** Underlined text-only action, advanced-mode toggles, skip links. */
 export function LinkButton({ className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
   return (
     <button

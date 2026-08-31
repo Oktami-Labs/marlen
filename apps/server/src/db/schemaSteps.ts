@@ -357,8 +357,8 @@ export const SCHEMA_STEPS: readonly string[] = [
   `,
   // 17: drop retired card kinds (email_hits, email_thread) from stored card
   // blobs. Rewrites only rows that contain one, carrying every other entry
-  // forward unchanged and leaving malformed blobs untouched; a row whose every
-  // entry is retired becomes NULL, the app's "no cards" encoding.
+  // forward unchanged and leaving malformed blobs untouched. A row with only
+  // retired entries becomes NULL, the app's "no cards" encoding.
   `
     UPDATE messages
        SET cards = (
@@ -449,7 +449,7 @@ export const SCHEMA_STEPS: readonly string[] = [
   `
     ALTER TABLE messages ADD COLUMN compaction_cutoff INTEGER;
   `,
-  // 22: lead intake analysis — score becomes an A/B/C priority tier (A hot,
+  // 22: lead intake analysis, score becomes an A/B/C priority tier (A hot,
   // B warm, C cold) and each lead carries the detected inquiry language, both
   // surfaced to the caller before first contact.
   `
@@ -458,8 +458,8 @@ export const SCHEMA_STEPS: readonly string[] = [
       WHEN 'high' THEN 'A' WHEN 'medium' THEN 'B' WHEN 'low' THEN 'C' ELSE '' END;
     ALTER TABLE leads ADD COLUMN language TEXT NOT NULL DEFAULT '';
   `,
-  // 23: todos — a persistent human-attention queue the agent maintains, each
-  // with a checklist in todo_steps. dedupe_key lets a repeating run upsert one
+  // 23: persistent todos maintained by the agent, each with a checklist in
+  // todo_steps. dedupe_key lets a repeating run upsert one
   // todo instead of piling up duplicates; the partial index skips ad-hoc ('').
   `
     CREATE TABLE todos (
@@ -483,12 +483,12 @@ export const SCHEMA_STEPS: readonly string[] = [
     CREATE INDEX idx_todo_steps_todo ON todo_steps(todo_id, ordinal);
     CREATE INDEX idx_todos_dedupe ON todos(dedupe_key) WHERE dedupe_key <> '';
   `,
-  // 24: todos gain an optional due date/time — the anchor for the home agenda
+  // 24: todos gain an optional due date/time, the anchor for the home agenda
   // (overdue at top, then by day, automations interleaved). Null = undated.
   `
     ALTER TABLE todos ADD COLUMN due_at TEXT;
   `,
-  // 25: outbound_drafts — pending outbound messages for comm channels without a
+  // 25: outbound_drafts, pending outbound messages for comm channels without a
   // native provider draft (WhatsApp). Approved via the same draft→send card as
   // email; a human click or an armed autosend dispatches them.
   `
@@ -516,7 +516,7 @@ export const SCHEMA_STEPS: readonly string[] = [
   `
     ALTER TABLE todos ADD COLUMN linked_automation_id TEXT;
   `,
-  // 28: sub-todos retired — todos are flat. Existing checklists fold into the
+  // 28: sub-todos retired, todos are flat. Existing checklists fold into the
   // parent's body as plain lines (content moves forward, never dropped), then
   // the table goes.
   `

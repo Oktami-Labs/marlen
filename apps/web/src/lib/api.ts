@@ -30,7 +30,6 @@ import type {
   LlmProviderInfo,
   LlmUsageResponse,
   LoginFlowStatus,
-  MemoryEntry,
   MissedAutomation,
   ModelSettings,
   OnOfficeConfigInput,
@@ -43,7 +42,6 @@ import type {
   RunFeedItem,
   SearchResult,
   SeenState,
-  Skill,
   SttResult,
   SttStatus,
   ThinkingLevel,
@@ -51,23 +49,17 @@ import type {
   TodoStatus,
   VoiceLearnRun,
   WhatsAppStatus,
+  WikiPage,
 } from "@marlen/shared";
 import i18n from "@/lib/i18n";
 import { openExternal } from "@/lib/utils";
 
-/** A draft's recorded fate, from GET /api/drafts/:accountId/:draftId/status. */
 interface DraftStatusResult {
   status: "open" | "sent" | "discarded";
   sentMessageId?: string;
 }
 
-/**
- * A failed API call. `status` is the raw HTTP status (callers use it to tell
- * a 404 — "gone upstream" — apart from other failures without matching
- * message text). `code` is the server's machine-readable hint for
- * user-fixable failures — the toast layer maps it to a click-through action
- * (see lib/toast.ts); it's undefined for everything else.
- */
+/** An API failure with machine-readable status and remediation code. */
 export class ApiError extends Error {
   constructor(
     message: string,
@@ -79,22 +71,14 @@ export class ApiError extends Error {
   }
 }
 
-/** True for a failed request the server answered with 404 (the resource is gone). */
 export function isNotFound(error: unknown): boolean {
   return error instanceof ApiError && error.status === 404;
 }
 
-/**
- * True when the request needed a Pipedream project and there isn't one. Callers
- * that can render something useful anyway (the accounts list still holds the
- * native onOffice and WhatsApp connections) treat it as an empty result rather
- * than an error.
- */
 export function isPipedreamMissing(error: unknown): boolean {
   return error instanceof ApiError && error.code === "pipedream_not_configured";
 }
 
-/** Plain-language message for an HTTP status class. */
 function statusMessage(status: number): string {
   if (status === 401 || status === 403) return i18n.t("errors.forbidden");
   if (status === 404) return i18n.t("errors.notFound");
@@ -104,11 +88,6 @@ function statusMessage(status: number): string {
   return i18n.t("errors.request");
 }
 
-/**
- * Throws when a response is not ok — with the server's `error` message when
- * the body carries one, otherwise a plain-language message for the status
- * class. Raw status codes go to the console, never to the user.
- */
 async function throwOnError(res: Response): Promise<void> {
   if (res.ok) return;
   console.error(`API ${res.status} ${res.statusText}: ${res.url}`);
@@ -119,16 +98,12 @@ async function throwOnError(res: Response): Promise<void> {
     if (data.error) message = data.error;
     code = data.code;
   } catch {
-    // no JSON envelope — keep the status-class message
+    // Keep the status-class message when the server returns no JSON envelope.
   }
   throw new ApiError(message, res.status, code);
 }
 
-/**
- * fetch that rethrows connection failures as a plain-language error (the raw
- * cause goes to the console). Aborts pass through untouched so callers can
- * keep telling cancellation apart from failure.
- */
+/** Translate network failures without hiding cancellations. */
 async function guardedFetch(url: string, init?: RequestInit): Promise<Response> {
   try {
     return await fetch(url, init);
@@ -139,7 +114,6 @@ async function guardedFetch(url: string, init?: RequestInit): Promise<Response> 
   }
 }
 
-/** Fetch JSON; non-2xx responses throw with a user-facing message. */
 async function http<T>(method: string, url: string, body?: unknown): Promise<T> {
   const res = await guardedFetch(url, {
     method,
@@ -157,12 +131,10 @@ const get = <T>(url: string) => http<T>("GET", url);
 export const api = {
   status: () => get<AppStatus>("/api/status"),
 
-  // null until a language has been chosen (first web load initializes it).
   language: () => get<{ language: Language | null }>("/api/settings/language"),
   setLanguage: (language: Language) =>
     http<{ language: Language }>("PUT", "/api/settings/language", { language }),
 
-  // null until a timezone has been chosen (first web load initializes it).
   timezone: () => get<{ timezone: string | null }>("/api/settings/timezone"),
   setTimezone: (timezone: string) =>
     http<{ timezone: string }>("PUT", "/api/settings/timezone", { timezone }),
@@ -181,7 +153,6 @@ export const api = {
   setAccountColors: (colors: AccountColor[]) =>
     http<{ colors: AccountColor[] }>("PUT", "/api/settings/account-colors", { colors }),
 
-  /** Bytes for an image a pasted signature only points at; the browser cannot read a cross-origin response itself. */
   signatureImage: (url: string) =>
     http<{ dataUri: string }>("POST", "/api/settings/signature-image", { url }),
   accountSignatures: () =>
@@ -227,33 +198,23 @@ export const api = {
     http<{ ok: boolean }>("DELETE", `/api/pipedream/accounts/${encodeURIComponent(id)}`),
   learnAccountVoice: (id: string) =>
     http<{ ok: boolean }>("POST", `/api/pipedream/accounts/${encodeURIComponent(id)}/learn-voice`),
-  // Each account's latest automatic voice-learn attempt (running/ok/error).
   voiceLearnRuns: () => get<VoiceLearnRun[]>("/api/learn/voice-runs"),
-  // Learned voices with their style directives resolved for display.
   accountVoices: () => get<AccountVoiceInfo[]>("/api/learn/voices"),
 
   onOfficeStatus: () => get<OnOfficeStatus>("/api/onoffice"),
   saveOnOffice: (body: OnOfficeConfigInput) => http<OnOfficeStatus>("PUT", "/api/onoffice", body),
   clearOnOffice: () => http<OnOfficeStatus>("DELETE", "/api/onoffice"),
-  // Arm/disarm the CRM create tools for unattended automation runs.
   setOnOfficeAutomationCreates: (enabled: boolean) =>
     http<OnOfficeStatus>("PUT", "/api/onoffice/automation-creates", { enabled }),
-  // Arm/disarm the CRM modify/delete/send tools for chat sessions.
   setOnOfficeWriteAccess: (enabled: boolean) =>
     http<OnOfficeStatus>("PUT", "/api/onoffice/write-access", { enabled }),
 
   whatsAppStatus: () => get<WhatsAppStatus>("/api/whatsapp"),
-  // Opens the pairing socket; the QR and the final open state arrive via the
-  // "whatsapp" server-event topic (refetch this status on it).
   whatsAppConnect: () => http<WhatsAppStatus>("POST", "/api/whatsapp/connect"),
-  // Signs the device out and wipes the local chat mirror.
   whatsAppUnlink: () => http<WhatsAppStatus>("DELETE", "/api/whatsapp"),
-  // Arm/disarm whatsapp_send_message for chat sessions.
   setWhatsAppSendAccess: (enabled: boolean) =>
     http<WhatsAppStatus>("PUT", "/api/whatsapp/send-access", { enabled }),
 
-  // Outbound message drafts (WhatsApp and future channels). Send is
-  // human-initiated only, like email's sendDraft.
   outbound: (status?: OutboundStatus) =>
     get<OutboundDraft[]>(`/api/outbound${status ? `?status=${encodeURIComponent(status)}` : ""}`),
   sendOutbound: (id: string) =>
@@ -267,7 +228,6 @@ export const api = {
       `/api/outbound/${encodeURIComponent(id)}/status`,
     ),
 
-  /** Global search across chats, digests, drafts, documents and memories (command palette). */
   search: (q: string) => get<{ results: SearchResult[] }>(`/api/search?q=${encodeURIComponent(q)}`),
 
   runsFeed: (params?: { q?: string; limit?: number; offset?: number }) => {
@@ -278,13 +238,8 @@ export const api = {
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return get<{ items: RunFeedItem[]; total: number }>(`/api/runs${suffix}`);
   },
-  // The pinned automation's latest successful run, for the Home page lead card.
-  // Unlike runsFeed, never filtered by showInActivity and never paginated away.
   pinnedRun: () =>
     get<{ run: RunFeedItem | null; automation: Automation | null }>("/api/runs/pinned"),
-  // Automations whose latest scheduled slot elapsed without a covering run —
-  // empty once boot catch-up has run them, so Home shows its button only when
-  // catch-up couldn't.
   missedRuns: () => get<{ items: MissedAutomation[] }>("/api/runs/missed"),
   runMissed: () => http<{ started: MissedAutomation[] }>("POST", "/api/runs/catch-up"),
   drafts: (opts?: { refresh?: boolean }) =>
@@ -293,8 +248,6 @@ export const api = {
     get<EmailDraftDetail>(
       `/api/drafts/${encodeURIComponent(accountId)}/${encodeURIComponent(draftId)}`,
     ),
-  // Keeping is what creates the real mailbox draft from a chat proposal;
-  // send: true dispatches it right after (the click is the authorization).
   keepProposal: (proposalId: string, opts?: { send?: boolean }) =>
     http<KeepDraftProposalResult>(
       "POST",
@@ -310,21 +263,17 @@ export const api = {
       "DELETE",
       `/api/drafts/${encodeURIComponent(accountId)}/${encodeURIComponent(draftId)}`,
     ),
-  // No humanizer — saves exactly what the caller passed.
   updateDraft: (accountId: string, draftId: string, patch: { body?: string; subject?: string }) =>
     http<{ ok: boolean }>(
       "PATCH",
       `/api/drafts/${encodeURIComponent(accountId)}/${encodeURIComponent(draftId)}`,
       patch,
     ),
-  // Human-initiated only — sends the draft as it currently stands upstream.
   sendDraft: (accountId: string, draftId: string) =>
     http<{ ok: boolean }>(
       "POST",
       `/api/drafts/${encodeURIComponent(accountId)}/${encodeURIComponent(draftId)}/send`,
     ),
-  // 404 means no snapshot exists (the draft wasn't agent-written) — callers
-  // treat that the same as any other failure to load a status.
   draftStatus: (accountId: string, draftId: string) =>
     get<DraftStatusResult>(
       `/api/drafts/${encodeURIComponent(accountId)}/${encodeURIComponent(draftId)}/status`,
@@ -340,19 +289,15 @@ export const api = {
   conversationMessages: (id: string) =>
     get<ChatMessage[]>(`/api/conversations/${encodeURIComponent(id)}/messages`),
   systemPrompt: () => get<{ prompt: string }>("/api/chat/system-prompt"),
-  /** End the turn running in this conversation; the stream reports it as "stopped". */
   stopChat: (id: string) =>
     http<{ stopped: boolean }>("POST", `/api/chat/${encodeURIComponent(id)}/stop`),
 
   sttStatus: () => get<SttStatus>("/api/stt"),
-  /** `audio` is the recording base64-encoded; `language` is an ISO-639-1 recognition hint. */
   transcribe: (audio: string, mimeType: string, language: string) =>
     http<SttResult>("POST", "/api/stt", { audio, mimeType, language }),
 
   renameConversation: (id: string, title: string) =>
     http<{ ok: boolean }>("PATCH", `/api/conversations/${encodeURIComponent(id)}`, { title }),
-  // A string sets focus to that account (the server clears the thread part);
-  // null removes focus entirely.
   setConversationFocus: (id: string, focusAccountId: string | null) =>
     http<{ ok: boolean }>("PATCH", `/api/conversations/${encodeURIComponent(id)}`, {
       focusAccountId,
@@ -371,7 +316,6 @@ export const api = {
   }) => http<Automation>("POST", "/api/automations", body),
   updateAutomation: (id: string, body: Partial<Automation>) =>
     http<Automation>("PATCH", `/api/automations/${encodeURIComponent(id)}`, body),
-  // Setting pinned true unpins every other automation server-side (exactly one may lead Home).
   setAutomationPinned: (id: string, pinned: boolean) =>
     http<Automation>("PATCH", `/api/automations/${encodeURIComponent(id)}`, { pinned }),
   deleteAutomation: (id: string) =>
@@ -381,7 +325,6 @@ export const api = {
   automationRuns: (id: string) =>
     get<AutomationRun[]>(`/api/automations/${encodeURIComponent(id)}/runs`),
   automationSuggestions: () => get<AutomationSuggestion[]>("/api/automations/suggestions"),
-  // Accepting creates the proposed automation server-side and returns it.
   acceptAutomationSuggestion: (id: string) =>
     http<Automation>("POST", `/api/automations/suggestions/${encodeURIComponent(id)}/accept`),
   dismissAutomationSuggestion: (id: string) =>
@@ -389,8 +332,6 @@ export const api = {
 
   leads: (status?: LeadStatus) =>
     get<Lead[]>(`/api/leads${status ? `?status=${encodeURIComponent(status)}` : ""}`),
-  // Intake upsert: one lead per address — recording a known one merges instead
-  // of duplicating, and `created` says which of the two happened.
   recordLead: (body: {
     email: string;
     name?: string;
@@ -400,14 +341,11 @@ export const api = {
   }) => http<{ lead: Lead; created: boolean }>("POST", "/api/leads", body),
   updateLead: (id: string, patch: Partial<Omit<Lead, "id" | "email" | "source">>) =>
     http<Lead>("PATCH", `/api/leads/${encodeURIComponent(id)}`, patch),
-  // Also deletes every automation attached to the lead.
   deleteLead: (id: string) =>
     http<{ ok: boolean }>("DELETE", `/api/leads/${encodeURIComponent(id)}`),
   leadAutomations: (id: string) =>
     get<Automation[]>(`/api/leads/${encodeURIComponent(id)}/automations`),
 
-  // Todos come from the agent and from the user's own add row on Home;
-  // updateTodo is the one maintenance verb (see routes/todos.ts).
   todos: (status?: TodoStatus) =>
     get<Todo[]>(`/api/todos${status ? `?status=${encodeURIComponent(status)}` : ""}`),
   createTodo: (body: { title: string; body?: string; dueAt?: string }) =>
@@ -424,42 +362,23 @@ export const api = {
     },
   ) => http<Todo>("PATCH", `/api/todos/${encodeURIComponent(id)}`, patch),
 
-  // What the user has already seen on Home; anything newer renders as new.
   seen: () => get<SeenState>("/api/seen"),
   markSeen: (keys: string[]) => http<SeenState>("POST", "/api/seen", { keys }),
   markAllSeen: () => http<SeenState>("POST", "/api/seen", { all: true }),
 
-  // Memory/skill entries surface as files in the Knowledge browser: listed,
-  // deleted, and edited there (the browser's md editor); created by the agent.
-  memories: () => get<MemoryEntry[]>("/api/memories"),
-  addMemory: (content: string, accountId?: string | null) =>
-    http<MemoryEntry>("POST", "/api/memories", {
-      content,
-      ...(accountId !== undefined ? { accountId } : {}),
-    }),
-  // accountId/contactId are only sent when passed explicitly — an omitted axis
-  // stays out of the body, so the server keeps it (or clears it when the other
-  // axis is being set; a memory carries at most one of the two).
-  updateMemory: (
-    id: string,
+  wiki: () => get<WikiPage[]>("/api/wiki"),
+  addPage: (
     content: string,
-    accountId?: string | null,
-    contactId?: string | null,
-  ) =>
-    http<MemoryEntry>("PUT", `/api/memories/${encodeURIComponent(id)}`, {
+    opts: { name?: string; type?: string | null; accountId?: string | null } = {},
+  ) => http<WikiPage>("POST", "/api/wiki", { content, ...opts }),
+  updatePage: (id: string, content: string, accountId?: string | null, contactId?: string | null) =>
+    http<WikiPage>("PUT", `/api/wiki/${encodeURIComponent(id)}`, {
       content,
       ...(accountId !== undefined ? { accountId } : {}),
       ...(contactId !== undefined ? { contactId } : {}),
     }),
-  deleteMemory: (id: string) =>
-    http<{ ok: boolean }>("DELETE", `/api/memories/${encodeURIComponent(id)}`),
-
-  skills: () => get<Skill[]>("/api/skills"),
-  // Create-or-overwrite by name — the server has no separate create endpoint.
-  saveSkill: (name: string, description: string, instructions: string) =>
-    http<Skill>("PUT", `/api/skills/${encodeURIComponent(name)}`, { description, instructions }),
-  deleteSkill: (name: string) =>
-    http<{ ok: boolean }>("DELETE", `/api/skills/${encodeURIComponent(name)}`),
+  deletePage: (id: string) =>
+    http<{ ok: boolean }>("DELETE", `/api/wiki/${encodeURIComponent(id)}`),
 
   library: () => get<LibraryStatus>("/api/library"),
   documentContent: (id: string) =>
@@ -472,8 +391,7 @@ export const api = {
     http<LibraryStatus>("DELETE", `/api/library/documents/${encodeURIComponent(id)}`),
   searchLibrary: (q: string) =>
     get<{ results: LibrarySearchHit[] }>(`/api/library/search?q=${encodeURIComponent(q)}`),
-  // Raw file body (not JSON), so this bypasses the `http` helper.
-  /** Uploads into the knowledge folder, or a subfolder of it when `dir` is set. */
+  // Uploads use a raw body rather than the JSON helper.
   uploadLibraryFile: async (file: File, dir?: string): Promise<LibraryStatus> => {
     const target = dir ? `&dir=${encodeURIComponent(dir)}` : "";
     const res = await guardedFetch(
@@ -491,50 +409,39 @@ export const api = {
     http<LibraryStatus>("POST", "/api/library/folders", { path }),
   deleteLibraryFolder: (path: string) =>
     http<LibraryStatus>("DELETE", `/api/library/folders?path=${encodeURIComponent(path)}`),
-  /** Open a library document in a new browser tab (or trigger a download). */
   openLibraryDocument: (id: string): void => {
     openExternal(`/api/library/documents/${encodeURIComponent(id)}/open`);
   },
-  /** Download a library document even when its type would render inline. */
   downloadLibraryDocument: (id: string): void => {
     openExternal(`/api/library/documents/${encodeURIComponent(id)}/open?download=1`);
   },
-  /** Open an agent-home folder ("", "memory", "knowledge/<dir>", …) in the OS file manager. */
   revealLibraryFolder: (path: string) =>
     http<{ ok: boolean }>("POST", "/api/library/reveal", { path }),
-  /** One thread's conversation (drafts excluded), read live — the drafts' collapsible history. */
   threadDetail: (accountId: string, threadId: string) =>
     get<{ subject: string; messages: EmailThreadMessage[] }>(
       `/api/mail/threads?accountId=${encodeURIComponent(accountId)}` +
         `&threadId=${encodeURIComponent(threadId)}`,
     ),
-  /** URL that streams an email attachment's bytes — inline for viewable types, download otherwise. */
   mailAttachmentUrl: (accountId: string, messageId: string, filename: string): string =>
     `/api/mail/attachments/open?accountId=${encodeURIComponent(accountId)}` +
     `&messageId=${encodeURIComponent(messageId)}&filename=${encodeURIComponent(filename)}`,
-  /** Save an email attachment into the document library, where it is indexed. */
   saveMailAttachment: (accountId: string, messageId: string, filename: string) =>
     http<{ saved: string }>("POST", "/api/mail/attachments/save", {
       accountId,
       messageId,
       filename,
     }),
-  /** Download a SQLite snapshot of the local database (streamed as an attachment). */
   downloadBackup: (): void => {
     openExternal("/api/backup");
   },
 };
 
-/**
- * POST /api/chat and iterate the SSE stream. Calls onEvent for every event;
- * resolves when the stream closes.
- */
+/** Stream chat events until the server closes the response. */
 export async function streamChat(
   body: {
     conversationId?: string;
     message: string;
     refs?: EmailRef[];
-    /** Header-chip mailbox pick applied when this starts a new conversation. */
     focusAccountId?: string | null;
   },
   onEvent: (event: ChatStreamEvent) => void,
@@ -546,8 +453,6 @@ export async function streamChat(
     body: JSON.stringify(body),
     signal,
   });
-  // A refused turn (e.g. 409 while this conversation is still replying) answers
-  // with the plain `{ error }` envelope rather than the SSE stream.
   await throwOnError(res);
   if (!res.body) throw new Error(i18n.t("errors.chatStream"));
 
@@ -573,7 +478,9 @@ export async function streamChat(
           } catch {
             throw new Error(i18n.t("errors.chatStream"));
           }
-          if (event.type === "done" || event.type === "error") terminalEvent = true;
+          if (event.type === "done" || event.type === "error" || event.type === "stopped") {
+            terminalEvent = true;
+          }
           onEvent(event);
         }
       }

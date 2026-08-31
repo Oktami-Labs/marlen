@@ -45,10 +45,13 @@ function renderPrompt(draftBody: string, candidates: TiebreakCandidate[]): strin
   ].join("\n");
 }
 
-/** Hard cap on one tiebreak call, so a stuck provider can't wedge the matcher's sweep. */
+/** Prevents a stalled provider from blocking the matcher sweep. */
 const TIEBREAK_TIMEOUT_MS = 60_000;
 
-/** Throws when the model produced no usable report (incl. timeout); callers treat any rejection as "none" and leave the draft open. */
+/**
+ * Throws when the model returns no usable report or times out. Callers treat a
+ * rejection as no match and leave the draft open.
+ */
 export async function resolveTiebreak(
   draftBody: string,
   candidates: TiebreakCandidate[],

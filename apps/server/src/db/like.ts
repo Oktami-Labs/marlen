@@ -10,7 +10,7 @@ export function likePattern(column: SQLWrapper, pattern: string) {
   return sql`${column} LIKE ${pattern} ESCAPE '\\'`;
 }
 
-/** `%<value>%` with LIKE wildcards escaped — the pattern likePattern's second argument expects. */
+/** Wrap a LIKE-escaped value in `%` for use as likePattern's second argument. */
 export function likeContains(value: string): string {
   return `%${escapeLikeInput(value)}%`;
 }

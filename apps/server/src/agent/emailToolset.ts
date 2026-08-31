@@ -31,7 +31,6 @@ import { clampToolText } from "./toolkit.js";
 
 const log = moduleLogger("emailToolset");
 
-/** Tool names satisfy the LLM providers' [a-zA-Z0-9_-]{1,128} constraint. */
 function sanitizeToolName(name: string): string {
   return name.replace(/[^a-zA-Z0-9_-]/g, "_").slice(0, 128);
 }
@@ -45,13 +44,7 @@ function accountSlug(account: ConnectedAccount): string {
   return slug || account.id.replace(/[^a-zA-Z0-9]/g, "").slice(-6);
 }
 
-/**
- * Claim a unique name for one account's local (non-MCP) tool. Tries the
- * app-slug suffix first, falls back to the account id when two accounts of the
- * same app collide on it. Returns null (claiming nothing) only if even the
- * id-suffixed name is taken, so the caller skips the tool rather than letting
- * one account's draft tool act as another's.
- */
+/** Fall back to the account id rather than assigning a colliding tool name. */
 function claimLocalToolName(
   base: string,
   suffix: string,
@@ -65,12 +58,6 @@ function claimLocalToolName(
   return name;
 }
 
-/**
- * Steering for a truncated MCP result. A Pipedream action returns the app's own
- * API response verbatim, so one wide call (a mail search over a month, a folder
- * listing) can carry every matched record in full — orders of magnitude past
- * what the transcript can hold.
- */
 const MCP_TRUNCATION_HINT =
   "Ask for less and retry — a smaller max-results/limit, a narrower date range, or a more " +
   "specific query — then read individual records by id.";
@@ -90,28 +77,14 @@ function mcpContentToText(content: unknown): string {
 
 type McpToolInfo = Awaited<ReturnType<McpClient["listTools"]>>["tools"][number];
 
-/**
- * One account's outcome from the parallel connect+listTools phase. session:
- * null means connect failed; session set but mcpTools: null means listTools
- * failed. Both still get the account's non-MCP tools (draft/attachment).
- */
 interface AccountConnectResult {
   account: ConnectedAccount;
   session: McpSession | null;
   mcpTools: McpToolInfo[] | null;
 }
 
-/**
- * Wrap one account's already-fetched MCP tool list as pi AgentTools, applying
- * the registration policy above. Takes `mcpTools` rather than fetching it: the
- * fetch runs in parallel across accounts, while this naming/dedup pass stays
- * synchronous and in account order, because which account wins a bare tool
- * name on a collision depends on processing order, so that order stays
- * deterministic.
- */
 interface AccountTools {
   tools: AgentTool[];
-  /** The read subset of `tools`, by reference: what delegate workers receive. */
   readTools: AgentTool[];
 }
 
@@ -127,20 +100,13 @@ function buildAccountTools(
   const tools: AgentTool[] = [];
   const readTools: AgentTool[] = [];
   const suffix = needsSuffix ? `__${accountSlug(account)}` : "";
-  // Tools dropped by the policy filter below — logged once after the loop so
-  // the silent capability filtering is at least visible in debug logs.
   const skipped: string[] = [];
 
   const draftProvider = getDraftProvider(account.app);
   for (const mcpTool of mcpTools) {
-    // Pipedream's create-draft is gated behind a paid workspace on some apps
-    // (Gmail needs File Stash); Marlen substitutes its own proxy-based tool
-    // under the same slug for every app with a DraftProvider, so skip
-    // Pipedream's version wherever ours takes over.
+    // Use the provider-generic local draft path when the account supports it.
     if (draftProvider && mcpTool.name === `${account.app}-create-draft`) continue;
-    // Same substitution for the app's own send/reply actions: the account
-    // signature and the humanizer pass live in the draft save path, so mail
-    // dispatched straight through the provider would carry neither.
+    // Direct send actions bypass signatures and draft composition.
     if (draftProvider?.sendDraft && isSubstitutedSendAction(mcpTool.name)) {
       skipped.push(mcpTool.name);
       continue;
@@ -160,12 +126,9 @@ function buildAccountTools(
       name,
       label: mcpTool.title ?? mcpTool.name,
       description: `${mcpTool.description ?? mcpTool.name}\n\nActs as the connected account: ${account.name}.`,
-      // MCP input schemas are plain JSON Schema, what TypeBox compiles to;
-      // pass through as-is.
       parameters: mcpTool.inputSchema as AgentTool["parameters"],
       execute: async (_toolCallId, params, signal) => {
-        // Reads are replayable across a transport failure; anything else
-        // (draft/write verbs) isn't re-sent once its fate is unknown.
+        // Never replay a write whose result is unknown.
         const result = await callWithRevival(
           box,
           account,
@@ -200,30 +163,17 @@ function buildAccountTools(
 
 export interface EmailToolset {
   tools: AgentTool[];
-  /** The MCP read tools only, the safe subset delegate workers receive; subset of `tools` by reference. */
   readTools: AgentTool[];
   close: () => Promise<void>;
 }
 
 export interface LoadEmailToolsOptions {
-  /**
-   * Whether a human is reviewing this session live. Defaults to true. It
-   * decides two things: which grants apply (sessionGrants), and how
-   * create-draft behaves — interactive create-draft proposes (a card the user
-   * keeps) instead of writing a mailbox draft, while unattended runs write
-   * real drafts, since nobody is there to keep a proposal.
-   */
+  /** Interactive sessions propose drafts; unattended sessions write them. */
   interactive?: boolean;
 }
 
 const EMPTY_TOOLSET: EmailToolset = { tools: [], readTools: [], close: async () => {} };
 
-/**
- * Load the agent's per-account email tools: one pinned MCP session per
- * connected account, plus the local draft and attachment tools. Several
- * accounts of the same app get an account-suffixed tool name. Accounts that
- * fail to connect are skipped; the agent works with what's left.
- */
 export async function loadEmailTools(options: LoadEmailToolsOptions = {}): Promise<EmailToolset> {
   const interactive = options.interactive ?? true;
   const config = await getConnectConfig();
@@ -235,10 +185,7 @@ export async function loadEmailTools(options: LoadEmailToolsOptions = {}): Promi
   try {
     [accounts, , permissions, signatures] = await Promise.all([
       listAccounts(),
-      // Warm/validate the token cache before opening N MCP sessions: bad
-      // credentials fail here once instead of as N identical connect failures.
-      // Each session's transport re-fetches per request (fetchWithFreshToken)
-      // rather than reusing this snapshot.
+      // Fail bad credentials once before opening per-account sessions.
       getPipedreamAccessToken(),
       getAccountPermissions(),
       getAccountSignatures(),
@@ -247,11 +194,7 @@ export async function loadEmailTools(options: LoadEmailToolsOptions = {}): Promi
     log.warn({ err: error }, "listing Pipedream accounts failed");
     return EMPTY_TOOLSET;
   }
-  // The personal WhatsApp link is the only transport sendWhatsApp uses once it
-  // is paired, so a Business account's tools would be a second send path the
-  // system prompt never describes and dispatch never picks: a message sent
-  // through them bypasses the link and fails on the Business account's own
-  // credentials. Keep tool availability matching what dispatch would do.
+  // Personal WhatsApp takes precedence over the Business transport.
   if (isWhatsAppLinked()) {
     accounts = accounts.filter((account) => account.app !== "whatsapp_business");
   }
@@ -262,18 +205,12 @@ export async function loadEmailTools(options: LoadEmailToolsOptions = {}): Promi
   );
   const grantsFor = (accountId: string): ActionGrants => grantsById.get(accountId) ?? NO_GRANTS;
 
-  // Signature presence only steers the tool descriptions; the html itself is
-  // re-read at call time. Signature edits reset sessions, keeping these fresh.
   const signedIds = new Set(signatures.map((s) => s.accountId));
 
   const perApp = new Map<string, number>();
   for (const account of accounts) perApp.set(account.app, (perApp.get(account.app) ?? 0) + 1);
 
-  // Connect + list tools for every account in parallel. Each attempt resolves
-  // to a per-account result rather than rejecting, so one account's failure
-  // can't drop or reorder the others. The naming/dedup pass that consumes
-  // these stays a separate synchronous account-ordered loop (buildAccountTools)
-  // so tool naming stays deterministic.
+  // Connect in parallel, then assign names in deterministic account order.
   const connectResults = await Promise.all(
     accounts.map(async (account): Promise<AccountConnectResult> => {
       let session: McpSession;
@@ -305,8 +242,6 @@ export async function loadEmailTools(options: LoadEmailToolsOptions = {}): Promi
   const seenNames = new Set<string>();
 
   for (const { account, session, mcpTools } of connectResults) {
-    // A failed connect still gets the account's local draft/attachment tools
-    // below: those go through the Connect proxy, not the MCP session.
     let box: McpSessionBox | undefined;
     if (session) {
       box = { current: session, closed: false };
@@ -314,8 +249,6 @@ export async function loadEmailTools(options: LoadEmailToolsOptions = {}): Promi
     }
     const needsSuffix = (perApp.get(account.app) ?? 0) > 1;
     if (box && mcpTools) {
-      // One account's tool assembly failing doesn't abort the accounts
-      // after it in this loop.
       try {
         const accountTools = buildAccountTools(
           mcpTools,
@@ -338,8 +271,7 @@ export async function loadEmailTools(options: LoadEmailToolsOptions = {}): Promi
     const suffix = needsSuffix ? `__${accountSlug(account)}` : "";
     const draftProvider = getDraftProvider(account.app);
     if (draftProvider) {
-      // Never handed to background workers (delegate receives only the
-      // readTools subset), so workers cannot create drafts.
+      // Draft tools are excluded from the delegate worker subset.
       const name = claimLocalToolName(`${account.app}-create-draft`, suffix, account, seenNames);
       if (name)
         tools.push(
@@ -353,8 +285,6 @@ export async function loadEmailTools(options: LoadEmailToolsOptions = {}): Promi
           ),
         );
       if (draftProvider.updateDraft) {
-        // Same footing as create-draft: rewrites an unsent draft, never
-        // dispatches mail, so it stays available on read-only accounts.
         const updateName = claimLocalToolName(
           `${account.app}-update-draft`,
           suffix,
@@ -374,12 +304,9 @@ export async function loadEmailTools(options: LoadEmailToolsOptions = {}): Promi
     }
     const attachmentProvider = getAttachmentProvider(account.app);
     if (attachmentProvider) {
-      // Reads mail but writes only into the local document library, so it's
-      // fine on a read-only account.
+      // Local library writes do not require mailbox write permission.
       const name = claimLocalToolName(`${account.app}-save-attachment`, suffix, account, seenNames);
       if (name) tools.push(buildSaveAttachmentTool(account, name, attachmentProvider));
-      // Read-only: lists attachments and publishes the interactive card whose
-      // rows open the viewer or save; no mailbox write.
       const listName = claimLocalToolName(
         `${account.app}-list-attachments`,
         suffix,
@@ -394,8 +321,7 @@ export async function loadEmailTools(options: LoadEmailToolsOptions = {}): Promi
     tools,
     readTools,
     close: async () => {
-      // Pin every box shut before closing, so an in-flight reconnect can't
-      // resurrect a connection past this point (see reconnectSession).
+      // Prevent in-flight reconnects from reopening disposed sessions.
       await Promise.all(
         boxes.map(async (box) => {
           box.closed = true;

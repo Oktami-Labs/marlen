@@ -366,7 +366,7 @@ export function StorageBrowser({
           ) : (
             <nav
               aria-label={t("storage.breadcrumbs")}
-              className="flex min-w-0 flex-1 items-center gap-1 overflow-hidden text-sm"
+              className="flex min-w-[5rem] flex-1 items-center gap-1 overflow-hidden text-sm"
             >
               {crumbs.map((crumb, index) => {
                 const isLast = index === crumbs.length - 1;
@@ -399,7 +399,7 @@ export function StorageBrowser({
               value={query}
               onChange={onQueryChange}
               placeholder={t("storage.searchPlaceholder")}
-              className="w-40"
+              className="w-36 @2xl:w-40"
             />
             <Select
               id="storage-sort"

@@ -25,33 +25,23 @@ import { dateTimeLabel } from "@/lib/dates";
 import { registerOpenSearch, visibleNavItems } from "@/lib/nav";
 import { cn, MOD_LABEL } from "@/lib/utils";
 
-/**
- * Global command palette (Cmd+K / Ctrl+K), mounted once in App.tsx so the
- * shortcut works from any page. An empty query lists the app's pages; typing
- * filters them and searches chats, automation runs (briefings), drafts,
- * library documents and memories. Enter jumps to the highlighted row.
- */
-
 type HitType = SearchResult["type"];
 
-/** Fixed grouping order the server already returns hits in. */
-const GROUP_ORDER: HitType[] = ["run", "chat", "draft", "document", "memory"];
+const GROUP_ORDER: HitType[] = ["run", "chat", "draft", "document", "wiki"];
 
 const GROUP_ICON: Record<HitType, LucideIcon> = {
   run: Newspaper,
   chat: MessageSquare,
   draft: Mail,
   document: FileText,
-  memory: Database,
+  wiki: Database,
 };
 
 const DEBOUNCE_MS = 170;
 /** Shared empty result set: a fresh `[]` per render would retrigger every memo that reads it. */
 const NO_HITS: SearchResult[] = [];
 
-/** A page the palette can jump to, its copy already resolved to display strings. */
 interface PageItem {
-  /** Untranslated match key, so e.g. "settings" hits in any UI language. */
   id: string;
   path: string;
   icon: LucideIcon;
@@ -64,7 +54,6 @@ type Entry =
 
 interface Row {
   entry: Entry;
-  /** Flat position the arrow keys move through, stable across group boundaries. */
   index: number;
 }
 
@@ -79,15 +68,13 @@ export function SearchPalette({ onofficeConfigured }: { onofficeConfigured: bool
   const navigate = useNavigate();
   const [open, setOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  /** Results plus the query they belong to, kept together so highlighting can
-   *  never disagree with the snippets it is highlighting. */
   const [searched, setSearched] = React.useState<{ query: string; results: SearchResult[] } | null>(
     null,
   );
   const [activeIndex, setActiveIndex] = React.useState(0);
   const listRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
-  /** Bumped on every dispatched search so a slow early response can't overwrite a newer one. */
+  // Ignore responses from superseded searches.
   const requestSeq = React.useRef(0);
 
   const trimmed = query.trim();
@@ -96,10 +83,8 @@ export function SearchPalette({ onofficeConfigured }: { onofficeConfigured: bool
     [trimmed, searched],
   );
   const hitQuery = searched?.query ?? "";
-  // Results stay on screen while the next query is in flight; only the sweep line animates.
   const loading = trimmed !== "" && searched?.query !== trimmed;
 
-  // Global shortcut, plus the header search buttons calling openSearch().
   React.useEffect(() => {
     const onKeyDown = (e: KeyboardEvent) => {
       if ((e.metaKey || e.ctrlKey) && e.key.toLowerCase() === "k") {
@@ -115,7 +100,6 @@ export function SearchPalette({ onofficeConfigured }: { onofficeConfigured: bool
     };
   }, []);
 
-  // Fresh every time it opens — a stale query/result set from last time is never useful.
   React.useEffect(() => {
     if (!open) return;
     requestSeq.current++;
@@ -124,7 +108,6 @@ export function SearchPalette({ onofficeConfigured }: { onofficeConfigured: bool
     setActiveIndex(0);
   }, [open]);
 
-  // Each query change re-preselects the top row.
   React.useEffect(() => {
     setActiveIndex(0);
     if (!trimmed) {
@@ -156,10 +139,6 @@ export function SearchPalette({ onofficeConfigured }: { onofficeConfigured: bool
     [t, onofficeConfigured],
   );
 
-  /**
-   * Everything the list renders, in one pass, with a stable flat index per row.
-   * Matching pages first, then hits grouped by type; an empty query lists all pages.
-   */
   const sections = React.useMemo<Section[]>(() => {
     let cursor = 0;
     const row = (entry: Entry): Row => ({ entry, index: cursor++ });
@@ -183,7 +162,6 @@ export function SearchPalette({ onofficeConfigured }: { onofficeConfigured: bool
   const rows = React.useMemo(() => sections.flatMap((section) => section.rows), [sections]);
   const activeRow = rows[activeIndex];
 
-  // Results can shrink under the cursor when a slow query lands.
   React.useEffect(() => {
     if (activeIndex > 0 && activeIndex >= rows.length) setActiveIndex(Math.max(0, rows.length - 1));
   }, [rows.length, activeIndex]);
@@ -199,12 +177,8 @@ export function SearchPalette({ onofficeConfigured }: { onofficeConfigured: bool
       sendChatCommand({ kind: "open", conversationId: hit.id });
       revealChat();
     } else if (hit.type === "draft") {
-      // Home consumes ?draft= from the URL on mount, so the param is already
-      // there on its first render whether or not it was mounted before.
       navigate({ pathname: "/", search: `?draft=${hit.accountId}:${hit.id}` });
     } else {
-      // The Knowledge panel consumes ?focus= from the URL on mount — no
-      // mount race, and back/forward stays clean because it clears the param.
       navigate({ pathname: "/knowledge", search: `?focus=${hit.type}:${hit.id}` });
     }
     setOpen(false);
@@ -241,8 +215,8 @@ export function SearchPalette({ onofficeConfigured }: { onofficeConfigured: bool
             e.preventDefault();
             inputRef.current?.focus();
           }}
-          // Clicks anywhere in the panel (rows, footer) must not pull focus
-          // off the input — it owns the whole keyboard contract.
+          // The input owns the keyboard contract, so clicks elsewhere in the
+          // panel must not move focus away from it.
           onMouseDown={(e) => {
             if (!(e.target as HTMLElement).closest("input")) e.preventDefault();
           }}
@@ -285,14 +259,10 @@ export function SearchPalette({ onofficeConfigured }: { onofficeConfigured: bool
             )}
           </div>
 
-          {/* Invisible at rest — only the accent sweep shows while a query is in flight,
-              so the previous results never blink out to a spinner. */}
           <div className="relative h-px shrink-0 overflow-hidden">
             {loading && <div className="palette-scan absolute inset-y-0 left-0 w-1/3 bg-accent" />}
           </div>
 
-          {/* Fixed height, not max — a centred panel that resized with its content
-              would wander vertically on every keystroke. */}
           <div
             id="palette-list"
             ref={listRef}
@@ -307,9 +277,6 @@ export function SearchPalette({ onofficeConfigured }: { onofficeConfigured: bool
               </div>
             ) : (
               sections.map((section) => (
-                // Groups a run of role="option" rows inside the role="listbox" above
-                // (the ARIA listbox grouping pattern) — <fieldset> is a form control
-                // grouping and has no place inside a listbox.
                 // biome-ignore lint/a11y/useSemanticElements: ARIA listbox option group, not a form fieldset
                 <div key={section.key} role="group" aria-label={section.label}>
                   <div className="sticky top-0 z-10 bg-surface px-2.5 pb-1 pt-2.5">
@@ -381,9 +348,7 @@ function PaletteRow({ entry, index, active, query, language, onPointerMove, onSe
       role="option"
       aria-selected={active}
       data-index={index}
-      // Not a tab stop (the input owns keyboard focus), and pointer *movement*
-      // rather than enter — a stationary cursor must not steal the selection
-      // from the arrow keys when the list scrolls underneath it.
+      // The input owns keyboard focus.
       tabIndex={-1}
       onPointerMove={onPointerMove}
       onClick={onSelect}

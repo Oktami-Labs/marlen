@@ -4,7 +4,7 @@ import { Type } from "@sinclair/typebox";
 import { badRequest } from "../core/errors.js";
 import { sttStatus, transcribe } from "../services/transcribe.js";
 
-// Base64 inflates 4/3, so this admits ~11MB of audio — well past any voice memo.
+// Base64 inflates by 4/3, so this admits about 11 MB of audio, beyond a voice memo.
 const BODY_LIMIT = 15 * 1024 * 1024;
 
 const sttBody = Type.Object({

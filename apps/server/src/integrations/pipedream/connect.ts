@@ -201,27 +201,16 @@ export async function createConnectToken(app: string): Promise<ConnectTokenRespo
   };
 }
 
-/**
- * `listAccounts` cache: a short TTL plus in-flight dedup (fetchCache.ts) turns
- * N concurrent callers into one Pipedream round-trip. Failed fetches never
- * populate the cache, and a fetch dispatched under old credentials never
- * repopulates it once invalidateAccountsCache has run (fetchCache's generation
- * counter).
- */
+/** Short-lived, deduplicated account reads that cannot outlive invalidation. */
 const ACCOUNTS_CACHE_KEY = "accounts";
 
 const accountsCache = createFetchCache<ConnectedAccount[]>({ ttlMs: 60_000 });
 
-/** Drop the cache so the next call fetches live; call when accounts change. */
 export function invalidateAccountsCache(): void {
   accountsCache.invalidate(ACCOUNTS_CACHE_KEY);
 }
 
-/**
- * Everything derived from which project is active: the account list and the
- * resolved app catalog. Called wherever the credentials or the builtin/custom
- * choice change, so the old project's answers can't outlive it.
- */
+/** Invalidate everything derived from the active project. */
 function invalidateProjectCaches(): void {
   invalidateAccountsCache();
   defaultAppsCache = null;
@@ -327,7 +316,7 @@ export async function deleteAccount(accountId: string): Promise<void> {
 }
 
 /**
- * One account's stored credentials — key-based apps (e.g. WhatsApp Business)
+ * One account's stored credentials, key-based apps (e.g. WhatsApp Business)
  * expose their custom auth fields here, which native integrations use to call
  * the provider API directly instead of through the proxy.
  */

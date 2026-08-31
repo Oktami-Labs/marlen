@@ -19,8 +19,7 @@ ReactDOM.createRoot(rootElement).render(
   <React.StrictMode>
     <QueryClientProvider client={queryClient}>
       <BrowserRouter>
-        {/* Inside the router so its context survives a caught error — only App's own
-            subtree (including the Toaster it renders) is what gets replaced. */}
+        {/* Keep router context outside the boundary. Only App and its Toaster are replaced. */}
         <ErrorBoundary>
           <App />
         </ErrorBoundary>

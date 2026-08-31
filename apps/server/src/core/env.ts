@@ -41,27 +41,13 @@ export const env = {
   // Hard deadline for one automation run, so a stuck model/MCP call can't wedge a schedule forever.
   automationRunTimeoutMs: num("AUTOMATION_RUN_TIMEOUT_MS", 300_000),
   databasePath: optional("DATABASE_PATH") ?? "./data/marlen.db",
-  /**
-   * The agent's home folder: memory/, skills/ and knowledge/ live under it as
-   * plain browsable files (see home/agentHome.ts). Project-relative by default;
-   * the desktop shell points it into Electron's userData. Tests and the verify
-   * skill point this at a scratch folder for isolation.
-   */
+  /** Plain-file agent home; the desktop shell points this into userData. */
   agentHomePath: optional("AGENT_HOME_PATH") ?? "./agent-home",
-  // Pre-relocation agent home; read only by the boot migration that moves its
-  // contents into the current home. ~/Trailin was the old default location.
+  // Migration input only.
   legacyAgentHomePath: optional("LEGACY_AGENT_HOME_PATH") ?? "~/Trailin",
-  /**
-   * Pre-home library folder. Read only by the boot migration that moves its
-   * files into the agent home's knowledge/; the desktop shell still sets it
-   * so packaged upgrades can find their old location.
-   */
+  // Migration input only.
   libraryPath: optional("LIBRARY_PATH") ?? "./data/library",
-  /**
-   * Pre-home skills folder. Read only by the boot migration that moves its
-   * files into the agent home; the desktop shell still sets it so packaged
-   * upgrades can find their old location.
-   */
+  // Migration input only.
   skillsPath: optional("SKILLS_PATH") ?? "./data/skills",
   // Where the built web app lives when not at the repo-relative default; the
   // desktop shell points it at its packaged copy.

@@ -247,7 +247,7 @@ export function NodeRows({
         const isSelected = actions.selected?.has(node.id) === true;
         return (
           // biome-ignore lint/a11y/noStaticElementInteractions: whole-row open is a mouse convenience; the name button inside is the keyboard path
-          // biome-ignore lint/a11y/useKeyWithClickEvents: same — keyboard users activate the name button
+          // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users activate the name button
           <div
             key={node.id}
             data-node-id={node.id}
@@ -318,7 +318,7 @@ export function NodeTiles({
         const isSelected = actions.selected?.has(node.id) === true;
         return (
           // biome-ignore lint/a11y/noStaticElementInteractions: whole-tile open is a mouse convenience; the name button inside is the keyboard path
-          // biome-ignore lint/a11y/useKeyWithClickEvents: same — keyboard users activate the name button
+          // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard users activate the name button
           <div
             key={node.id}
             data-node-id={node.id}

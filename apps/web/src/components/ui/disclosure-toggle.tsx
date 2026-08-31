@@ -5,7 +5,7 @@ import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 
 /**
- * Quiet text disclosure for list rows — chevron + label, no fill. With `open`
+ * Quiet text disclosure for list rows, chevron + label, no fill. With `open`
  * it is a two-way toggle (chevron flips, `aria-expanded` announced); without
  * it, a one-way reveal affordance (chevron stays down, no expanded state).
  */
@@ -26,7 +26,7 @@ export function DisclosureToggle({
       aria-expanded={open}
       onClick={onToggle}
       className={cn(
-        "flex w-fit items-center gap-1.5 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground",
+        "flex w-fit items-center gap-1.5 py-1 text-xs font-medium text-muted-foreground transition-colors hover:text-foreground",
         className,
       )}
     >
@@ -58,7 +58,7 @@ export function ExpandButton({ open, onToggle }: { open: boolean; onToggle: () =
   );
 }
 
-/** The reveal-more affordance under a capped list — pairs with `usePagedVisible`. */
+/** The reveal-more affordance under a capped list, pairs with `usePagedVisible`. */
 export function ShowMoreButton({ count, onClick }: { count: number; onClick: () => void }) {
   const { t } = useTranslation();
   return <DisclosureToggle onToggle={onClick}>{t("library.showMore", { count })}</DisclosureToggle>;

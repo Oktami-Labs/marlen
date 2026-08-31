@@ -1,13 +1,13 @@
 /**
  * The bridge the desktop shell's preload script exposes as
  * window.marlenDesktop (apps/desktop/src/preload.ts). Absent in a plain
- * browser tab — callers feature-detect via desktopBridge().
+ * browser tab, callers feature-detect via desktopBridge().
  */
 
 /**
  * Outcome of a user-initiated update check (mirrors UpdateCheckStatus in
  * apps/desktop/src/updater.ts). "downloading" means a newer release is being
- * fetched in the background — completion arrives via onUpdateState.
+ * fetched in the background, completion arrives via onUpdateState.
  * "unsupported" is an unpackaged dev run with no update feed.
  */
 export type UpdateCheckStatus =
@@ -21,7 +21,7 @@ export type UpdateCheckStatus =
 /**
  * What the shell knows about the newest release (mirrors UpdateState in
  * apps/desktop/src/updater.ts). `manual` means a newer version exists that this
- * build cannot install itself — macOS refuses to swap an unsigned bundle — so
+ * build cannot install itself, macOS refuses to swap an unsigned bundle, so
  * the only way forward is downloading the release by hand.
  */
 export type UpdateState = {
@@ -33,9 +33,9 @@ export type UpdateState = {
 /** Identity of the installed shell build: app version plus the host platform/arch. */
 export type DesktopAppInfo = {
   version: string;
-  /** Node's process.platform in the shell — "darwin", "win32", "linux". */
+  /** Node's process.platform in the shell, "darwin", "win32", "linux". */
   platform: string;
-  /** Node's process.arch in the shell — "arm64", "x64", …. */
+  /** Node's process.arch in the shell, "arm64", "x64", …. */
   arch: string;
 };
 
@@ -73,7 +73,7 @@ export function desktopBridge(): DesktopBridge | undefined {
 }
 
 /** The inset (macOS) title-bar reservation, or null in a browser tab / on a
- *  platform with a native bar — the only case the web reserves top space for. */
+ *  platform with a native bar, the only case the web reserves top space for. */
 export function insetTitleBar(): { height: number } | null {
   const bridge = desktopBridge();
   return bridge?.titleBar === "inset" ? { height: bridge.titleBarHeight } : null;

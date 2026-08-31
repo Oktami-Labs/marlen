@@ -53,7 +53,7 @@ export function useTheme() {
     return () => mql.removeEventListener("change", onChange);
   }, [pref]);
 
-  // Cross-instance sync — another hook instance changed the pref.
+  // Cross-instance sync, another hook instance changed the pref.
   React.useEffect(() => {
     const listener = (next: ThemePref) => {
       if (next !== pref) setPref(next);

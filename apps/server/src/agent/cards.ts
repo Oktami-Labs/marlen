@@ -17,27 +17,20 @@ import {
   type DelegationTask,
   type DraftPreview,
   type EmailRef,
+  type FormField,
   type Lead,
   type LeadCardData,
   type MessageCard,
+  type SourceItem,
+  splitPage,
+  type WikiDiffRow,
 } from "@marlen/shared";
+import { textDiff } from "../core/utils/diff.js";
 import { isNonEmptyString, isRecord } from "../core/utils/util.js";
 import { parseEmailRef } from "./emailRefs.js";
 
-/**
- * The AgentCard system: each kind splits into coerce* (validates one untrusted
- * entry), build* (assembles the card its tool publishes), and a CARD_PARSERS
- * arm (revalidates a stored or round-tripped payload).
- */
-
-/** The AgentCard union member for one kind. */
 export type CardOf<K extends AgentCard["kind"]> = Extract<AgentCard, { kind: K }>;
 
-/**
- * The reminder a card-emitting tool appends to its result text: the card
- * already renders `subject`, so the model should react to it (per
- * `instruction`) instead of restating its contents.
- */
 export function cardNote(subject: string, instruction: string): string {
   return `\n\n[The user sees ${subject} as a card in the conversation. ${instruction}]`;
 }
@@ -77,11 +70,6 @@ export function parseCardAccount(value: unknown): CardAccount | undefined {
   };
 }
 
-// email_draft — a saved or rewritten draft preview. Both the draft tools
-// (trusted local state) and parseAgentCard funnel through buildEmailDraftCard
-// so the required-field rule lives once.
-
-/** Validates one raw attachment entry of a draft preview. `filename` is required; a malformed size is dropped, not the entry. */
 function coerceDraftAttachment(value: unknown): { filename: string; size?: number } | undefined {
   if (!isRecord(value) || !isNonEmptyString(value.filename)) return undefined;
   return {
@@ -92,7 +80,6 @@ function coerceDraftAttachment(value: unknown): { filename: string; size?: numbe
   };
 }
 
-/** Validates a raw draft-shaped value. subject/body plus one id (mailbox draft or proposal) are required; everything else is dropped when malformed rather than failing the whole draft. */
 export function coerceDraftPreview(value: unknown): DraftPreview | undefined {
   if (!isRecord(value)) return undefined;
   const {
@@ -135,11 +122,9 @@ export function coerceDraftPreview(value: unknown): DraftPreview | undefined {
 export interface EmailDraftCardInput {
   account?: CardAccount;
   draft: unknown;
-  /** Raw style-directive values; malformed entries are dropped, never the card. */
   voiceDirectives?: unknown;
 }
 
-/** Caps mirror voiceLearn's report narrowing, so a stored card can't outgrow what a learn produces. */
 const MAX_VOICE_DIRECTIVES = 6;
 const MAX_VOICE_DIRECTIVE_LENGTH = 300;
 
@@ -151,7 +136,6 @@ function coerceVoiceDirectives(value: unknown): string[] | undefined {
   return directives && directives.length > 0 ? directives : undefined;
 }
 
-/** Builds the "email_draft" card, or undefined when `draft` is missing a required field. */
 export function buildEmailDraftCard(input: EmailDraftCardInput): CardOf<"email_draft"> | undefined {
   const draft = coerceDraftPreview(input.draft);
   if (!draft) return undefined;
@@ -174,10 +158,6 @@ function parseEmailDraftCard(
     voiceDirectives: details.voiceDirectives,
   });
 }
-
-// message_draft — a pending outbound message (WhatsApp and future channels),
-// approved with the same draft→send card as email. Carries no account; its
-// draftId addresses the row under /api/outbound.
 
 export interface MessageDraftCardInput {
   channel: string;
@@ -212,13 +192,6 @@ function parseMessageDraftCard(
   });
 }
 
-// attachments — a message's attachments, each with the handle its row actions
-// (open in the viewer, save to library) need. list_attachments builds it from
-// the provider's live listing plus server-decided viewable/saveable flags; the
-// parse arm trusts a stored card's own fields. accountId/messageId/filename
-// together address the bytes through GET /api/mail/attachments/open.
-
-/** Validates a raw attachment-shaped value. accountId/messageId/filename are required; the flags default to false when absent. */
 export function coerceAttachmentItem(value: unknown): AttachmentItem | undefined {
   if (!isRecord(value)) return undefined;
   const { accountId, messageId, filename, mimeType, size, viewable, saveable } = value;
@@ -241,7 +214,6 @@ export function coerceAttachmentItem(value: unknown): AttachmentItem | undefined
 export interface AttachmentsCardInput {
   account?: CardAccount;
   subject?: string;
-  /** Raw attachment-shaped values, coerced one by one; malformed entries are dropped, not the whole card. */
   items: unknown[];
 }
 
@@ -269,12 +241,6 @@ function parseAttachmentsCard(
   });
 }
 
-// choices — clickable buttons the user picks from. present_choices attaches
-// each option's ref via its own `account`/`threadId` parameters, never from a
-// raw `ref` field; the parse arm trusts a stored card's own `ref`
-// (parseEmailRef). Both funnel label/detail/reply through coerceChoiceOption.
-
-/** Validates a raw option-shaped value against an already-resolved ref. `label` is the only required field. */
 export function coerceChoiceOption(
   value: unknown,
   ref: EmailRef | undefined,
@@ -290,15 +256,10 @@ export function coerceChoiceOption(
   };
 }
 
-/** Builds the "choices" card from already-validated options; present_choices gates option count before this runs. */
 export function buildChoicesCard(question: string, options: ChoiceOption[]): CardOf<"choices"> {
   return { kind: "choices", question, options };
 }
 
-/**
- * Unlike the other kinds, a choices card carries no top-level `account`;
- * options are self-contained via their own `ref`, parsed off each raw option.
- */
 function parseChoicesCard(details: Record<string, unknown>): CardOf<"choices"> | undefined {
   if (!isNonEmptyString(details.question) || !Array.isArray(details.options)) return undefined;
   const options = details.options
@@ -308,24 +269,11 @@ function parseChoicesCard(details: Record<string, unknown>): CardOf<"choices"> |
   return buildChoicesCard(details.question, options);
 }
 
-// briefing — a triaged, cross-account inbox digest. compose_briefing resolves
-// the model's account string and builds the webmail deep link server-side
-// before calling coerceBriefingItem, while the parse arm trusts a stored card's
-// `accountId`/`webUrl` directly. This trusted/untrusted asymmetry is why
-// briefing's coercion stays hand-written rather than leaning on anything generic.
-
 export function isBriefingPriority(value: unknown): value is BriefingPriority {
   return typeof value === "string" && (BRIEFING_PRIORITIES as readonly string[]).includes(value);
 }
 
-/**
- * Coerces a raw item-shaped record into a BriefingItem, given an
- * already-resolved accountId and webUrl. Both are taken only from the resolved
- * parameters, never off the raw model-supplied `value`: the model can't be
- * trusted to name our internal account ids or build a correct deep link. Drops
- * anything missing threadId, sender, subject or gist; an unrecognized priority
- * degrades to the least-pressing tier rather than dropping the item.
- */
+/** `accountId` and `webUrl` must come from resolved server values, not model data. */
 export function coerceBriefingItem(
   value: unknown,
   accountId: string | undefined,
@@ -368,7 +316,6 @@ export function coerceBriefingItem(
   };
 }
 
-/** The parse arm's per-item coercion: accountId/webUrl are trusted straight off the stored item, unlike compose_briefing's server-resolved values. */
 function parseBriefingItem(value: unknown): BriefingItem | undefined {
   if (!isRecord(value)) return undefined;
   const accountId = isNonEmptyString(value.accountId) ? value.accountId : undefined;
@@ -376,11 +323,6 @@ function parseBriefingItem(value: unknown): BriefingItem | undefined {
   return coerceBriefingItem(value, accountId, webUrl);
 }
 
-/**
- * Coerces a raw rollup-shaped record into a BriefingRollup, given its items
- * already coerced by the caller. Keeps the group only when it has a label and
- * at least one surviving item; an empty group has nothing to render.
- */
 export function coerceBriefingRollup(
   value: unknown,
   items: BriefingItem[],
@@ -440,10 +382,6 @@ function parseBriefingCard(details: Record<string, unknown>): CardOf<"briefing">
   });
 }
 
-// lead — a leads-directory row surfaced in chat. present_lead loads the row
-// from the db (trusted) and hands it to buildLeadCard; the parse arm revalidates
-// a stored card's own fields, since it round-trips as unknown.
-
 const LEAD_STATUSES = ["new", "contacted", "engaged", "qualified", "won", "lost"] as const;
 const LEAD_PRIORITIES = ["A", "B", "C"] as const;
 
@@ -494,10 +432,124 @@ function parseLeadCard(details: Record<string, unknown>): CardOf<"lead"> | undef
   return { kind: "lead", lead: data };
 }
 
-// chart — a small bar/line chart of the numbers the model is explaining.
-// present_chart supplies untrusted points; coerceChartPoint validates each and
-// buildChartCard drops the whole card when none survive. The parse arm reuses
-// the same builder on a stored payload.
+/** At most this many results ride the card; the rest stay in the tool text. */
+const MAX_SOURCES = 10;
+
+/** The web results an answer stands on, in the order the search returned them. */
+export function buildSourcesCard(
+  query: string,
+  results: { url: string; title?: string; description?: string; age?: string }[],
+): CardOf<"sources"> | undefined {
+  const items: SourceItem[] = [];
+  for (const result of results.slice(0, MAX_SOURCES)) {
+    if (!isNonEmptyString(result.url)) continue;
+    items.push({
+      url: result.url,
+      title: isNonEmptyString(result.title) ? result.title : result.url,
+      ...(isNonEmptyString(result.description) ? { description: result.description } : {}),
+      ...(isNonEmptyString(result.age) ? { age: result.age } : {}),
+    });
+  }
+  return items.length > 0 ? { kind: "sources", query, items } : undefined;
+}
+
+function parseSourcesCard(details: Record<string, unknown>): CardOf<"sources"> | undefined {
+  if (!Array.isArray(details.items) || !isString(details.query)) return undefined;
+  return buildSourcesCard(
+    details.query,
+    details.items.filter(isRecord).map((item) => ({
+      url: isString(item.url) ? item.url : "",
+      title: isString(item.title) ? item.title : undefined,
+      description: isString(item.description) ? item.description : undefined,
+      age: isString(item.age) ? item.age : undefined,
+    })),
+  );
+}
+
+/** What the agent just wrote to the wiki, so the turn shows what it will remember. */
+export function buildWikiNoteCard(input: {
+  pageId: string;
+  content: string;
+  pageType?: string | null;
+  updated?: boolean;
+  /** The page as it stood before a rewrite; drives the change list. */
+  before?: string;
+}): CardOf<"wiki_note"> | undefined {
+  const summary = splitPage(input.content).summary;
+  if (!isNonEmptyString(input.pageId) || !summary) return undefined;
+  const diff = input.before === undefined ? undefined : textDiff(input.before, input.content);
+  return {
+    kind: "wiki_note",
+    pageId: input.pageId,
+    summary,
+    ...(isNonEmptyString(input.pageType) ? { pageType: input.pageType } : {}),
+    ...(input.updated ? { updated: true } : {}),
+    ...(diff && diff.added + diff.removed > 0 ? { diff } : {}),
+  };
+}
+
+function parseWikiDiff(value: unknown): CardOf<"wiki_note">["diff"] {
+  if (!isRecord(value)) return undefined;
+  const { added, removed, rows } = value;
+  if (typeof added !== "number" || typeof removed !== "number") return undefined;
+  const parsed: WikiDiffRow[] = [];
+  for (const row of Array.isArray(rows) ? rows : []) {
+    if (!isRecord(row) || !isString(row.text)) continue;
+    if (row.op !== "+" && row.op !== "-") continue;
+    parsed.push({ op: row.op, text: row.text });
+  }
+  return { added, removed, rows: parsed };
+}
+
+function parseWikiNoteCard(details: Record<string, unknown>): CardOf<"wiki_note"> | undefined {
+  const { pageId, summary, pageType, updated } = details;
+  if (!isNonEmptyString(pageId) || !isNonEmptyString(summary)) return undefined;
+  const diff = parseWikiDiff(details.diff);
+  return {
+    kind: "wiki_note",
+    pageId,
+    summary,
+    ...(isNonEmptyString(pageType) ? { pageType } : {}),
+    ...(updated === true ? { updated: true } : {}),
+    ...(diff ? { diff } : {}),
+  };
+}
+
+const FIELD_KINDS = ["text", "long", "number", "date", "choice"] as const;
+const MAX_FIELD_OPTIONS = 8;
+
+/** The fields an agent asks for in one go, dropping anything unusable. */
+export function buildFormCard(title: string, fields: unknown[]): CardOf<"form"> | undefined {
+  const parsed: FormField[] = [];
+  for (const raw of fields) {
+    if (!isRecord(raw)) continue;
+    const { name, label, kind, options, placeholder, required } = raw;
+    if (!isNonEmptyString(name) || !isNonEmptyString(label)) continue;
+    const fieldKind = (FIELD_KINDS as readonly string[]).includes(kind as string)
+      ? (kind as FormField["kind"])
+      : "text";
+    const picks = Array.isArray(options)
+      ? options.filter(isNonEmptyString).slice(0, MAX_FIELD_OPTIONS)
+      : [];
+    // A choice with nothing to choose from would render an empty select.
+    if (fieldKind === "choice" && picks.length === 0) continue;
+    parsed.push({
+      name,
+      label,
+      kind: fieldKind,
+      ...(picks.length > 0 ? { options: picks } : {}),
+      ...(isNonEmptyString(placeholder) ? { placeholder } : {}),
+      ...(required === true ? { required: true } : {}),
+    });
+  }
+  if (!isNonEmptyString(title) || parsed.length === 0) return undefined;
+  return { kind: "form", title, fields: parsed };
+}
+
+function parseFormCard(details: Record<string, unknown>): CardOf<"form"> | undefined {
+  if (!Array.isArray(details.fields) || !isString(details.title)) return undefined;
+  return buildFormCard(details.title, details.fields);
+}
 
 export function coerceChartPoint(value: unknown): ChartPoint | undefined {
   if (!isRecord(value)) return undefined;
@@ -543,19 +595,12 @@ function parseChartCard(details: Record<string, unknown>): CardOf<"chart"> | und
   });
 }
 
-// delegation — the delegate tool's fan-out, one lane per background worker.
-// The tool builds it from its own trusted task state and re-publishes it on
-// every worker transition, so the card is live progress while the turn runs
-// and a durable record of what the answer drew on afterwards.
-
 export function coerceDelegationTask(value: unknown): DelegationTask | undefined {
   if (!isRecord(value)) return undefined;
   const { label, status, elapsedMs } = value;
   if (!isNonEmptyString(label)) return undefined;
   return {
     label,
-    // An unrecognized status degrades to the settled tier rather than dropping
-    // the lane: a stored card never renders a spinner for a finished worker.
     status:
       isString(status) && (DELEGATION_STATUSES as readonly string[]).includes(status)
         ? (status as DelegationStatus)
@@ -566,7 +611,6 @@ export function coerceDelegationTask(value: unknown): DelegationTask | undefined
   };
 }
 
-/** Builds the "delegation" card, or undefined when no task survives coercion. */
 export function buildDelegationCard(tasks: unknown[]): CardOf<"delegation"> | undefined {
   const coerced = tasks
     .map(coerceDelegationTask)
@@ -580,11 +624,6 @@ function parseDelegationCard(details: Record<string, unknown>): CardOf<"delegati
   return buildDelegationCard(details.tasks);
 }
 
-/**
- * One parse arm per kind. The mapped type keeps this record exhaustive: adding
- * a kind to the AgentCard union fails compilation here until it supplies its
- * parse arm. Each arm gets the already-parsed `details.account`.
- */
 const CARD_PARSERS: {
   [K in AgentCard["kind"]]: (
     details: Record<string, unknown>,
@@ -599,21 +638,17 @@ const CARD_PARSERS: {
   attachments: parseAttachmentsCard,
   choices: parseChoicesCard,
   briefing: parseBriefingCard,
+  sources: (details) => parseSourcesCard(details),
+  form: (details) => parseFormCard(details),
+  wiki_note: (details) => parseWikiNoteCard(details),
 };
 
-/**
- * Validates a tool `details` payload into an `AgentCard` the chat can render.
- * The last line of defense before a card reaches the client: `details` is
- * `unknown` (it round-trips through pi's event stream as `any`), so every field
- * is checked rather than trusted, and nothing here ever throws.
- */
+/** Validate an untrusted tool payload before it reaches the client. */
 export function parseAgentCard(details: unknown): AgentCard | undefined {
   try {
     if (!isRecord(details)) return undefined;
     const kind = details.kind;
-    // Object.hasOwn (not `in`) so a kind string naming an Object.prototype
-    // member can't reach the lookup; after the guard the string is a known
-    // parser key, which the narrowing cast records.
+    // Do not let Object.prototype names reach the parser lookup.
     if (typeof kind !== "string" || !Object.hasOwn(CARD_PARSERS, kind)) return undefined;
     const parse = CARD_PARSERS[kind as AgentCard["kind"]];
     return parse(details, parseCardAccount(details.account));
@@ -622,11 +657,6 @@ export function parseAgentCard(details: unknown): AgentCard | undefined {
   }
 }
 
-/**
- * Parses a messages.cards JSON blob back into validated cards for the API. Same
- * trust posture as parseAgentCard: our own write, but it round-trips through
- * JSON, so anything malformed is dropped rather than crashing message restore.
- */
 export function parseStoredCards(raw: string | null | undefined): MessageCard[] | undefined {
   if (!raw) return undefined;
   try {

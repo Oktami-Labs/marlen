@@ -1,4 +1,4 @@
-import type { ConnectedAccount, MemoryEntry } from "@marlen/shared";
+import type { ConnectedAccount, WikiPage } from "@marlen/shared";
 import { useQuery } from "@tanstack/react-query";
 import { AudioLines, RotateCcw } from "lucide-react";
 import * as React from "react";
@@ -12,14 +12,14 @@ import { toast } from "@/lib/toast";
 
 /**
  * Voice-learn status for one account row: an in-flight or failed attempt, or
- * the learned voice itself — a chip whose tooltip lists the style directives
+ * the learned voice itself, a chip whose tooltip lists the style directives
  * and which opens the backing style memory in the editor. A learn starting or
  * finishing emits "learn", which the topic bridge turns into a refetch of
  * both queries.
  */
 export function VoiceLearnBadge({ account }: { account: ConnectedAccount }) {
   const { t } = useTranslation();
-  const [editing, setEditing] = React.useState<MemoryEntry | null>(null);
+  const [editing, setEditing] = React.useState<WikiPage | null>(null);
   const { data: runs } = useQuery({
     queryKey: ["learn", "voiceRuns"],
     queryFn: () => api.voiceLearnRuns(),
@@ -72,8 +72,8 @@ export function VoiceLearnBadge({ account }: { account: ConnectedAccount }) {
     const edit = async () => {
       if (!voice.memoryId) return;
       try {
-        const entry = (await api.memories()).find((m) => m.id === voice.memoryId);
-        if (entry) setEditing(entry);
+        const page = (await api.wiki()).find((p) => p.id === voice.memoryId);
+        if (page) setEditing(page);
       } catch (err) {
         toast.error(err);
       }
@@ -92,7 +92,7 @@ export function VoiceLearnBadge({ account }: { account: ConnectedAccount }) {
         </button>
         {editing && (
           <FileEditor
-            target={{ kind: "memory", entry: editing }}
+            target={{ kind: "page", page: editing }}
             onClose={() => setEditing(null)}
             onStatus={() => {}}
           />

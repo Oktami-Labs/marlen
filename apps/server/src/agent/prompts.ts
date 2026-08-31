@@ -27,7 +27,7 @@ export const prompts = {
   /** The base system prompt; buildSystemPrompt appends the conditional sections. */
   system: withTells(read("system")).replaceAll("{{app-version}}", appVersion),
   humanizer: withTells(read("humanizer")),
-  /** User-facing app documentation, served by app_help — not spliced into any prompt. */
+  /** User-facing app documentation, served by app_help, not spliced into any prompt. */
   appGuide: read("app-guide"),
   delegateWorker: read("delegate-worker"),
   compaction: read("compaction"),

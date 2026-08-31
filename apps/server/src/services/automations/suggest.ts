@@ -90,7 +90,7 @@ const reportSuggestionsTool: ReportToolSpec<SuggestedAutomation[]> = {
   },
 };
 
-/** Hard cap so a stuck provider can't wedge the nightly sweep. */
+/** Prevents a stalled provider from blocking the nightly sweep. */
 const SUGGEST_TIMEOUT_MS = 90_000;
 
 /**

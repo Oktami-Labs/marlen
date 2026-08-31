@@ -1,8 +1,8 @@
 import { cn, UNASSIGNED_ACCOUNT_COLOR } from "@/lib/utils";
 
 /**
- * The one round dot marker. Default form is the colored account marker — the
- * dot that says which connected inbox a row, chip, or card line belongs to —
+ * The one round dot marker. Default form is the colored account marker, the
+ * dot that says which connected inbox a row, chip, or card line belongs to,
  * and it owns the fallback: an account with no assigned color always gets the
  * unassigned grey, never no dot and never an ad-hoc tone. The `tone` variants
  * cover the non-account scopes (theme-aware ink, pale accent) so no caller

@@ -38,7 +38,7 @@ export const whatsAppRoutes: FastifyPluginAsyncTypebox = async (app) => {
     return statusPayload();
   });
 
-  // Live agents hold the tool list built under the old setting, so flipping it resets sessions.
+  // Cached sessions capture tool availability at creation.
   app.put(
     "/api/whatsapp/send-access",
     { schema: { body: Type.Object({ enabled: Type.Boolean() }) } },

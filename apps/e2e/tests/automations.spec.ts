@@ -2,15 +2,6 @@ import type { Automation } from "@marlen/shared";
 import { expect, openApp, test } from "../src/fixtures.js";
 import { t } from "../src/i18n.js";
 
-/**
- * Automations are the one substantial write surface a hermetic run can drive
- * end to end: they need no email account, no LLM and no third-party service.
- * This covers the whole path — form, API, SQLite, list — for a create and a
- * delete.
- */
-
-// The worker's server is shared by its tests and seeds a default automation of
-// its own, so this one is found by name rather than by position.
 const NAME = `E2E Automatisierung ${Date.now()}`;
 
 test("an automation created in the UI is persisted and can be deleted again", async ({
@@ -24,7 +15,6 @@ test("an automation created in the UI is persisted and can be deleted again", as
   await page.getByLabel(t("automations.instruction")).fill("Fasse den Posteingang zusammen.");
   await page.getByRole("button", { name: t("automations.create"), exact: true }).click();
 
-  // The row's accessible name concatenates name, schedule and instruction.
   const row = page.getByRole("button", { name: new RegExp(NAME) });
   await expect(row).toBeVisible();
 
@@ -35,8 +25,6 @@ test("an automation created in the UI is persisted and can be deleted again", as
   ).toContain(NAME);
 
   await row.click();
-  // The edit dialog's own footer button opens a second, confirming dialog;
-  // both are role=dialog, so the confirm is addressed by its title.
   await page.getByRole("button", { name: t("automations.delete"), exact: true }).click();
   await page
     .getByRole("dialog", { name: t("automations.delete") })

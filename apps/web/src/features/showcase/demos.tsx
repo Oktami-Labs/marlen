@@ -1,9 +1,3 @@
-/*
- * Interactive demos for the shared primitives the /showcase gallery exercises —
- * each one holds its own state so the page stays a live test bench, not a
- * screenshot. Part of the DEV showcase; safe to delete with the folder.
- */
-
 import { useQuery } from "@tanstack/react-query";
 import {
   ArrowUp,
@@ -26,7 +20,7 @@ import * as React from "react";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { OpenRunInChatButton } from "@/components/OpenRunInChatButton";
 import { RunStatusBadge } from "@/components/RunStatusBadge";
-import { ThreadHistory } from "@/components/ThreadHistory";
+import { ThreadHistory, ThreadMessageRow } from "@/components/ThreadHistory";
 import { AccountDot } from "@/components/ui/account-dot";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -221,7 +215,7 @@ export function NoticeDemo() {
   );
 }
 
-/** The quiet open/close disclosure — chevron up/down, no fill. */
+/** The quiet open/close disclosure, chevron up/down, no fill. */
 export function DisclosureDemo() {
   const [open, setOpen] = React.useState(false);
   return (
@@ -239,7 +233,7 @@ export function DisclosureDemo() {
 }
 
 /**
- * toggleRowProps in action: the whole header row expands/collapses — focus it
+ * toggleRowProps in action: the whole header row expands/collapses, focus it
  * and press Enter or Space. Used where the header wraps real buttons and so
  * can't be a native <button> itself.
  */
@@ -323,7 +317,7 @@ export function CursorTooltipDemo() {
   );
 }
 
-/** ColorPicker driving an AccountDot — the pairing the connections page uses. */
+/** ColorPicker driving an AccountDot, the pairing the connections page uses. */
 export function ColorPickerDemo() {
   const [hex, setHex] = React.useState("#4f46e5");
   return (
@@ -375,7 +369,7 @@ export function ErrorBoundaryDemo() {
 /**
  * ThreadHistory against demo ids: it reads the thread live on first expand,
  * so this shows the loading pass and then whichever terminal branch the
- * server answers with — the quiet standalone-draft line on a 404, the retry
+ * server answers with, the quiet standalone-draft line on a 404, the retry
  * banner otherwise.
  */
 export function ThreadHistoryDemo() {
@@ -386,6 +380,46 @@ export function ThreadHistoryDemo() {
         Expand to watch it fetch — with demo ids the empty or error branch renders, on a connected
         account the collapsible message list does.
       </p>
+    </div>
+  );
+}
+
+/** A received body in the shape the server's sanitizer emits: inline styles, a layout table, a tracking pixel, quoted history. */
+const DEMO_EMAIL_HTML = `
+<div dir="ltr">
+  <p style="margin:0 0 12px">Guten Tag Frau Wagner,</p>
+  <p style="margin:0 0 12px">anbei die Unterlagen zur <b>Wohnung am Stadtpark</b>. Die Besichtigung passt bei uns am Donnerstag.</p>
+  <table cellpadding="6" style="border-collapse:collapse;font-size:13px">
+    <tr><td bgcolor="#f2f2f7"><b>Fl\u00e4che</b></td><td bgcolor="#f2f2f7">84 m\u00b2</td></tr>
+    <tr><td>Kaltmiete</td><td>1.240 \u20ac</td></tr>
+  </table>
+  <p style="margin:12px 0"><a href="https://marlen.email/expose/2291">Expos\u00e9 ansehen</a></p>
+  <img src="https://track.example.com/open.gif" width="1" height="1" alt="">
+</div>
+<div class="gmail_quote">
+  <blockquote type="cite"><p>Sehr geehrte Damen und Herren, k\u00f6nnen Sie mir die Unterlagen zusenden?</p></blockquote>
+</div>`;
+
+/**
+ * The sandboxed message view a thread row expands to: the sender's own markup,
+ * remote images blocked until asked for, quoted history behind the toggle.
+ */
+export function EmailBodyDemo() {
+  const [open, setOpen] = React.useState(true);
+  return (
+    <div className="max-w-md">
+      <ThreadMessageRow
+        message={{
+          from: "Petra Wagner <petra.wagner@example.com>",
+          to: ["ich@example.com"],
+          date: new Date(Date.now() - 3 * 3600_000).toISOString(),
+          body: "Guten Tag Frau Wagner, anbei die Unterlagen.",
+          bodyHtml: DEMO_EMAIL_HTML,
+        }}
+        open={open}
+        onToggle={() => setOpen((wasOpen) => !wasOpen)}
+        lang="de"
+      />
     </div>
   );
 }
@@ -414,7 +448,7 @@ export function OpenRunInChatDemo() {
   );
 }
 
-/** Focus ring and ::selection — the two accent marks that only appear on interaction. */
+/** Focus ring and ::selection, the two accent marks that only appear on interaction. */
 export function FocusRingDemo() {
   const [picked, setPicked] = React.useState(false);
   return (
@@ -481,7 +515,7 @@ const ROW_MOTION_ROWS = [
  *
  * Send and discard deliberately read differently: a sent row keeps its name and
  * morphs in place into its terminal line, a discarded one gives the name up and
- * leaves. Same mechanism, opposite meaning — the row that went out into the
+ * leaves. Same mechanism, opposite meaning, the row that went out into the
  * world must not look like the row that was thrown away.
  */
 export function RowMotionDemo() {
@@ -662,13 +696,14 @@ const RESIZE_MIN = 180;
 const RESIZE_MAX = 380;
 
 /**
- * useResizableWidth on a demo rail — same grip markup as the app's chat
+ * useResizableWidth on a demo rail, same grip markup as the app's chat
  * splitter. Overdragging past the minimum collapses it, like the real rails.
  */
 export function ResizableDemo() {
   const [collapsed, setCollapsed] = React.useState(false);
-  const { width, onPointerDown } = useResizableWidth({
+  const { ref, width, onPointerDown } = useResizableWidth({
     storageKey: "marlen-showcase-resize",
+    cssVar: "--rail-width",
     defaultWidth: 260,
     min: RESIZE_MIN,
     max: RESIZE_MAX,
@@ -684,7 +719,7 @@ export function ResizableDemo() {
         Drag the grip — the width persists across reloads. Pull well past the minimum to collapse
         the rail, the same overdrag gesture the chat column uses.
       </p>
-      {/* biome-ignore lint/a11y/useSemanticElements: interactive draggable splitter, not a static divider — <hr> can't be focusable or hold the grip child */}
+      {/* biome-ignore lint/a11y/useSemanticElements: interactive splitter; <hr> cannot receive focus or contain the grip */}
       <div
         role="separator"
         aria-orientation="vertical"
@@ -699,7 +734,8 @@ export function ResizableDemo() {
         <div className="h-8 w-1 rounded-full bg-foreground/10 transition-colors group-hover:bg-foreground/30 group-active:bg-accent/60" />
       </div>
       <div
-        style={{ width }}
+        ref={ref}
+        style={{ width: "var(--rail-width)" }}
         className="flex shrink-0 items-center justify-center font-mono text-xs tabular-nums text-muted-foreground"
       >
         {width}px

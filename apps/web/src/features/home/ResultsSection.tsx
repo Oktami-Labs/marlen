@@ -16,7 +16,7 @@ const RESULTS_WINDOW_MS = 48 * 60 * 60 * 1000;
 /** Newest results shown; older ones age out into the activity log. */
 const RESULTS_MAX = 4;
 
-/** The run's presentable output: draft cards are excluded — those are
+/** The run's presentable output: draft cards are excluded, those are
  *  approvals and already live in the attention list. */
 function displayCards(run: RunFeedItem): MessageCard[] {
   return (run.cards ?? []).filter(
@@ -48,7 +48,7 @@ export function freshResultRuns(
 }
 
 /**
- * "Neue Ergebnisse" — what the other automations produced recently, shown as
+ * "Neue Ergebnisse", what the other automations produced recently, shown as
  * their actual output cards instead of history rows. The hero automation is
  * excluded (its output leads the page); runs older than the window live only
  * in the activity log below. Hidden entirely when nothing is fresh.
@@ -62,7 +62,7 @@ export function ResultsSection({
 }: {
   /** The activity feed with the hero run already removed; null while loading. */
   runs: RunFeedItem[] | null;
-  /** Every run of this automation is excluded, not just the hero run itself. */
+  /** Excludes every run from the automation represented by the hero. */
   heroAutomationId?: string;
   colors: AccountColor[];
   onNavigate: (view: View) => void;

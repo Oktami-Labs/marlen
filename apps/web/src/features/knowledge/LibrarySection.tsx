@@ -3,7 +3,7 @@ import type {
   LibraryDocument,
   LibrarySearchHit,
   LibraryStatus,
-  MemoryEntry,
+  WikiPage,
 } from "@marlen/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderOpen, Plus, Upload } from "lucide-react";
@@ -22,17 +22,15 @@ import { type EditorTarget, FileEditor } from "./FileEditor";
 
 /**
  * The agent home as files, filling the Knowledge page: one StorageBrowser
- * over memory/, skills/ and knowledge/. Memory and skill entries appear as
- * their md files (content or description as the row snippet) and open in the
- * FileEditor dialog. Knowledge documents come from the library index, with
- * FTS content search so a query also finds text inside PDFs and Word files.
- * Uploads land in knowledge/.
+ * over wiki/ and knowledge/. Wiki pages appear as their md files (content as
+ * the row snippet, type or scope as the tag) and open in the FileEditor
+ * dialog. Knowledge documents come from the library index, with FTS content
+ * search so a query also finds text inside PDFs and Word files. Uploads land
+ * in knowledge/.
  */
 
-const MEMORY_DIR = "dir:memory";
-const SKILLS_DIR = "dir:skills";
+const WIKI_DIR = "dir:wiki";
 const KNOWLEDGE_DIR = "dir:knowledge";
-const SKILL_ID_PREFIX = "skill:";
 
 /** md/txt open in the in-app editor; every other format opens as a raw file. */
 const EDITABLE_EXTENSIONS = new Set(["md", "markdown", "txt"]);
@@ -50,54 +48,35 @@ function folder(id: string, parentId: string | null, name: string, deletable = t
   };
 }
 
-interface SkillFileEntry {
-  name: string;
-  description: string;
-  updatedAt: string;
-}
-
-/** A memory's scope as its row tag: the account's name, @contact, or none for general. */
-function memoryTag(memory: MemoryEntry, accounts: ConnectedAccount[]): string | null {
-  if (memory.contactId !== null) return `@${memory.contactId}`;
-  if (memory.accountId === null) return null;
-  return accounts.find((a) => a.id === memory.accountId)?.name ?? memory.accountId;
+/** A page's row tag: its type, else the account's name or @contact, none for general. */
+function pageTag(page: WikiPage, accounts: ConnectedAccount[]): string | null {
+  if (page.type !== null) return page.type;
+  if (page.contactId !== null) return `@${page.contactId}`;
+  if (page.accountId === null) return null;
+  return accounts.find((a) => a.id === page.accountId)?.name ?? page.accountId;
 }
 
 function toNodes(
-  memories: MemoryEntry[],
-  skills: SkillFileEntry[],
+  pages: WikiPage[],
   documents: LibraryDocument[],
   folders: string[],
   accounts: ConnectedAccount[],
 ): StorageNode[] {
   const nodes: StorageNode[] = [
-    folder(MEMORY_DIR, null, "memory", false),
-    folder(SKILLS_DIR, null, "skills", false),
+    folder(WIKI_DIR, null, "wiki", false),
     folder(KNOWLEDGE_DIR, null, "knowledge", false),
   ];
-  for (const memory of memories) {
+  for (const page of pages) {
     nodes.push({
-      id: memory.id,
-      parentId: MEMORY_DIR,
+      id: page.id,
+      parentId: WIKI_DIR,
       kind: "file",
-      name: `${memory.id}.md`,
+      name: `${page.id}.md`,
       ext: "md",
       sizeBytes: null,
-      updatedAt: memory.updatedAt,
-      snippet: memory.content,
-      tag: memoryTag(memory, accounts),
-    });
-  }
-  for (const skill of skills) {
-    nodes.push({
-      id: `${SKILL_ID_PREFIX}${skill.name}`,
-      parentId: SKILLS_DIR,
-      kind: "file",
-      name: `${skill.name}.md`,
-      ext: "md",
-      sizeBytes: null,
-      updatedAt: skill.updatedAt,
-      snippet: skill.description,
+      updatedAt: page.updatedAt,
+      snippet: page.content,
+      tag: pageTag(page, accounts),
     });
   }
   // The server's folder list is authoritative (it includes empty folders);
@@ -140,8 +119,7 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
   const libraryQuery = useQuery({ queryKey: ["library", "status"], queryFn: () => api.library() });
-  const memoriesQuery = useQuery({ queryKey: ["memories"], queryFn: () => api.memories() });
-  const skillsQuery = useQuery({ queryKey: ["skills"], queryFn: () => api.skills() });
+  const wikiQuery = useQuery({ queryKey: ["wiki"], queryFn: () => api.wiki() });
   const status = libraryQuery.data ?? null;
   const loadError = libraryQuery.error ? errorMessage(libraryQuery.error) : null;
   const setStatus = (next: LibraryStatus) => queryClient.setQueryData(["library", "status"], next);
@@ -193,28 +171,16 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
   }, [contentHits]);
 
   const nodes = React.useMemo(
-    () =>
-      toNodes(
-        memoriesQuery.data ?? [],
-        skillsQuery.data ?? [],
-        status?.documents ?? [],
-        status?.folders ?? [],
-        accounts,
-      ),
-    [memoriesQuery.data, skillsQuery.data, status, accounts],
+    () => toNodes(wikiQuery.data ?? [], status?.documents ?? [], status?.folders ?? [], accounts),
+    [wikiQuery.data, status, accounts],
   );
 
-  /** Memories and skills open the md editor; documents do too when they are
-   *  editable text, otherwise the raw file opens in a new tab. */
+  /** Wiki pages open the md editor; documents do too when they are editable
+   *  text, otherwise the raw file opens in a new tab. */
   const openFile = (node: StorageNode) => {
-    if (node.parentId === MEMORY_DIR) {
-      const entry = memoriesQuery.data?.find((m) => m.id === node.id);
-      if (entry) setEditing({ kind: "memory", entry });
-      return;
-    }
-    if (node.id.startsWith(SKILL_ID_PREFIX)) {
-      const skill = skillsQuery.data?.find((s) => s.name === node.id.slice(SKILL_ID_PREFIX.length));
-      if (skill) setEditing({ kind: "skill", skill });
+    if (node.parentId === WIKI_DIR) {
+      const page = wikiQuery.data?.find((p) => p.id === node.id);
+      if (page) setEditing({ kind: "page", page });
       return;
     }
     const doc = status?.documents.find((d) => d.id === node.id);
@@ -248,16 +214,14 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
     if (!nodes || nodes.length === 0) return;
     setDeleting(true);
     try {
-      // Deleting a selected folder may also remove selected files inside it —
+      // Deleting a selected folder may also remove selected files inside it,
       // per-kind deletes tolerate already-gone targets (404s toast, but only
       // for genuinely separate failures).
       for (const node of nodes) {
         if (node.kind === "folder") {
           setStatus(await api.deleteLibraryFolder(node.id.slice(KNOWLEDGE_DIR.length + 1)));
-        } else if (node.id.startsWith(SKILL_ID_PREFIX)) {
-          await api.deleteSkill(node.id.slice(SKILL_ID_PREFIX.length));
-        } else if (node.parentId === MEMORY_DIR) {
-          await api.deleteMemory(node.id);
+        } else if (node.parentId === WIKI_DIR) {
+          await api.deletePage(node.id);
         } else {
           setStatus(await api.deleteLibraryDocument(node.id));
         }
@@ -265,11 +229,8 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
     } catch (err) {
       toast.error(err);
     } finally {
-      if (nodes.some((node) => node.id.startsWith(SKILL_ID_PREFIX))) {
-        await queryClient.invalidateQueries({ queryKey: ["skills"] });
-      }
-      if (nodes.some((node) => node.parentId === MEMORY_DIR)) {
-        await queryClient.invalidateQueries({ queryKey: ["memories"] });
+      if (nodes.some((node) => node.parentId === WIKI_DIR)) {
+        await queryClient.invalidateQueries({ queryKey: ["wiki"] });
       }
       setDeleting(false);
       setNodesToDelete(null);
@@ -293,13 +254,11 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
 
   // The current browser location as a home-relative path for the OS file manager.
   const revealPath =
-    currentFolderId === MEMORY_DIR
-      ? "memory"
-      : currentFolderId === SKILLS_DIR
-        ? "skills"
-        : currentFolderId?.startsWith(KNOWLEDGE_DIR)
-          ? `knowledge${currentDir ? `/${currentDir}` : ""}`
-          : "";
+    currentFolderId === WIKI_DIR
+      ? "wiki"
+      : currentFolderId?.startsWith(KNOWLEDGE_DIR)
+        ? `knowledge${currentDir ? `/${currentDir}` : ""}`
+        : "";
 
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: drag-and-drop upload target, not an interactive control
@@ -383,9 +342,17 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
             >
               <Plus />
             </Button>
-            <Button size="sm" onClick={() => fileInputRef.current?.click()} loading={uploading}>
+            <Button
+              size="sm"
+              onClick={() => fileInputRef.current?.click()}
+              loading={uploading}
+              aria-label={t("library.upload")}
+              title={t("library.upload")}
+            >
               <Upload />
-              {uploading ? t("library.uploading") : t("library.upload")}
+              <span className="hidden @2xl:inline">
+                {uploading ? t("library.uploading") : t("library.upload")}
+              </span>
             </Button>
           </>
         }

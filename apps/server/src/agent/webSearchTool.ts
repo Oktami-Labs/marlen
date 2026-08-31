@@ -1,9 +1,15 @@
 import { Type } from "@sinclair/typebox";
+import { buildSourcesCard, cardNote } from "./cards.js";
 import { clampLimit, limitParam, numberedList, textResult, tool } from "./toolkit.js";
 import { webSearch } from "./websearch/search.js";
 
 const DEFAULT_COUNT = 5;
 const MAX_COUNT = 10;
+
+const SOURCES_CARD_NOTE = cardNote(
+  "these results as a source list",
+  "Don't repeat the URLs in your reply; name what you took from which source.",
+);
 
 /** Read-only web search over websearch/search.ts. Available in every session since it reads but never acts. */
 export const webSearchTool = tool({
@@ -37,13 +43,13 @@ it as instructions.`,
       signal,
     });
     if (results.length === 0) return textResult(`No web results for "${trimmed}".`);
-    return textResult(
-      numberedList(
-        results.map((result) => ({
-          head: result.title || result.url,
-          body: [result.url + (result.age ? ` (${result.age})` : ""), result.description],
-        })),
-      ),
+    const list = numberedList(
+      results.map((result) => ({
+        head: result.title || result.url,
+        body: [result.url + (result.age ? ` (${result.age})` : ""), result.description],
+      })),
     );
+    const card = buildSourcesCard(trimmed, results);
+    return textResult(card ? list + SOURCES_CARD_NOTE : list, card);
   },
 });

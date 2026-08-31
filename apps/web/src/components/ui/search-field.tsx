@@ -1,16 +1,18 @@
 import { Search, X } from "lucide-react";
+import type * as React from "react";
 import { useTranslation } from "react-i18next";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 
-/** Leading magnifier, trailing clear — the same shape used across the app's list filters. */
+/** Leading magnifier, trailing clear, the same shape used across the app's list filters. */
 export function SearchField({
   value,
   onChange,
   placeholder,
   className,
   size = "default",
+  onKeyDown,
 }: {
   value: string;
   onChange: (next: string) => void;
@@ -18,6 +20,8 @@ export function SearchField({
   className?: string;
   /** `sm` is the compact in-card variant (e.g. the system-prompt inspector). */
   size?: "default" | "sm";
+  /** For filters that also navigate their results from the keyboard (Enter, Escape). */
+  onKeyDown?: React.KeyboardEventHandler<HTMLInputElement>;
 }) {
   const { t } = useTranslation();
   const sm = size === "sm";
@@ -32,6 +36,7 @@ export function SearchField({
       <Input
         value={value}
         onChange={(e) => onChange(e.target.value)}
+        onKeyDown={onKeyDown}
         placeholder={placeholder}
         aria-label={placeholder}
         className={sm ? "h-8 pl-8 pr-8 text-xs" : "pl-9 pr-8"}

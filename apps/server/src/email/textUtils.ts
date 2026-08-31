@@ -134,7 +134,7 @@ export function stripDuplicateSignoff(body: string, signatureText: string): stri
  * with, comparing whitespace-normalized non-empty lines so spacing differences
  * from the HTML round-trip can't defeat the match. Null when the body does not
  * end with the signature (a hand-written draft, or one from before the
- * signature was configured) — the caller then treats the whole text as body
+ * signature was configured), the caller then treats the whole text as body
  * and must not re-append the signature on save.
  */
 export function detachSignature(

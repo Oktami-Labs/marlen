@@ -1,15 +1,15 @@
 import type { AgentCard, CardAccount } from "@marlen/shared";
 
 /**
- * Sample data for the `/showcase` chat command: one turn per kind of thing the
- * assistant can render in chat — tool-activity chips, every card, a formatted
+ * Sample data for the `/showcase` chat command. It includes one turn for each
+ * renderable chat result: tool-activity chips, all card types, a formatted
  * markdown reply, and the thinking shimmer.
  *
  * Email content is written in a consistent sample persona's voice: Selin
  * Kaya, Nordwind Studio co-founder, juggling a billing dispute with Acme
  * GmbH on her work inbox and a holiday booking on her personal one.
- * Commentary between samples is localized via `contentKey`. `imgSrc` is
- * left unset — this also exercises AccountChip's icon fallback.
+ * Commentary between samples is localized via `contentKey`. Leaving `imgSrc`
+ * unset also exercises AccountChip's icon fallback.
  */
 
 export type ShowcaseTurn = {
@@ -17,10 +17,18 @@ export type ShowcaseTurn = {
   contentKey?: string;
   /** Literal sample content (sample-persona German). */
   content?: string;
-  toolCalls?: { name: string; isError: boolean; done: boolean }[];
+  toolCalls?: {
+    name: string;
+    label?: string;
+    isError: boolean;
+    done: boolean;
+    result?: string;
+  }[];
   cards?: AgentCard[];
   /** Renders the streaming "thinking…" state. */
   thinking?: boolean;
+  /** Renders a turn the user stopped: the "stopped" mark and the way on. */
+  stopped?: boolean;
 };
 
 const WORK_ACCOUNT: CardAccount = {
@@ -95,7 +103,7 @@ const ATTACHMENTS_CARD: AgentCard = {
   ],
 };
 
-/** The structured Morning-briefing card — flat and cross-account, mixing the
+/** The structured Morning-briefing card, flat and cross-account, mixing the
  *  work and personal demo inboxes so the priority-first layout has something
  *  to prove. Reuses the Acme thread/draft ids from DRAFT_CARD, so the
  *  "Review draft"/"Ask about this" quick actions land on the same demo data
@@ -216,7 +224,7 @@ const BRIEFING_CARD: AgentCard = {
   ],
 };
 
-/** A clarifying question the agent asks when a request is ambiguous — one
+/** A clarifying question the agent asks when a request is ambiguous, one
  *  option per candidate email plus a third that opts out of both, reusing
  *  the Acme invoice thread id from DRAFT_CARD so its ref points at real
  *  demo data. */
@@ -255,8 +263,7 @@ const CHOICES_CARD: AgentCard = {
   ],
 };
 
-/** A lead the agent surfaced, reusing the Elif Aydın rebranding thread from the
- *  briefing so the demo reads as one story. */
+/** A lead connected to the Elif Aydın briefing sample. */
 const LEAD_CARD: AgentCard = {
   kind: "lead",
   lead: {
@@ -303,7 +310,7 @@ const CHART_LINE_CARD: AgentCard = {
 };
 
 /** The delegate fan-out mid-flight: settled, failed, running and queued lanes,
- *  so every mark renders — including the live spinner. */
+ *  so every mark renders, including the live spinner. */
 const DELEGATION_CARD: AgentCard = {
   kind: "delegation",
   tasks: [
@@ -327,10 +334,81 @@ const DELEGATION_CARD: AgentCard = {
   ],
 };
 
+const MESSAGE_DRAFT_CARD: AgentCard = {
+  kind: "message_draft",
+  channel: "whatsapp",
+  targetLabel: "+49 170 5550183 (Elif Aydın)",
+  draftId: "wa-draft-elif-rebranding",
+  body: "Hallo Elif, die Rebranding-Mappe liegt jetzt in der Bibliothek. Passt Donnerstag 10 Uhr für die Abstimmung?",
+};
+
+/** What a web answer stood on, including a result with an age. */
+const SOURCES_CARD: AgentCard = {
+  kind: "sources",
+  query: "Verzugszinsen Geschäftskunden 2026",
+  items: [
+    {
+      url: "https://www.gesetze-im-internet.de/bgb/__288.html",
+      title: "§ 288 BGB Verzugszinsen und sonstiger Verzugsschaden",
+      age: "3 Jahre",
+    },
+    {
+      url: "https://www.ihk.de/verzugszinsen-berechnen",
+      title: "Verzugszinsen richtig berechnen: Basiszinssatz plus neun Punkte",
+      age: "4 Monate",
+    },
+    {
+      url: "https://www.bundesbank.de/basiszinssatz",
+      title: "Basiszinssatz nach § 247 BGB",
+    },
+  ],
+};
+
+/** A rewritten page: the chip carries what the rewrite changed. */
+const WIKI_NOTE_CARD: AgentCard = {
+  kind: "wiki_note",
+  pageId: "acme-gmbh",
+  summary:
+    "Acme GmbH, Kunde seit 2024. Ansprechpartner Thomas Brandt, Buchhaltung immer in Cc. Zahlungsziel 30 Tage.",
+  updated: true,
+  diff: {
+    added: 2,
+    removed: 1,
+    rows: [
+      { op: "-", text: "Zahlungsziel 14 Tage." },
+      { op: "+", text: "Zahlungsziel 30 Tage (seit Rechnung #A-2291 neu vereinbart)." },
+      { op: "+", text: "Buchhaltung (buchhaltung@acme-gmbh.de) gehört bei Rechnungen in Cc." },
+    ],
+  },
+};
+
+/** The several-things-at-once question: one field of every kind. */
+const FORM_CARD: AgentCard = {
+  kind: "form",
+  title: "Angaben für die Zahlungserinnerung",
+  fields: [
+    { name: "due", label: "Neue Frist", kind: "date", required: true },
+    {
+      name: "tone",
+      label: "Tonfall",
+      kind: "choice",
+      options: ["Freundlich erinnern", "Sachlich mahnen", "Letzte Mahnung"],
+      required: true,
+    },
+    { name: "fee", label: "Mahngebühr in Euro", kind: "number", placeholder: "0" },
+    {
+      name: "note",
+      label: "Zusatz für den Schluss",
+      kind: "long",
+      placeholder: "Optional, ein bis zwei Sätze",
+    },
+  ],
+};
+
 /** A digest-style reply exercising the markdown vocabulary: heading, bold, mailto, list, table, link. */
 const MARKDOWN_SAMPLE = `### Was heute wichtig ist
 
-**Acme GmbH** hat auf die Zahlungserinnerung geantwortet — Thomas Brandt ([t.brandt@acme-gmbh.de](mailto:t.brandt@acme-gmbh.de)) bittet um die Rechnung als PDF.
+**Acme GmbH** hat auf die Zahlungserinnerung geantwortet, Thomas Brandt ([t.brandt@acme-gmbh.de](mailto:t.brandt@acme-gmbh.de)) bittet um die Rechnung als PDF.
 
 - Antwortentwurf liegt in deinem Postfach bereit
 - Buchhaltung ist in Cc
@@ -363,13 +441,37 @@ export const SHOWCASE_TURNS: ShowcaseTurn[] = [
       { name: "gmail-create-draft", isError: false, done: true },
     ],
   },
+  {
+    contentKey: "chat.showcase.stoppedNote",
+    stopped: true,
+    toolCalls: [
+      {
+        name: "gmail-find-email",
+        label: "E-Mails durchsuchen",
+        isError: true,
+        done: true,
+        result: "Gmail antwortet nicht (503)",
+      },
+      {
+        name: "gmail-find-email",
+        label: "E-Mails durchsuchen",
+        isError: true,
+        done: true,
+        result: "Gmail antwortet nicht (503)",
+      },
+    ],
+  },
   { cards: [DRAFT_CARD] },
+  { cards: [MESSAGE_DRAFT_CARD] },
   { cards: [DELEGATION_CARD] },
   { cards: [ATTACHMENTS_CARD] },
   { cards: [BRIEFING_CARD] },
   { cards: [CHOICES_CARD] },
   { cards: [LEAD_CARD] },
   { cards: [CHART_BAR_CARD, CHART_LINE_CARD] },
+  { contentKey: "chat.showcase.sourcesNote", cards: [SOURCES_CARD] },
+  { contentKey: "chat.showcase.savedNote", cards: [WIKI_NOTE_CARD] },
+  { contentKey: "chat.showcase.formNote", cards: [FORM_CARD] },
   { content: MARKDOWN_SAMPLE },
   { thinking: true },
 ];

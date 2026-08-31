@@ -251,7 +251,7 @@ export const draftRoutes: FastifyPluginAsyncTypebox = async (app) => {
   // Saved exactly as typed; the humanizer runs only in the agent's create-draft
   // tool. When the draft carried the account signature (the detail GET detached
   // it, so the edited text is prose only), the new body is re-wrapped above the
-  // same signature — an in-app edit never strips, doubles, or de-styles it.
+  // same signature, an in-app edit never strips, doubles, or de-styles it.
   app.patch(
     "/api/drafts/:accountId/:draftId",
     { schema: { params: draftParams, body: draftPatchBody } },

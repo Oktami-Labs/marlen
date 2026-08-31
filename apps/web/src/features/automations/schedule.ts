@@ -57,7 +57,7 @@ export function buildCron({ frequency, time, weekdays, month, day }: SchedulePre
     case "date":
       return `${minute} ${hour} ${day} ${month} *`;
     // Manual-only: the server treats an empty schedule as "never fires on its
-    // own" — the automation runs only via its "Run now" button.
+    // own", the automation runs only via its "Run now" button.
     case "manual":
       return "";
   }

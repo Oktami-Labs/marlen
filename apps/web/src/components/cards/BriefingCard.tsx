@@ -23,7 +23,7 @@ import { dispatchQuickAction } from "@/lib/quickActions";
 import { cn } from "@/lib/utils";
 import { CardShell } from "./CardShell";
 
-/** The row's account marker — a decorative dot resolved from `colors`, with
+/** The row's account marker, a decorative dot resolved from `colors`, with
  *  the account name riding along for assistive tech only. */
 function AccountMarker({
   accountId,
@@ -50,7 +50,7 @@ function AccountMarker({
 type BriefingData = Extract<AgentCard, { kind: "briefing" }>;
 
 /**
- * The structured Morning-briefing card — flat and cross-account by design
+ * The structured Morning-briefing card, flat and cross-account by design
  * (see apps/web/DESIGN.md and the `kind: "briefing"` doc comment on
  * AgentCard). Priority is the grouping axis, not the inbox: an account only
  * ever shows up as a colour dot on a row. A run whose turn produced no card
@@ -63,7 +63,7 @@ export function BriefingCard({
 }: {
   card: BriefingData;
   colors?: AccountColor[];
-  /** Skip the CardShell frame — for embedding in an already-elevated panel (BriefingHero), never nest surfaces. */
+  /** Skip the CardShell frame, for embedding in an already-elevated panel (BriefingHero), never nest surfaces. */
   bare?: boolean;
 }) {
   const { t } = useTranslation();
@@ -74,7 +74,7 @@ export function BriefingCard({
     const map = new Map<BriefingPriority, BriefingItem[]>(BRIEFING_PRIORITIES.map((p) => [p, []]));
     for (const item of items) {
       // Every BriefingPriority (including "fyi") seeds a bucket above, so this
-      // always resolves — the optional chain only guards the Map API's typing.
+      // always resolves, the optional chain only guards the Map API's typing.
       const bucket = map.get(item.priority) ?? map.get("fyi");
       bucket?.push(item);
     }
@@ -90,7 +90,7 @@ export function BriefingCard({
   if (draftsReadyCount > 0) {
     otherStats.push(t("chat.cards.briefing.stats.draftsReady", { count: draftsReadyCount }));
   }
-  // Rolled-up mail isn't tallied here — each kind renders as its own headed
+  // Rolled-up mail isn't tallied here, each kind renders as its own headed
   // group below, with its own count, so a top-line total would just duplicate.
   if (typeof scanned === "number") {
     otherStats.push(t("chat.cards.briefing.stats.scanned", { count: scanned }));
@@ -194,9 +194,9 @@ export function BriefingCard({
 }
 
 /**
- * One triaged item. The account chip other cards use is deliberately not
- * here — that's the whole point of the flat cross-account layout — so the
- * account only surfaces as a colour dot, resolved the same way the other
+ * One triaged item. The flat cross-account layout deliberately omits the
+ * account chip used by other cards. The account appears only as a colour dot,
+ * resolved the same way the other
  * cards resolve theirs (`colors` by `accountId`).
  */
 function BriefingRow({
@@ -264,8 +264,7 @@ function BriefingRow({
 
   return (
     <div className="group -mx-2 flex items-start gap-2 rounded-lg px-2 py-1.5">
-      {/* Colour alone can't carry which inbox a row came from — the one thing
-          this cross-account layout trades away for density. */}
+      {/* Keep an accessible account label because colour alone cannot identify an inbox. */}
       <AccountMarker
         accountId={item.accountId}
         accounts={accounts}
@@ -348,7 +347,7 @@ function BriefingRow({
 
 /**
  * The whole rolled-up region under one master toggle, on top of each kind
- * group's own toggle — so all the low-value mail folds away in one click, or
+ * group's own toggle, so all the low-value mail folds away in one click, or
  * kind by kind. Open by default: the noise stays visible but is never in the
  * way.
  */
@@ -383,7 +382,7 @@ function RollupsSection({
 
 /**
  * A collapsible group of rolled-up low-value mail of one kind (Newsletters,
- * Receipts…). The heading is a disclosure toggle — open by default, so the mail
+ * Receipts…). The heading is a disclosure toggle, open by default, so the mail
  * stays visible, but foldable away when the noise isn't wanted. Mirrors the FYI
  * tier's toggle rather than the plain tier headings.
  */
@@ -427,7 +426,7 @@ function RollupGroup({
 }
 
 /**
- * One rolled-up low-value message — a compact, quiet counterpart to
+ * One rolled-up low-value message, a compact, quiet counterpart to
  * BriefingRow: smaller type, tighter rows, no urgency mark, deadline/draft
  * badges or draft/ask actions. Its single action is an open-in-webmail button
  * that surfaces on hover, so the noise stays scannable and one click away from

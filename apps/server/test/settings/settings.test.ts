@@ -5,18 +5,8 @@ import { pathToFileURL } from "node:url";
 import type { AccountSignature } from "@marlen/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-/**
- * Three things the settings layer has to get right, because they fail
- * silently: the whole-table read cache must survive concurrent writers, a
- * saved signature must not carry anything that runs (it is the only
- * user-authored HTML the app stores and later renders in its own origin), and
- * the paste path's image fetch must stay pointed at the web — the URLs it is
- * handed come from whoever wrote the copied email.
- */
-
 let settings: typeof import("../../src/db/settings.js");
 let app: Awaited<ReturnType<typeof import("../../src/app.js").buildApp>>;
-/** Inside the OS temp dir, like the folder Outlook writes a copied selection's images to. */
 let scratch: string;
 
 beforeAll(async () => {

@@ -98,8 +98,7 @@ async function startServices(app: FastifyInstance): Promise<void> {
   await startLibrary((message) => app.log.info(message));
   app.log.info(`Document library folder: ${getLibraryDir()}`);
 
-  // Reconnect a paired WhatsApp account (no-op while none linked). Live agent
-  // sessions hold a tool list for the old link state, so a pairing/unlink rebuilds them.
+  // Cached sessions capture WhatsApp link state at creation.
   onWhatsAppLinkedChange(() => resetSessions());
   startWhatsApp();
 

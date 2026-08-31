@@ -4,7 +4,7 @@ import {
   type AccountVoiceInfo,
   type ConnectedAccount,
   EMAIL_APPS,
-  MEMORY_MAX_LENGTH,
+  WIKI_SUMMARY_MAX_LENGTH,
 } from "@marlen/shared";
 import { Type } from "@sinclair/typebox";
 import { moduleLogger } from "../core/logger.js";
@@ -20,12 +20,7 @@ import {
 import { normalizeAddressSet } from "../email/learn/addressSubject.js";
 import { getMailReadProvider, type SentMessage } from "../email/read/readProviders.js";
 import { listAccounts } from "../integrations/pipedream/connect.js";
-import {
-  createMemory,
-  deleteMemory,
-  listMemories,
-  updateMemory,
-} from "../storage/memories/store.js";
+import { createPage, deletePage, listPages, updatePage } from "../storage/wiki/store.js";
 import { activeModelConfigured } from "./llm/registry.js";
 import { type ReportToolSpec, runReportPrompt } from "./oneShot.js";
 import { appLanguageName } from "./prompt.js";
@@ -38,32 +33,12 @@ const FETCH_LIMIT = 40;
 const MAX_SAMPLES = 15;
 const MAX_BODY_CHARS = 2000;
 
-/** Accounts with a learn in flight: one learn per account, across every entry point. */
 const inFlight = new Set<string>();
 
-/**
- * No usable sent mail in the sample window. recordedLearn treats it as a quiet
- * skip, not a failure: it deletes the attempt row (so Settings shows no error
- * and boot reconcile re-attempts the account later).
- */
 class NoSentMailError extends Error {}
 
-/**
- * The one recorded failure boot reconcile retries. An account connected before
- * a model was configured fails with this and would otherwise count as attempted
- * forever; reconcile only runs once a model exists, so the error is stale by
- * definition. Matched by exact message, so both sites must use this constant.
- */
 const NO_MODEL_ERROR = "no LLM configured — sign in under Settings → AI";
 
-/**
- * One learn per account at a time: a concurrent second is refused, since two
- * overlapping learns would race each other's memory writes. Every outcome is
- * recorded to db/voiceRuns.ts (a failed learn gets a retry button in Settings,
- * a success clears the error badge); NoSentMailError deletes the row instead.
- * Rethrows the learn's error after recording; the outcome writes are
- * best-effort.
- */
 async function recordedLearn<T>(accountId: string, learn: () => Promise<T>): Promise<T> {
   if (inFlight.has(accountId)) {
     throw new Error("a voice learn for this account is already running — wait for it to finish");
@@ -91,18 +66,14 @@ async function recordedLearn<T>(accountId: string, learn: () => Promise<T>): Pro
 }
 
 function systemPromptFor(accountName: string, languageName: string): string {
-  return `You are a writing-style analyst for Marlen, a personal email assistant. Your only job is
+  return `You are a writing-style analyst for Marlene, a personal email assistant. Your only job is
 to study the user's OWN sent messages from the connected account ${accountName} — provided below in
 the prompt — and report back their writing style, nothing else. Study how the user writes: greeting,
 sign-off, tone, length, language(s). Write every directive in ${languageName}. When you are done,
 call the report_style tool exactly once with your findings.`;
 }
 
-/**
- * Downselect for variety: newest first, one message per thread, preferring
- * unseen recipient sets, so the sample spans the user's range instead of one
- * thread.
- */
+/** Prefer recent messages across distinct threads and recipient sets. */
 function sampleSentMessages(sent: SentMessage[]): SentMessage[] {
   const newestFirst = [...sent].reverse();
   const seenThreads = new Set<string>();
@@ -148,7 +119,6 @@ interface LearnedVoice {
   style: string[];
 }
 
-/** narrow re-checks the shape since report params are untrusted, trimming and dropping blank entries. */
 const reportStyleTool: ReportToolSpec<LearnedVoice> = {
   name: "report_style",
   label: "Report writing style",
@@ -169,7 +139,6 @@ const reportStyleTool: ReportToolSpec<LearnedVoice> = {
   }),
   narrow: (params) => {
     const { style } = (params ?? {}) as Record<string, unknown>;
-    // Per-entry and count caps keep the combined style file under MEMORY_MAX_LENGTH.
     return {
       style: Array.isArray(style)
         ? style
@@ -184,7 +153,7 @@ const reportStyleTool: ReportToolSpec<LearnedVoice> = {
 
 const sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
 
-/** Bounded retry for transient fetch failures: the on-connect run can race freshly-created proxy credentials. A clean answer, even empty, returns as-is. */
+/** Retry sent-mail reads while newly created proxy credentials settle. */
 async function fetchSentSample(
   provider: NonNullable<ReturnType<typeof getMailReadProvider>>,
   account: ConnectedAccount,
@@ -236,25 +205,14 @@ async function learnVoiceCore(
     missingReportError: "the style analysis finished without calling report_style — try again",
   });
 
-  // Write-then-delete: create the new style memory (ONE combined file per
-  // account, one directive per line) and persist the voice pointing at it
-  // FIRST, then delete the previous run's memories. Deleting first risks a
-  // mid-run failure leaving the account with no style directives; an orphaned
-  // old memory is recoverable, a lost voice is not. A create failure ("memory
-  // is full") throws and is recorded as this learn's error, leaving the
-  // previous voice intact.
+  // Persist the replacement and its pointer before deleting prior generated pages.
   const styleMemoryIds: string[] = [];
   const body = learned.style.map((directive) => `- ${directive}`).join("\n");
   if (body) {
-    // A dedup hit returns the existing entry; still record its id so a future re-learn replaces it too.
-    const { entry } = await createMemory(body, "agent", accountId);
-    styleMemoryIds.push(entry.id);
+    const { page } = await createPage(body, "agent", { accountId, type: "style" });
+    styleMemoryIds.push(page.id);
   }
 
-  // patchAccountVoice swaps only this account's slot against the on-disk array
-  // at write time, so a parallel learn for another account can't erase this
-  // result. previous is captured inside the patch: the freshest view of which
-  // memories the new ones replace.
   let previous: AccountVoice | undefined;
   const next = await patchAccountVoice(accountId, (existing) => {
     previous = existing;
@@ -265,14 +223,11 @@ async function learnVoiceCore(
     };
   });
 
-  // Only now delete the previous run's style directives (not user-written
-  // memories); skip ids a dedup hit reused, and don't let one bad delete abort
-  // the rest: the voice is already saved, so a failure here just orphans a
-  // recoverable memory.
+  // Delete only superseded generated pages after the new voice is durable.
   for (const id of previous?.styleMemoryIds ?? []) {
     if (styleMemoryIds.includes(id)) continue;
     try {
-      await deleteMemory(id);
+      await deletePage(id);
     } catch (error) {
       log.warn({ err: error, accountId, memoryId: id }, "failed to delete old style memory");
     }
@@ -281,13 +236,6 @@ async function learnVoiceCore(
   return next;
 }
 
-/**
- * Fold nightly draft-vs-sent lessons into the account's single style memory,
- * creating it (and registering it on the voice) when none exists. Lines the
- * file already holds are skipped; once the file is full the rest are dropped —
- * the next voice_learn re-derives style from scratch. Returns how many
- * directives were actually added.
- */
 export async function mergeStyleDirectives(
   accountId: string,
   directives: string[],
@@ -301,8 +249,8 @@ export async function mergeStyleDirectives(
       .toLowerCase();
 
   const voice = (await getAccountVoices()).find((v) => v.accountId === accountId);
-  const memories = await listMemories();
-  const byId = new Map(memories.map((m) => [m.id, m]));
+  const pages = await listPages();
+  const byId = new Map(pages.map((p) => [p.id, p]));
   const target = (voice?.styleMemoryIds ?? [])
     .map((id) => byId.get(id))
     .find((m) => m !== undefined);
@@ -314,7 +262,7 @@ export async function mergeStyleDirectives(
     const key = dedupKey(directive);
     if (!key || seen.has(key)) continue;
     const next = content ? `${content}\n- ${directive}` : `- ${directive}`;
-    if (next.length > MEMORY_MAX_LENGTH) break;
+    if (next.length > WIKI_SUMMARY_MAX_LENGTH) break;
     seen.add(key);
     content = next;
     added++;
@@ -322,9 +270,8 @@ export async function mergeStyleDirectives(
   if (added === 0) return 0;
 
   if (target) {
-    // updateMemory renames the file when content changes; keep the voice's
-    // pointer current so the next learn still replaces this file.
-    const entry = await updateMemory(target.id, content);
+    // Keep the voice pointer aligned with content-addressed page renames.
+    const entry = await updatePage(target.id, content);
     if (entry && entry.id !== target.id) {
       await patchAccountVoice(accountId, (existing) => ({
         ...existing,
@@ -335,25 +282,19 @@ export async function mergeStyleDirectives(
       }));
     }
   } else {
-    const { entry } = await createMemory(content, "agent", accountId);
+    const { page } = await createPage(content, "agent", { accountId, type: "style" });
     await patchAccountVoice(accountId, (existing) => ({
       ...existing,
       accountId,
-      styleMemoryIds: [...(existing?.styleMemoryIds ?? []), entry.id],
+      styleMemoryIds: [...(existing?.styleMemoryIds ?? []), page.id],
     }));
   }
   return added;
 }
 
-/**
- * Learned voices with their style directives resolved from the backing
- * memories, one bullet-stripped line per directive. Accounts whose memories
- * yield no lines (deleted, emptied) are omitted: no directives, no voice to
- * show. Serves the Settings badge and the draft card's provenance.
- */
 export async function listAccountVoiceInfos(): Promise<AccountVoiceInfo[]> {
-  const [voices, memories] = await Promise.all([getAccountVoices(), listMemories()]);
-  const byId = new Map(memories.map((m) => [m.id, m.content]));
+  const [voices, pages] = await Promise.all([getAccountVoices(), listPages()]);
+  const byId = new Map(pages.map((p) => [p.id, p.content]));
   return voices.flatMap((voice) => {
     const ids = voice.styleMemoryIds ?? [];
     const directives = ids
@@ -378,7 +319,7 @@ export const voiceLearnTool: AgentTool = tool({
   label: "Learn account voice",
   description:
     `Analyze an account's sent mail to learn the user's writing style, then save the style ` +
-    `as memories scoped to that account (used for every future draft). Use when the user ` +
+    `as a style page scoped to that account (used for every future draft). Use when the user ` +
     `asks to learn or mimic their style from past emails.`,
   account: "required",
   accountDescription: "The connected account's email address to learn from.",
@@ -387,10 +328,8 @@ export const voiceLearnTool: AgentTool = tool({
   execute: async (_params, { account }) => {
     const voice = await recordedLearn(account.id, () => learnVoiceCore(account.id));
 
-    // Look the directives back up by id: the learn returns only the voice
-    // record, not their text. The content is already a bulleted list.
-    const memories = await listMemories();
-    const byId = new Map(memories.map((m) => [m.id, m.content]));
+    const pages = await listPages();
+    const byId = new Map(pages.map((p) => [p.id, p.content]));
     const styleLines = (voice.styleMemoryIds ?? [])
       .map((id) => byId.get(id))
       .filter((content): content is string => !!content);
@@ -404,12 +343,6 @@ export const voiceLearnTool: AgentTool = tool({
   },
 });
 
-/**
- * Automatic learning for connected email accounts (connect flow + boot
- * reconcile). Never blocks or crashes the connect flow: every failure path
- * stays quiet and best-effort.
- */
-
 const CONNECT_FETCH_ATTEMPTS = 3;
 const CONNECT_FETCH_RETRY_DELAY_MS = 10_000;
 
@@ -422,12 +355,10 @@ export interface VoiceLearnDeps {
 const defaultDeps: VoiceLearnDeps = {
   listAccounts: (opts) => listAccounts(opts),
   modelConfigured: () => activeModelConfigured(),
-  // The unguarded core; recordedLearn holds the in-flight guard around the whole run.
   learn: (accountId) =>
     learnVoiceCore(accountId, CONNECT_FETCH_ATTEMPTS, CONNECT_FETCH_RETRY_DELAY_MS),
 };
 
-/** Refreshed ({ refresh: true }) so a just-linked account is visible. */
 async function resolveEmailAccount(
   accountId: string,
   deps: VoiceLearnDeps,
@@ -438,11 +369,6 @@ async function resolveEmailAccount(
   return (EMAIL_APPS as readonly string[]).includes(account.app) ? account : null;
 }
 
-/**
- * Never throws. Skips (no LLM, not an email account) are thrown as errors so
- * they stay visible and retryable in Settings; a concurrent duplicate belongs
- * to the learn already in flight and records nothing.
- */
 export async function runVoiceLearnOnConnect(
   accountId: string,
   deps: VoiceLearnDeps = defaultDeps,
@@ -468,19 +394,11 @@ export async function runVoiceLearnOnConnect(
   }
 }
 
-/** Fire-and-forget: the run never rejects and manages its own lifetime, so the caller (an HTTP route) isn't blocked. */
 export function startVoiceLearnOnConnect(accountId: string): void {
   void runVoiceLearnOnConnect(accountId);
 }
 
-/**
- * Boot catch-up: learn every connected email account with no attempt row and
- * no saved voice. Attempted-but-failed accounts are left alone (their error
- * rows are the user's to retry; auto-retrying every boot could hammer a broken
- * account), except a NO_MODEL_ERROR row, which this boot has already disproved.
- * Runs sequentially: a burst of parallel model calls would spike provider and
- * LLM rate limits at boot. Never throws.
- */
+/** Learn unattempted accounts sequentially and leave actionable failures for manual retry. */
 export async function reconcileVoiceLearns(deps: VoiceLearnDeps = defaultDeps): Promise<void> {
   try {
     await failInterruptedVoiceLearnRuns();

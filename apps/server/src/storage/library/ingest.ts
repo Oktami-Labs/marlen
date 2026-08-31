@@ -30,28 +30,20 @@ export function getLibraryDir(): string {
   return libraryDir;
 }
 
-/**
- * Resolve a document's stored relative path against the knowledge folder,
- * rejecting anything that escapes it (or names the folder itself): a DB row can't
- * point file access (read or delete) outside it.
- */
+/** Reject paths outside the knowledge folder and the folder itself. */
 export function documentPath(relPath: string): string | null {
   const absPath = resolveWithin(libraryDir, relPath);
   return absPath === libraryDir ? null : absPath;
 }
 
-/** Documents are stored whole; this only guards against pathological files. */
 const MAX_TEXT_LENGTH = 2_000_000;
 const CHUNK_TARGET = 1800;
-/** Files larger than this are listed as errors rather than read into memory. */
 const MAX_FILE_SIZE = 100 * 1024 * 1024;
 
-/** A file modified this recently may still be mid-copy; give it a settle check. */
 const QUIESCENCE_RECENT_MS = 5000;
 const QUIESCENCE_WAIT_MS = 500;
 const QUIESCENCE_RESCAN_MS = 2000;
 
-/** html-to-text options: headings stay as written (uppercased by default), links keep their URLs so they stay searchable. */
 const HTML_EXTRACT_OPTIONS: HtmlToTextOptions = {
   wordwrap: false,
   selectors: ["h1", "h2", "h3", "h4", "h5", "h6"].map((selector) => ({
@@ -60,8 +52,7 @@ const HTML_EXTRACT_OPTIONS: HtmlToTextOptions = {
   })),
 };
 
-// pdf-parse and mammoth load on first use, not at module scope: together they cost
-// ~180ms of server boot that a library holding neither format never spends.
+// Load large format parsers only when needed.
 async function extractText(absPath: string, ext: string): Promise<string> {
   if (ext === ".pdf") {
     const { PDFParse } = await import("pdf-parse");
@@ -96,11 +87,7 @@ function normalize(text: string): string {
   );
 }
 
-/**
- * Split into contiguous slices of ~CHUNK_TARGET characters, breaking at a
- * paragraph, line or sentence boundary. Slices are exact (no trimming), so
- * joining them restores the text.
- */
+/** Split on nearby text boundaries without dropping characters. */
 function chunkText(text: string, target = CHUNK_TARGET): string[] {
   const chunks: string[] = [];
   let pos = 0;
@@ -130,8 +117,6 @@ async function listFiles(): Promise<Map<string, { size: number; mtimeMs: number 
     try {
       entries = await readdir(join(libraryDir, rel), { withFileTypes: true });
     } catch (error) {
-      // A permission-denied or vanished subfolder doesn't abort the whole scan;
-      // skip this subtree.
       ingestLog.warn({ err: error, rel }, "skipping unreadable library directory");
       return;
     }
@@ -144,9 +129,7 @@ async function listFiles(): Promise<Map<string, { size: number; mtimeMs: number 
         try {
           const info = await stat(join(libraryDir, relPath));
           found.set(relPath, { size: info.size, mtimeMs: Math.round(info.mtimeMs) });
-        } catch {
-          // Vanished between readdir and stat; the follow-up scan reconciles it away.
-        }
+        } catch {}
       }
     }
   };
@@ -163,8 +146,7 @@ async function indexFile(relPath: string, size: number, mtimeMs: number): Promis
     size,
     mtimeMs,
   };
-  // Unsupported and oversized files still get a visible row: no extraction or
-  // chunking, so a stray spreadsheet or image is never read.
+  // Record unsupported files without reading them.
   if (size > MAX_FILE_SIZE) {
     store.replaceDocument(
       { ...base, status: "error", error: "file too large to index", textLength: 0 },
@@ -221,7 +203,6 @@ interface ScanSummary {
 let scanning: Promise<ScanSummary> | null = null;
 let rescanWanted = false;
 
-/** Reconcile the folder with the index. Concurrent calls share one scan. */
 function scanLibrary(): Promise<ScanSummary> {
   if (scanning) {
     rescanWanted = true;
@@ -239,7 +220,6 @@ function scanLibrary(): Promise<ScanSummary> {
   return scanning;
 }
 
-/** Two stats ~500ms apart: true while the file is still being written to. */
 async function isStillChanging(relPath: string): Promise<boolean> {
   const absPath = join(libraryDir, relPath);
   try {
@@ -248,7 +228,6 @@ async function isStillChanging(relPath: string): Promise<boolean> {
     const after = await stat(absPath);
     return after.size !== before.size || after.mtimeMs !== before.mtimeMs;
   } catch {
-    // Vanished mid-check; the follow-up scan reconciles it away.
     return true;
   }
 }
@@ -275,15 +254,12 @@ async function doScan(): Promise<ScanSummary> {
       known.size === info.size &&
       known.modifiedAt === new Date(info.mtimeMs).toISOString();
     if (unchanged) continue;
-    // A just-modified file may still be copying in. If it's visibly growing,
-    // skip it this round (no error row for a half-written file); the follow-up
-    // scan indexes it once the copy settles.
+    // Delay indexing until an active copy settles.
     if (Date.now() - info.mtimeMs < QUIESCENCE_RECENT_MS && (await isStillChanging(relPath))) {
       settling = true;
       continue;
     }
-    // Serial on purpose: one PDF at a time, so a full folder never spikes CPU
-    // under a running chat.
+    // Bound extraction load to one document at a time.
     if (await indexFile(relPath, info.size, info.mtimeMs)) summary.indexed += 1;
     else summary.failed += 1;
   }
@@ -295,9 +271,7 @@ async function doScan(): Promise<ScanSummary> {
 let watcher: FSWatcher | null = null;
 let scanTimer: NodeJS.Timeout | null = null;
 let watcherRetryTimer: NodeJS.Timeout | null = null;
-/** Bumped every time stopWatcher() tears a watcher down. A delayed retry
- *  captures the generation live when armed and checks it before resurrecting a
- *  watcher, so it never fires for a watcher already re-armed by another attempt. */
+/** Prevent delayed retries from reviving a superseded watcher. */
 let watcherGeneration = 0;
 const WATCHER_RETRY_MS = 30_000;
 
@@ -318,7 +292,6 @@ function stopWatcher(): void {
     clearTimeout(scanTimer);
     scanTimer = null;
   }
-  // Drop a pending watcher-restart retry: it belongs to the watcher just closed.
   if (watcherRetryTimer) {
     clearTimeout(watcherRetryTimer);
     watcherRetryTimer = null;
@@ -332,8 +305,6 @@ function startWatcher(): void {
     const instance = watch(libraryDir, { recursive: true }, () => scheduleScan(1000));
     watcher = instance;
     instance.on("error", (error) => {
-      // A stray event from a watcher already superseded by an earlier retry;
-      // this generation is no longer current, nothing to close or retry.
       if (watcherGeneration !== generation) return;
       ingestLog.warn(
         { err: error, folder: libraryDir },
@@ -343,15 +314,11 @@ function startWatcher(): void {
       watcher = null;
       watcherRetryTimer = setTimeout(() => {
         watcherRetryTimer = null;
-        // Stale by the time the backoff elapsed (already re-armed some other
-        // way). Re-arming here would resurrect a watcher nobody wants.
         if (watcherGeneration !== generation) return;
         startWatcher();
       }, WATCHER_RETRY_MS);
     });
-  } catch {
-    // No folder watching on this platform; boot scans and the UI's rescan still work.
-  }
+  } catch {}
 }
 
 export async function startLibrary(log: (message: string) => void): Promise<void> {
@@ -370,12 +337,7 @@ export function stopLibrary(): void {
   stopWatcher();
 }
 
-/**
- * Write `data` into the library (or subfolder `relDir`) under a hidden temp
- * name, then rename to `name`: the scanner skips dotfiles, so a partially
- * written file is never visible to it. Cleans up on failure, rescans on
- * success. Returns the path relative to the library root.
- */
+/** Write through a hidden temp file so the scanner never sees partial content. */
 async function writeIntoLibrary(
   relDir: string,
   name: string,
@@ -406,7 +368,6 @@ export async function saveUpload(fileName: string, data: Buffer, relDir = ""): P
   return writeIntoLibrary(relDir, name, "upload", data);
 }
 
-/** Every directory under the knowledge folder as relative paths, empty ones included. */
 export async function listFolders(): Promise<string[]> {
   const found: string[] = [];
   const visit = async (rel: string): Promise<void> => {
@@ -427,7 +388,6 @@ export async function listFolders(): Promise<string[]> {
   return found.sort();
 }
 
-/** Create a (possibly nested) folder inside the knowledge folder. */
 export async function createFolder(relPath: string): Promise<boolean> {
   const absPath = documentPath(relPath);
   if (!absPath) return false;
@@ -436,11 +396,7 @@ export async function createFolder(relPath: string): Promise<boolean> {
   return true;
 }
 
-/**
- * Delete a folder and everything in it. Confined like every file op, and it
- * must really be a directory — a document id or file path must never slip
- * through to a recursive rm. The rescan drops the removed files' index rows.
- */
+/** Recursive deletion is allowed only for a verified directory inside knowledge. */
 export async function deleteFolder(relPath: string): Promise<boolean> {
   const absPath = documentPath(relPath);
   if (!absPath) return false;
@@ -452,12 +408,9 @@ export async function deleteFolder(relPath: string): Promise<boolean> {
   return true;
 }
 
-/** Extensions whose raw text the web editor may read and write back. */
 const EDITABLE_EXTENSIONS = new Set(["md", "markdown", "txt"]);
-/** Editor cap: a text file past this is data, not a note someone hand-edits. */
 const MAX_EDITABLE_SIZE = 1024 * 1024;
 
-/** A document's raw file text for editing; null when missing or not an editable text file. */
 export async function readDocumentText(id: string): Promise<string | null> {
   const doc = await store.getDocument(id);
   if (!doc || !EDITABLE_EXTENSIONS.has(doc.ext) || doc.size > MAX_EDITABLE_SIZE) return null;
@@ -470,7 +423,6 @@ export async function readDocumentText(id: string): Promise<string | null> {
   }
 }
 
-/** Overwrite an editable document's file in place (same path, temp+rename, rescan). */
 export async function writeDocumentText(id: string, content: string): Promise<boolean> {
   const doc = await store.getDocument(id);
   if (!doc || !EDITABLE_EXTENSIONS.has(doc.ext)) return false;
@@ -485,11 +437,7 @@ export async function writeDocumentText(id: string, content: string): Promise<bo
   return true;
 }
 
-/**
- * Delete a document's file and index row. The file is removed only when its
- * stored path resolves inside the knowledge folder (documentPath): a traversal
- * path can't delete outside it, though the index row is dropped either way.
- */
+/** A malformed stored path may remove its index row, never a file outside knowledge. */
 export async function deleteDocument(id: string): Promise<boolean> {
   const doc = await store.getDocument(id);
   if (!doc) return false;

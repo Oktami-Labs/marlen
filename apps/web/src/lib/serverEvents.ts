@@ -5,7 +5,7 @@ import * as React from "react";
  * One shared EventSource on GET /api/events. Created when the first
  * subscriber appears, closed when the last leaves. Events are debounced per
  * topic so a burst of server-side changes (an agent creating three drafts)
- * causes one refetch, not three — except "notification" events, whose
+ * causes one refetch, not three, except "notification" events, whose
  * payloads are each delivered (see subscribeRunNotifications).
  */
 
@@ -15,7 +15,7 @@ const DEBOUNCE_MS = 300;
 const RECONNECT_MS = 3000;
 
 /**
- * Three missed server heartbeats (15s "ping" events) — past that the stream
+ * Three missed server heartbeats (15s "ping" events), past that the stream
  * is presumed dead even though the browser still reports it open: a proxy can
  * swallow the upstream's end without closing the browser-side socket, and
  * such a zombie never errors on its own.
@@ -30,18 +30,27 @@ interface Subscription {
 
 const subscriptions = new Set<Subscription>();
 const notificationHandlers = new Set<(notification: RunNotification) => void>();
+const connectionHandlers = new Set<(online: boolean) => void>();
 const timers = new Map<ServerEventTopic, ReturnType<typeof setTimeout>>();
 let source: EventSource | null = null;
 let dropped = false;
 let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
 let watchdog: ReturnType<typeof setInterval> | null = null;
 let lastAlive = 0;
+let online = true;
+
+/** Publishes a change in whether the stream is carrying events right now. */
+function setOnline(next: boolean): void {
+  if (online === next) return;
+  online = next;
+  for (const handler of connectionHandlers) handler(next);
+}
 
 function markAlive(): void {
   lastAlive = Date.now();
 }
 
-/** True while anyone — topic subscription or notification handler — needs the stream. */
+/** True while anyone, topic subscription or notification handler, needs the stream. */
 function hasSubscribers(): boolean {
   return subscriptions.size > 0 || notificationHandlers.size > 0;
 }
@@ -64,9 +73,9 @@ function connect(): void {
     } catch {
       return;
     }
-    // "notification" events carry a payload each — the per-topic debounce
-    // would swallow all but the last of a burst, so they dispatch immediately
-    // to their own handler set instead.
+    // Each "notification" event carries a payload. The per-topic debounce
+    // would swallow all but the last event in a burst, so notifications
+    // dispatch immediately to their own handler set instead.
     if (event.topic === "notification") {
       if (event.notification) {
         for (const handler of notificationHandlers) handler(event.notification);
@@ -85,9 +94,10 @@ function connect(): void {
   };
   source.onerror = () => {
     dropped = true;
+    setOnline(false);
     // The browser only auto-reconnects network-level drops (readyState
-    // CONNECTING). An HTTP error reply — e.g. the dev proxy answering 502
-    // while the server restarts — closes the source for good (readyState
+    // CONNECTING). An HTTP error reply, e.g. the dev proxy answering 502
+    // while the server restarts, closes the source for good (readyState
     // CLOSED), so that case needs this manual reconnect loop; a failed
     // attempt lands back here and schedules the next one.
     if (source?.readyState === EventSource.CLOSED) {
@@ -100,16 +110,18 @@ function connect(): void {
   };
   source.onopen = () => {
     markAlive();
+    setOnline(true);
     if (!dropped) return;
     dropped = false;
     // Back after a drop: refetch everything to catch changes missed offline.
     for (const sub of subscriptions) sub.handler();
   };
-  // Zombie detection: tear down and redial a stream that has gone silent past
-  // STALE_MS — the case where no error will ever fire (see STALE_MS above).
+  // Redial a stream that stays silent past STALE_MS because that failure does
+  // not emit an error event. See the STALE_MS definition above.
   watchdog ??= setInterval(() => {
     if (!source || Date.now() - lastAlive < STALE_MS) return;
     dropped = true;
+    setOnline(false);
     source.close();
     source = null;
     connect();
@@ -120,6 +132,8 @@ function disconnect(): void {
   source?.close();
   source = null;
   dropped = false;
+  // Nobody is listening any more, so there is no outage to report.
+  online = true;
   if (reconnectTimer) {
     clearTimeout(reconnectTimer);
     reconnectTimer = null;
@@ -173,4 +187,22 @@ export function useServerEvents(topics: ServerEventTopic[], onChange: () => void
     () => subscribeServerEvents(key.split(",") as ServerEventTopic[], () => handler.current()),
     [key],
   );
+}
+
+/**
+ * Whether the server's event stream is carrying events right now. A dropped
+ * stream is not a broken app (turns keep running on the server and the page
+ * refetches on reconnect), but it does mean the screen has stopped updating
+ * itself, which is worth saying out loud rather than looking idle.
+ */
+export function useServerConnection(): boolean {
+  const [connected, setConnected] = React.useState(online);
+  React.useEffect(() => {
+    setConnected(online);
+    connectionHandlers.add(setConnected);
+    return () => {
+      connectionHandlers.delete(setConnected);
+    };
+  }, []);
+  return connected;
 }

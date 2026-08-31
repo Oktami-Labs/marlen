@@ -3,7 +3,7 @@ import * as React from "react";
 /**
  * Grows a textarea with its content, up to the element's CSS max-height cap
  * (then it scrolls internally). Empty is left to the CSS min-height/rows
- * instead of measured via scrollHeight — Chrome/Firefox size that against the
+ * instead of measured via scrollHeight, Chrome/Firefox size that against the
  * wrapped placeholder text, not the (empty) value, which puffs the box up at
  * rest.
  */

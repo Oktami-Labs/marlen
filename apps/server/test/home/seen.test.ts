@@ -4,12 +4,6 @@ import { join } from "node:path";
 import type { SeenState } from "@marlen/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-/**
- * Home's "new since you last looked" state. The floor is the part that hurts
- * when it breaks: without one, every item that predates the feature reads as
- * new and the whole page lights up.
- */
-
 let app: Awaited<ReturnType<typeof import("../../src/app.js").buildApp>>;
 
 beforeAll(async () => {

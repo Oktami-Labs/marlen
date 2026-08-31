@@ -70,9 +70,8 @@ export function Providers({
 
   const busy = Boolean(flow && !flow.done);
 
-  // A short, meaningful list: providers you're connected to, plus the subscription
-  // sign-ins (Claude, Copilot, ChatGPT) as easy options. The ~30 API-key providers
-  // are never listed — they're reached on demand through "Add API key".
+  // Keep the list to connected providers and subscription sign-ins. The full
+  // API-key provider catalog remains available through "Add API key".
   const connected = providers.filter((p) => p.auth !== null);
   const signIns = providers.filter((p) => p.oauth && p.auth === null);
   const rows = [...connected, ...signIns];
@@ -138,7 +137,7 @@ function ProviderRow({
           : t("settings.providerStatus.none");
 
   return (
-    <ListRow className={cn(connected && "bg-success/10")}>
+    <ListRow>
       <div className="min-w-0">
         <p className="truncate text-sm font-medium">{provider.name}</p>
         <p
@@ -155,7 +154,7 @@ function ProviderRow({
           {t("common.signOut")}
         </Button>
       ) : onSignIn ? (
-        <Button size="sm" onClick={onSignIn} disabled={busy}>
+        <Button variant="secondary" size="sm" onClick={onSignIn} disabled={busy}>
           {t("common.signIn")}
         </Button>
       ) : (
@@ -216,7 +215,7 @@ export function ApiKeyEditor({
   const [error, setError] = React.useState<string | null>(null);
   const done = React.useRef(false);
 
-  // Auto-save when you press Enter or click away — no Save button. The ref guards
+  // Auto-save when you press Enter or click away, no Save button. The ref guards
   // against Enter + the follow-up blur both firing a save.
   const save = async () => {
     if (done.current || saving || !key.trim()) return;
@@ -275,7 +274,7 @@ function LoginFlowCard({ flow, onClose }: { flow: LoginFlowStatus; onClose: () =
   const { t } = useTranslation();
   const [input, setInput] = React.useState("");
   // Narrowed once so the sign-in button's closure below doesn't need a
-  // non-null assertion — property narrowing doesn't cross closure boundaries.
+  // non-null assertion, property narrowing doesn't cross closure boundaries.
   const authUrl = flow.authUrl;
 
   if (flow.done) {
@@ -308,7 +307,7 @@ function LoginFlowCard({ flow, onClose }: { flow: LoginFlowStatus; onClose: () =
             try {
               await api.loginCancel();
             } catch {
-              // Flow may already be gone server-side — still dismiss the card.
+              // Flow may already be gone server-side, still dismiss the card.
             } finally {
               onClose();
             }
@@ -358,7 +357,7 @@ function LoginFlowCard({ flow, onClose }: { flow: LoginFlowStatus; onClose: () =
               components={{
                 // Trans clones this element and replaces its children with the
                 // translation string's interpolated `{{uri}}` (verificationUri)
-                // at render time — the fallback text below matches that value,
+                // at render time, the fallback text below matches that value,
                 // so the anchor always has real accessible content.
                 uri: (
                   <a

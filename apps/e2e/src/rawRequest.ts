@@ -1,11 +1,6 @@
 import { request as httpRequest } from "node:http";
 
-/**
- * A request with headers nothing sanitizes: `fetch` and Playwright's API
- * client both own the Host header, and the server's DNS-rebinding guard is
- * precisely a rule about Host. Only a raw socket can express the request an
- * attacker's page would make.
- */
+/** Send an exact Host header without fetch or Playwright rewriting it. */
 
 export interface RawResponse {
   status: number;

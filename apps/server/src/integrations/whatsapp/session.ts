@@ -26,36 +26,14 @@ import {
 
 const log = moduleLogger("whatsapp");
 
-/**
- * Lifecycle of the one WhatsApp Web socket: QR pairing, reconnect with backoff,
- * unlink. Credentials persist under env.whatsappAuthPath so the link survives
- * restarts.
- *
- * A Baileys socket is single-use: every reconnect builds a fresh one. The
- * generation counter pins event handlers to the socket they belong to, so a
- * stale socket's trailing events can't corrupt the current state.
- */
-
 const RECONNECT_DELAYS_MS = [1_000, 2_000, 5_000, 10_000, 30_000, 60_000];
 
-/**
- * Failed attempts after which a paired account stops reading as "connecting":
- * the backoff keeps trying, but the socket is down and the UI says so rather
- * than spinning forever.
- */
 const CONNECTING_ATTEMPTS = 3;
 
-/** WhatsApp refuses the handshake with this status when the client version has aged out. */
 const OUTDATED_VERSION_STATUS = 405;
 const VERSION_LOOKUP_TIMEOUT_MS = 5_000;
 
-/**
- * Closes no reconnect can fix: the account is blocked, the session needs
- * re-pairing, or another socket took it over (reconnecting would kick that one
- * off, which kicks this one off, forever). 500 is deliberately absent: Baileys
- * falls back to it for any stream error it doesn't recognize, so it says
- * nothing about the session.
- */
+/** Disconnect states that require user action rather than reconnecting. */
 const UNRECOVERABLE_STATUS = new Set<number>([
   DisconnectReason.forbidden,
   DisconnectReason.multideviceMismatch,
@@ -70,7 +48,6 @@ export interface WhatsAppRuntimeStatus {
   pushName: string | null;
 }
 
-/** The paired account as WhatsApp reports it (the credentials' `me`). */
 interface LinkedAccount {
   id?: string;
   name?: string;
@@ -79,15 +56,8 @@ interface LinkedAccount {
 interface SessionState {
   socket: WASocket | null;
   connection: WhatsAppConnection;
-  /**
-   * The paired account, null when none is, undefined until first read. Loaded
-   * from creds.json once and tracked from the socket's creds.update after that:
-   * Baileys rewrites that file non-atomically, so a read landing mid-write
-   * reported a linked account as unlinked, which reset live agent sessions,
-   * routed sends to the Business transport, and stranded reconnects.
-   */
+  /** undefined until credentials are read; null when no account is paired. */
   linked: LinkedAccount | null | undefined;
-  /** The raw QR payload currently on offer; the data URL renders async. */
   qr: string | null;
   qrDataUrl: string | null;
   generation: number;
@@ -111,11 +81,6 @@ const state: SessionState = {
 type LinkedChangeListener = () => void;
 const linkedChangeListeners = new Set<LinkedChangeListener>();
 
-/**
- * Runs whenever `linked` flips (pairing completed, account unlinked). A callback
- * registry rather than a direct import, so this module stays importable from the
- * agent side without a cycle.
- */
 export function onWhatsAppLinkedChange(listener: LinkedChangeListener): void {
   linkedChangeListeners.add(listener);
 }
@@ -124,7 +89,6 @@ function authDir(): string {
   return resolve(process.cwd(), env.whatsappAuthPath);
 }
 
-/** The account creds.json was last written for; the seed for state.linked. */
 function readCredsAccount(): LinkedAccount | null {
   try {
     const raw = readFileSync(join(authDir(), "creds.json"), "utf8");
@@ -134,11 +98,6 @@ function readCredsAccount(): LinkedAccount | null {
   }
 }
 
-/**
- * The paired account. The file is read once, on the first call of a process;
- * from there the socket's creds.update keeps this current, so no read ever
- * races Baileys writing that file.
- */
 function linkedAccount(): LinkedAccount | null {
   if (state.linked === undefined) state.linked = readCredsAccount();
   return state.linked;
@@ -148,7 +107,6 @@ export function isWhatsAppLinked(): boolean {
   return linkedAccount() !== null;
 }
 
-/** Take the identity from a creds.update, announcing a pairing as it lands. */
 function rememberLinked(me: LinkedAccount | undefined): void {
   if (!me?.id) return;
   const current = linkedAccount();
@@ -177,11 +135,6 @@ export function getWhatsAppSocket(): WASocket | null {
   return state.connection === "open" ? state.socket : null;
 }
 
-/**
- * Dispatch a text message now, resolving a raw-number jid to the account's real
- * jid first. Throws when not connected or the number isn't on WhatsApp; the
- * caller (the outbound send route or an armed autosend) turns that into an error.
- */
 export async function dispatchWhatsApp(
   target: string,
   text: string,
@@ -238,7 +191,7 @@ function renderQr(qr: string): void {
   state.qrDataUrl = null;
   QRCode.toDataURL(qr, { errorCorrectionLevel: "M", margin: 1, scale: 6 })
     .then((dataUrl) => {
-      // Only publish if this QR is still the one on offer (they rotate ~20s).
+      // QR payloads rotate while data URL rendering is in flight.
       if (state.qr !== qr) return;
       state.qrDataUrl = dataUrl;
       notifyStatusChanged();
@@ -248,12 +201,7 @@ function renderQr(qr: string): void {
 
 let waVersion: WAVersion | null = null;
 
-/**
- * The web client version handed to WhatsApp. The one Baileys bundles ages out
- * within weeks and is then refused with 405 before any QR is offered, so the
- * live revision comes from WhatsApp's own service worker, the Baileys mirror
- * second, the bundled version only when both are unreachable.
- */
+/** Resolve and cache a current web client version, with the bundled version as fallback. */
 async function resolveWaVersion(): Promise<WAVersion> {
   if (waVersion) return waVersion;
   const lookup = (async (): Promise<WAVersion | null> => {
@@ -263,14 +211,12 @@ async function resolveWaVersion(): Promise<WAVersion> {
     return mirror.isLatest ? mirror.version : null;
   })().then(
     (version) => {
-      // Kept even when the deadline below already won, so the next attempt
-      // starts from the answer instead of racing for it again.
+      // Cache a late answer for the next attempt.
       if (version) waVersion = version;
       return version;
     },
     () => null,
   );
-  // Neither lookup carries its own deadline, and pairing waits on this one.
   const deadline = new Promise<null>((resolve) => {
     setTimeout(() => resolve(null), VERSION_LOOKUP_TIMEOUT_MS).unref();
   });
@@ -305,7 +251,6 @@ function disconnectStatusCode(error: unknown): number | undefined {
   return typeof output?.statusCode === "number" ? output.statusCode : undefined;
 }
 
-/** What a paired-and-dialing account reports: see CONNECTING_ATTEMPTS. */
 function dialingConnection(): WhatsAppConnection {
   return state.reconnectAttempts <= CONNECTING_ATTEMPTS ? "connecting" : "off";
 }
@@ -315,13 +260,10 @@ function handleClose(generation: number, error: unknown): void {
   state.socket = null;
   const statusCode = disconnectStatusCode(error);
 
-  // WhatsApp rotated past the pinned version: drop it so the next attempt looks
-  // the current one up again instead of retrying the refused one.
+  // Refresh a client version rejected as outdated.
   if (statusCode === OUTDATED_VERSION_STATUS) waVersion = null;
 
   if (statusCode === DisconnectReason.loggedOut) {
-    // Unlinked from the phone: credentials are dead, same cleanup as a local
-    // unlink minus the remote logout that already happened.
     log.info("WhatsApp logged out remotely — clearing the link");
     void wipeLink();
     return;
@@ -331,22 +273,17 @@ function handleClose(generation: number, error: unknown): void {
     return;
   }
   if (!isWhatsAppLinked()) {
-    // Pairing ended without a scan (QR timeout) or was aborted: back to off, so
-    // we don't loop against WhatsApp's servers. The user restarts from Settings.
     log.info({ statusCode }, "WhatsApp pairing ended without a link");
     setConnection("off");
     return;
   }
   if (statusCode !== undefined && UNRECOVERABLE_STATUS.has(statusCode)) {
-    // Credentials stay: only the phone can decide they're gone, and wiping
-    // would cost the user a re-pair over what the next launch may fix.
+    // Keep credentials unless the phone explicitly logs out.
     log.warn({ statusCode }, "WhatsApp ended the session — not reconnecting");
     state.reconnectAttempts = 0;
     setConnection("off");
     return;
   }
-  // A paired account reconnects: immediately after the post-pairing restart
-  // WhatsApp requires (515), with backoff otherwise.
   setConnection(dialingConnection());
   if (statusCode === DisconnectReason.restartRequired) {
     connect().catch((err: unknown) => {
@@ -375,24 +312,19 @@ async function connect(): Promise<void> {
       keys: makeCacheableSignalKeyStore(authState.keys, socketLogger),
     },
     logger: socketLogger,
-    browser: Browsers.macOS("Marlen"),
-    // Recent-history sync is plenty; a full-history sync floods the store with
-    // months-old chats.
+    browser: Browsers.macOS("Marlene"),
+    // Avoid importing the account's full message history.
     syncFullHistory: false,
-    // Never present as online: that would suppress notifications on the user's
-    // phone whenever the server runs.
+    // Do not suppress notifications on the user's phone.
     markOnlineOnConnect: false,
   });
   if (generation !== state.generation) {
-    // A logout/shutdown raced this connect; discard the fresh socket.
     void socket.end(undefined);
     return;
   }
   state.socket = socket;
 
   socket.ev.on("creds.update", (update) => {
-    // Pairing announces the account through this path, before the file it
-    // lands in has been written.
     rememberLinked(update.me);
     saveCreds().catch((err: unknown) => {
       log.warn({ err }, "saving the WhatsApp credentials failed");
@@ -412,8 +344,6 @@ async function connect(): Promise<void> {
     }
   });
 
-  // Store ingestion. Failures don't take the socket down: the mirror is
-  // best-effort.
   const guarded = (what: string, run: () => void) => {
     try {
       run();
@@ -477,11 +407,9 @@ async function wipeLink(): Promise<void> {
     log.warn({ err }, "clearing the WhatsApp mirror failed");
   });
   setConnection("off");
-  // setConnection dedupes repeats, so the linked flip is forced through.
   notifyStatusChanged();
 }
 
-/** Sign the device out remotely (best-effort), drop credentials and wipe the mirror; the phone's account and chats are untouched. */
 export async function unlinkWhatsApp(): Promise<void> {
   const socket = state.socket;
   if (socket && state.connection === "open") {
@@ -492,7 +420,6 @@ export async function unlinkWhatsApp(): Promise<void> {
   await wipeLink();
 }
 
-/** Shutdown: close the socket, keep credentials and mirror for the next boot. */
 export async function stopWhatsApp(): Promise<void> {
   state.shuttingDown = true;
   state.generation++;

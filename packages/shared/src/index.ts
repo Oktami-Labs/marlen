@@ -52,18 +52,15 @@ export type ApiErrorCode = "pipedream_not_configured";
 
 export interface PipedreamStatus {
   configured: boolean;
-  /** "custom" = the user's own Pipedream project; "builtin" = shipped with the app. */
   mode: "custom" | "builtin";
   builtinAvailable: boolean;
   source: "settings" | "env" | null;
   clientId: string | null;
   projectId: string | null;
   environment: "development" | "production";
-  /** True when a client secret is stored; the secret itself is never returned. */
   hasClientSecret: boolean;
 }
 
-/** clientSecret may be omitted to keep the saved one. */
 export interface PipedreamConfigInput {
   clientId: string;
   clientSecret?: string;
@@ -86,35 +83,22 @@ export interface AccountColor {
   hex: string;
 }
 
-/** One account's outgoing-mail signature; appended below every agent-drafted body. */
 export interface AccountSignature {
   accountId: string;
-  /** Sanitized HTML fragment, as pasted or written in Settings. */
   html: string;
 }
 
-/** Font stack outgoing HTML is wrapped in: unstyled HTML falls back to per-client serif defaults (Times in classic Outlook). */
 export const EMAIL_BODY_FONT_FAMILY = "Arial, Helvetica, sans-serif";
 
-/** Typography of the agent-written part of an outgoing body. */
 export const EMAIL_BODY_STYLE = {
   fontFamily: EMAIL_BODY_FONT_FAMILY,
   fontSize: "14px",
   lineHeight: "1.5",
 } as const;
 
-/**
- * Typography of the signature block below it, and of the editor's preview of
- * one, so that what is shown and what is sent cannot drift apart. The face and
- * size are the body's, but the line spacing is deliberately the browser
- * default: a pasted signature brings its own spacing, and a body line-height
- * imposed on top of it is the difference between a signature that looks like
- * the one in the mail client it came from and one stretched to twice its
- * height.
- */
+/** Keep pasted signature spacing instead of imposing the body line height. */
 export const EMAIL_SIGNATURE_STYLE = { ...EMAIL_BODY_STYLE, lineHeight: "normal" } as const;
 
-/** One of those as a style attribute value, for the html the server assembles as text. */
 export function styleAttribute(style: Record<string, string>): string {
   return Object.entries(style)
     .map(
@@ -123,46 +107,35 @@ export function styleAttribute(style: Record<string, string>): string {
     .join(";");
 }
 
-/** Reading is always allowed; an account with no record is read-only. */
 export interface AccountPermissions {
   accountId: string;
-  /** Every non-read verb not covered by send/delete. */
   write: boolean;
-  /** Outward communication: send, reply, forward, publish. */
   send: boolean;
-  /** Destructive verbs: delete, remove, trash, destroy, purge. */
   delete: boolean;
 }
 
-/**
- * Each switch arms one whole-filesystem capability; nothing armed = no file
- * access. Paths start in the user's home directory; interactive sessions only.
- */
+/** Whole-filesystem capabilities available only in interactive sessions. */
 export interface FileAccessSettings {
   read: boolean;
   write: boolean;
   bash: boolean;
 }
 
-/** Writing style is NOT a field here: style directives live as account-scoped memories. */
 export interface AccountVoice {
   accountId: string;
   learnedAt?: string;
   styleMemoryIds?: string[];
 }
 
-/** A learned voice with its style directives resolved for display; only accounts with directives are listed. */
 export interface AccountVoiceInfo {
   accountId: string;
   learnedAt?: string;
-  /** First style memory backing the voice, for a "view on Knowledge" link. */
   memoryId?: string;
   directives: string[];
 }
 
 export interface SearchResult {
-  type: "chat" | "run" | "draft" | "document" | "memory";
-  /** conversationId | run id | draft id | document id | memory id, per `type`. */
+  type: "chat" | "run" | "draft" | "document" | "wiki";
   id: string;
   title: string;
   snippet: string;
@@ -210,22 +183,17 @@ export interface ChatMessage {
   error?: string;
 }
 
-/** POST /api/stt result: the recording's transcript. */
 export interface SttResult {
   text: string;
 }
 
-/** A provider whose speech API voice input can run on. */
 export interface SttProviderOption {
   id: string;
   name: string;
-  /** Where to create an API key for this provider. */
   keyUrl: string;
-  /** True when the provider's speech API has a free tier. */
   free: boolean;
 }
 
-/** GET /api/stt: the provider voice input would transcribe with, null until one is connected. */
 export interface SttStatus {
   providerId: string | null;
   options: SttProviderOption[];
@@ -240,17 +208,16 @@ export interface Automation {
   id: string;
   name: string;
   instruction: string;
-  /** 5-field cron expression; "" = manual-only ("Run now"). */
+  /** Five-field cron expression; empty means manual-only. */
   schedule: string;
   enabled: boolean;
   showInActivity: boolean;
   /** At most one automation may be pinned; its latest successful run leads Home. */
   pinned: boolean;
-  /** Lead this automation belongs to, deleted with it; null for standalone. */
   leadId: string | null;
   runOnNewMail: boolean;
   notifyOnCompletion: boolean;
-  /** Manual sort key, ascending; new automations get -now so they land on top. */
+  /** Ascending manual sort key. */
   position: number;
   createdAt: string;
   nextRunAt?: string | null;
@@ -267,13 +234,7 @@ export interface AutomationSuggestion {
   decidedAt: string | null;
 }
 
-/**
- * Why a run started, beyond its schedule. Rendered into the run's opening
- * message and persisted on the run row, so both the agent and the UI know
- * what the run concerns (a catch-up run shows the slot it covered).
- */
 export type RunTrigger =
-  /** body carries the specifics the title omits; empty when the todo had none. */
   | { kind: "todo"; todoId: string; title: string; body: string }
   | { kind: "mail"; accountNames: string[] }
   | { kind: "catchUp"; dueAt: string };
@@ -283,7 +244,6 @@ export interface AutomationRun {
   automationId: string;
   status: "running" | "success" | "error";
   result: string;
-  /** Null for plain scheduled/manual runs and runs recorded before triggers were persisted. */
   trigger: RunTrigger | null;
   startedAt: string;
   finishedAt: string | null;
@@ -294,7 +254,6 @@ export interface RunFeedItem extends AutomationRun {
   automationName: string | null;
 }
 
-/** Only the latest missed slot is reported per automation, not one per skipped occurrence. */
 export interface MissedAutomation {
   id: string;
   name: string;
@@ -303,7 +262,6 @@ export interface MissedAutomation {
 
 export type LeadSource = "email" | "manual" | "onoffice";
 
-/** Sales priority tier from purchase likelihood: A hot, B warm, C cold; "" unassessed. */
 export type LeadPriority = "A" | "B" | "C" | "";
 
 /**
@@ -312,15 +270,9 @@ export type LeadPriority = "A" | "B" | "C" | "";
  */
 export type LeadStatus = "new" | "contacted" | "engaged" | "qualified" | "won" | "lost";
 
-/**
- * Keyed by normalized email: repeat interest updates the row instead of
- * duplicating it. Follow-up automations reference it via Automation.leadId and
- * are deleted with it.
- */
 export interface Lead {
   id: string;
   name: string;
-  /** Normalized (lowercased) address; the lead's unique identity. */
   email: string;
   phone: string;
   accountId: string;
@@ -329,9 +281,8 @@ export interface Lead {
   status: LeadStatus;
   interest: string;
   persona: string;
-  /** Priority tier A/B/C the caller acts on before first contact. */
   priority: LeadPriority;
-  /** Detected inquiry language (BCP-47 primary subtag, e.g. "de"), for the caller. */
+  /** BCP-47 primary language subtag. */
   language: string;
   notes: string;
   lastInboundAt: string | null;
@@ -363,7 +314,6 @@ export interface EmailDraftDetail {
   body: string;
   cc: string;
   bcc: string;
-  /** The account signature detached from the body; present only when the draft ends with it. */
   signature?: string;
 }
 
@@ -372,7 +322,6 @@ export type DraftProposalStatus = "proposed" | "kept" | "sent" | "discarded";
 export interface DraftProposalStatusResult {
   status: DraftProposalStatus;
   accountId: string;
-  /** The mailbox draft the proposal became; set once kept or sent. */
   draftId?: string;
 }
 
@@ -406,11 +355,8 @@ export interface LoginFlowStatus {
   error?: string;
 }
 
-/** User-facing thinking depth; the web maps these to Fast / Normal / Thorough. */
 export type ThinkingLevel = "off" | "medium" | "high";
 
-/** One catalog model as the SDK registry describes it — pickers show the
- *  friendly name instead of maintaining any hand-written model list. */
 export interface ModelInfo {
   id: string;
   name: string;
@@ -419,45 +365,44 @@ export interface ModelInfo {
 export interface ModelSettings {
   provider: string;
   model: string;
-  /** Whether the active model can reason at all; false hides the thinking control. */
   reasoning: boolean;
   thinkingLevel: ThinkingLevel;
   catalog: { id: string; name: string; models: ModelInfo[] }[];
 }
 
-/** One subscription rate window. Normalized ids: "5h", "week", "week_<model>"
- *  (model-scoped weekly windows like Opus or Fable); an unrecognized provider
- *  window passes its raw key through so new tiers are never dropped. */
+/** Normalized window ids are "5h", "week", or "week_<model>". */
 export interface UsageWindow {
   id: string;
-  /** Percent of the window consumed, 0-100. */
   usedPct: number;
-  /** ISO timestamp when the window resets; null when the provider doesn't say. */
   resetsAt: string | null;
 }
 
 export interface LlmUsage {
   provider: string;
-  /** Subscription tier as the provider reports it ("plus", "max_20x"); null when it doesn't say. */
   plan: string | null;
   windows: UsageWindow[];
 }
 
-/** One entry per connected subscription sign-in that reports usage; empty
- *  when none do (API-key sign-ins, fetch failures). */
 export interface LlmUsageResponse {
   usages: LlmUsage[];
 }
 
-/** Estimated fullness of one conversation's context under the active model. */
+export interface LlmContextBreakdown {
+  instructions: number;
+  knowledge: number;
+  skills: number;
+  /** Provider-counted context outside the prompt and transcript. */
+  tools: number;
+  conversation: number;
+}
+
 export interface LlmContextUsage {
-  /** Percent of the model's context window occupied, 0-100. */
   usedPct: number;
   tokens: number;
   contextWindow: number;
+  breakdown: LlmContextBreakdown;
 }
 
-/** context is null when no model is configured or it reports no window. */
 export interface LlmContextResponse {
   context: LlmContextUsage | null;
 }
@@ -466,47 +411,40 @@ export interface AppStatus {
   pipedreamConfigured: boolean;
   modelConfigured: boolean;
   emailAccounts: number;
-  /**
-   * True when `emailAccounts` is a real answer: the list was fetched, or
-   * Pipedream isn't configured at all. False only when Pipedream IS configured
-   * but listing accounts failed (a transient outage, not a setup problem).
-   */
+  /** False when a configured account provider could not be reached. */
   emailAccountsKnown: boolean;
-  /**
-   * The whole lead surface (leads page, lead tools, the seeded lead
-   * automations) exists only when this is true.
-   */
   onofficeConfigured: boolean;
   provider: string;
   model: string;
 }
 
-/** Usable once the model has credentials and an email account is linked; an
- *  unknown account count (provider unreachable) never counts as incomplete,
- *  only a confirmed zero. */
 export function isSetupComplete(status: AppStatus): boolean {
   return status.modelConfigured && (status.emailAccounts > 0 || !status.emailAccountsKnown);
 }
 
-/** Longest a memory's content may be; entries are injected into the prompt in full.
- *  Sized for a concise topic file (a handful of short lines), not a document. */
-export const MEMORY_MAX_LENGTH = 2000;
+/** A page summary (the part riding the system prompt) is capped to this many characters there. */
+export const WIKI_SUMMARY_MAX_LENGTH = 2000;
 
-/** Hard cap on stored memory entries; every one is injected into the prompt. */
-export const MEMORY_MAX_COUNT = 200;
+/** Cap for a whole page written through the tools and routes; hand-edited files may exceed it. */
+export const WIKI_PAGE_MAX_LENGTH = 20_000;
+
+export const WIKI_PAGE_MAX_COUNT = 1000;
+
+/** The one page type with behavior attached: always indexed in the prompt, id stable on edit. */
+export const WIKI_TYPE_SKILL = "skill";
 
 /**
- * Scope is one of three states: global (accountId and contactId both null),
- * account-scoped, or contact-scoped, never both set.
+ * One wiki page: a markdown file in the agent home's wiki/ folder, the unit of
+ * the agent's long-term memory. Scope is one of three states: global
+ * (accountId and contactId both null), account-scoped, or contact-scoped,
+ * never both set. `type` is advisory ("person", "recipe", …) except "skill".
  */
-export interface MemoryEntry {
+export interface WikiPage {
   id: string;
+  type: string | null;
   content: string;
-  /** "user" = added in Settings; "agent" = saved by the assistant. */
   source: "user" | "agent";
-  /** Account this fact is scoped to; null = not account-scoped. */
   accountId: string | null;
-  /** Normalized (lowercased) email this fact is about; null = not contact-scoped. */
   contactId: string | null;
   usedCount: number;
   lastUsedAt: string | null;
@@ -514,25 +452,23 @@ export interface MemoryEntry {
   updatedAt: string;
 }
 
-/** Hard cap on a skill's instruction body; read on demand via skill_read, so
- *  sized for a long self-contained playbook, not for per-turn prompt cost. */
-export const SKILL_MAX_LENGTH = 20_000;
-
-export interface Skill {
-  name: string;
-  description: string;
-  instructions: string;
-  updatedAt: string;
+/**
+ * A page is summary + body: the summary (up to the first blank line) rides the
+ * system prompt, the body stays on disk behind page_read.
+ */
+export function splitPage(content: string): { summary: string; body: string } {
+  const trimmed = content.trim();
+  const gap = trimmed.search(/\n[ \t]*\n/);
+  if (gap === -1) return { summary: trimmed, body: "" };
+  return { summary: trimmed.slice(0, gap).trim(), body: trimmed.slice(gap).trim() };
 }
 
 export interface LearnRun {
   id: string;
-  /** "boot" = catch-up sweep after server start; "scheduled" = the nightly run. */
   reason: "boot" | "scheduled";
   status: "ok" | "error";
   matched: number;
   pending: number;
-  /** Pairs stamped learned without a lesson: the draft was sent unchanged. */
   identical: number;
   learned: number;
   lessons: number;
@@ -546,10 +482,7 @@ export interface LearnStatus {
   nextRunAt: string | null;
 }
 
-/**
- * One record per account, overwritten on retry; "error" stays until a rerun
- * succeeds, so a failed or skipped learn stays visible and retryable.
- */
+/** One retryable voice-learning result per account. */
 export interface VoiceLearnRun {
   accountId: string;
   status: "running" | "ok" | "error";
@@ -560,7 +493,6 @@ export interface VoiceLearnRun {
 
 export interface LibraryDocument {
   id: string;
-  /** Path relative to the library folder. */
   path: string;
   title: string;
   ext: string;
@@ -575,7 +507,6 @@ export interface LibraryDocument {
 
 export interface LibraryStatus {
   folder: string;
-  /** Every directory under the knowledge folder (relative paths), empty ones included. */
   folders: string[];
   documents: LibraryDocument[];
 }
@@ -588,7 +519,6 @@ export interface LibrarySearchHit {
   snippet: string;
 }
 
-/** Raw file text of an editable (md/txt) library document, for the web editor. */
 export interface LibraryDocumentContent {
   content: string;
 }
@@ -609,24 +539,14 @@ export interface CreatedDraft {
 
 export type TodoStatus = "open" | "done" | "dismissed";
 
-/**
- * A human-attention item the agent surfaces and maintains: something you must
- * do or decide. The async, persistent counterpart of the in-chat `choices`
- * card. Distinct from an automation (that is agent-executed); a run creates a
- * todo when it needs a human.
- */
 export interface Todo {
   id: string;
   title: string;
   body: string;
   status: TodoStatus;
-  /** When the user should do/decide this; null = undated ("anytime"). The home agenda groups and sorts on it. */
   dueAt: string | null;
-  /** Manual sort key within an agenda group (drag-and-drop order). */
   position: number;
-  /** Conversation/run that created it, for "open in chat"; null when none. */
   conversationId: string | null;
-  /** Automation fired when this todo completes (open→done); null = none. */
   linkedAutomationId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -634,25 +554,17 @@ export interface Todo {
 
 export type OutboundStatus = "open" | "sent" | "discarded";
 
-/** Display names for outbound channels; fall back to the raw channel id. */
 export const OUTBOUND_CHANNEL_LABELS: Record<string, string> = { whatsapp: "WhatsApp" };
 
-/**
- * A pending outbound message for a comm channel without a native provider
- * draft (WhatsApp today), the counterpart of an email draft. Inert until a
- * human approves it on Home or its card, unless armed autosend dispatched it
- * at creation.
- */
+/** A pending message for a channel without provider-native drafts. */
 export interface OutboundDraft {
   id: string;
   channel: string;
-  /** Channel-native recipient address (a WhatsApp jid). */
   target: string;
   targetLabel: string;
   body: string;
   status: OutboundStatus;
   sentRef: string | null;
-  /** The conversation that drafted it, so the row can reopen it to refine. */
   conversationId: string | null;
   createdAt: string;
   updatedAt: string;
@@ -663,8 +575,7 @@ export type ServerEventTopic =
   | "drafts"
   | "outbound"
   | "todos"
-  | "memories"
-  | "skills"
+  | "wiki"
   | "library"
   | "conversations"
   | "automations"
@@ -675,12 +586,7 @@ export type ServerEventTopic =
   | "seen"
   | "notification";
 
-/**
- * What the user has already seen on Home. `keys` are per-item marks
- * ("todo:<id>", "run:<id>", "outbound:<id>", "draft:<accountId>:<draftId>");
- * anything created after `floor` without a mark renders as new. The floor is
- * set once at migration time so pre-existing items never flash as new.
- */
+/** Items newer than `floor` remain new until their key appears in `keys`. */
 export interface SeenState {
   floor: string;
   keys: string[];

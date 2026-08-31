@@ -7,8 +7,8 @@ import { AccountChip } from "./AccountChip";
 /**
  * Shared frame for agent cards. Cards are the agent's work products, so they
  * read as discrete blocks in the chat stream: a `surface` panel carrying a
- * hairline outline (`border-border`) — the one place the app outlines a shape,
- * a documented exception in DESIGN.md — so a card stands apart from the white
+ * hairline outline (`border-border`), the one place the app outlines a shape,
+ * a documented exception in DESIGN.md, so a card stands apart from the white
  * chat rail and from adjacent cards without a heavier grey wrapper around it.
  *
  * The mono uppercase eyebrow is the cards' signature: a specimen label naming
@@ -27,7 +27,7 @@ export function CardShell({
 }: {
   icon: LucideIcon;
   label: string;
-  /** Scope readout next to the label, e.g. "3 results" — rendered as mono data. */
+  /** Scope readout next to the label, e.g. "3 results", rendered as mono data. */
   meta?: string;
   title?: string;
   account?: CardAccount;

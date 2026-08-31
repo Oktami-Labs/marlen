@@ -17,7 +17,7 @@ import { cn } from "@/lib/utils";
  * Dictation into the composer: press to record, press again to transcribe,
  * Escape or the discard button to drop the take. While recording, the live
  * waveform covers the composer (the surrounding wrapper is the positioned
- * ancestor). The transcript is appended as text the caller owns — a recording
+ * ancestor). The transcript is appended as text the caller owns, a recording
  * is never sent on its own.
  */
 

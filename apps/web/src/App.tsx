@@ -27,6 +27,7 @@ import { Toaster } from "@/components/ui/toaster";
 import { AutomationsPanel } from "@/features/automations/AutomationsPanel";
 import { AttachmentViewer } from "@/features/chat/AttachmentViewer";
 import { ChatPanel } from "@/features/chat/ChatPanel";
+import { ChatSearchBar } from "@/features/chat/ChatSearchBar";
 import { onRevealChat, sendChatCommand } from "@/features/chat/controller";
 import { FocusChip } from "@/features/chat/FocusChip";
 import { HistoryList } from "@/features/chat/HistoryList";
@@ -35,7 +36,7 @@ import { KnowledgePanel } from "@/features/knowledge/KnowledgePanel";
 import { LeadsPanel } from "@/features/leads/LeadsPanel";
 import { SettingsPanel } from "@/features/settings/SettingsPanel";
 import { SetupGate } from "@/features/setup/SetupGate";
-import { ShowcasePanel } from "@/features/showcase/ShowcasePanel"; // DEV showcase — delete with its route
+import { ShowcasePanel } from "@/features/showcase/ShowcasePanel";
 import { api } from "@/lib/api";
 import { rememberLanguage } from "@/lib/i18n";
 import {
@@ -52,31 +53,21 @@ import { useRunNotifications } from "@/lib/useRunNotifications";
 import { useTheme } from "@/lib/useTheme";
 import { cn, MOD_LABEL, withViewTransition } from "@/lib/utils";
 
-/** Set once setup finished (or was skipped); an established app never re-gates. */
 const SETUP_DISMISSED_KEY = "marlen-setup-dismissed";
 
-/** Drag range for the chat panel width, shared by the resize hook and the drag handle's
- *  ARIA value. The hook additionally caps the panel at a fraction of the window, so the
- *  px ceiling is only reachable on large screens. */
 const CHAT_WIDTH_MIN = 320;
 const CHAT_WIDTH_MAX = 960;
 
-/** Narrows a raw route segment to a known nav view, for typed `t()` lookups. */
 function isNavView(path: string): path is View {
   return (NAV_VIEWS as readonly string[]).includes(path);
 }
 
-/** Whether a path is one the `<Routes>` below render a view for; everything else
- *  reaches the catch-all, which the header has to name as missing rather than
- *  falling back to the Home (or parent segment's) title. */
 function isKnownPath(pathname: string): boolean {
   const path = pathname.replace(/\/+$/, "") || "/";
-  // DEV showcase — remove this line with the route.
   if (import.meta.env.DEV && path === SHOWCASE_NAV.path) return true;
   return NAV_ITEMS.some((item) => item.path === path);
 }
 
-/** Adopt the server's language setting; on first run, seed it from the client's initial language (the German default unless localStorage says otherwise). */
 function useServerLanguage() {
   const { i18n } = useTranslation();
   React.useEffect(() => {
@@ -98,7 +89,6 @@ function useServerLanguage() {
   }, [i18n]);
 }
 
-/** Seed the server's timezone from the browser on first run — no visible setting for it. */
 function useServerTimezone() {
   React.useEffect(() => {
     api
@@ -112,7 +102,6 @@ function useServerTimezone() {
   }, []);
 }
 
-/** Ghost icon button whose aria-label and hover tooltip are always the same string. */
 function HeaderIconButton({
   label,
   ...props
@@ -120,15 +109,14 @@ function HeaderIconButton({
   return <Button variant="ghost" size="icon" aria-label={label} data-tooltip={label} {...props} />;
 }
 
-/** Mobile-only scrim behind a slide-over panel. */
-function Backdrop({ onClick }: { onClick: () => void }) {
-  // Click-away convenience for mouse users only — every panel this backdrops
-  // already exposes a real, keyboard-reachable close button, so the scrim
-  // itself carries no independent keyboard interaction to mirror. role="presentation"
-  // both drops the implicit semantics and satisfies the click/key-event pairing rule.
+function Backdrop({ onClick, className }: { onClick: () => void; className?: string }) {
   return (
     // biome-ignore lint/a11y/noStaticElementInteractions: presentational scrim, not a control
-    <div role="presentation" className="scrim fixed inset-0 z-40 md:hidden" onClick={onClick} />
+    <div
+      role="presentation"
+      className={cn("scrim fixed inset-0 z-40", className)}
+      onClick={onClick}
+    />
   );
 }
 
@@ -141,7 +129,6 @@ export default function App() {
   const onChatRoute = currentPath === "chat";
   const view: View = isNavView(currentPath) ? currentPath : "home";
   const [status, setStatus] = React.useState<AppStatus | null>(null);
-  // "pending" until the first status answer decides between gate and app.
   const [gate, setGate] = React.useState<"pending" | "open" | "closed">(() =>
     localStorage.getItem(SETUP_DISMISSED_KEY) ? "closed" : "pending",
   );
@@ -158,12 +145,7 @@ export default function App() {
   );
   const [shortcutsOpen, setShortcutsOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
-  // Mirrors the ChatPanel's open conversation so the Chat tab's history rail can highlight it.
   const [activeConversationId, setActiveConversationId] = React.useState<string | undefined>();
-  // A mailbox picked in the header chip before any conversation exists. The first
-  // message carries it to the server (which opens the conversation focused on it),
-  // after which the conversation owns its focus. Reset whenever there's no active
-  // conversation again (a new chat), so a fresh chat starts on "All accounts".
   const [pendingFocusAccountId, setPendingFocusAccountId] = React.useState<string | null>(null);
   React.useEffect(() => {
     if (!activeConversationId) setPendingFocusAccountId(null);
@@ -174,20 +156,26 @@ export default function App() {
       localStorage.getItem("marlen-chat-history-collapsed") === "true",
   );
   const [historyQuery, setHistoryQuery] = React.useState("");
+  const [chatSearch, setChatSearch] = React.useState<{ query: string; hit: number } | null>(null);
+  const [chatHits, setChatHits] = React.useState(0);
   const [, theme, setThemePref] = useTheme();
   useDesktopChrome(theme);
   useWaitingBadge();
   const toggleTheme = React.useCallback(() => {
     setThemePref(theme === "dark" ? "light" : "dark");
   }, [theme, setThemePref]);
-  const { width: chatWidth, onPointerDown: onChatResizeStart } = useResizableWidth({
+  const {
+    ref: chatWidthRef,
+    width: chatWidth,
+    dragging: chatResizing,
+    onPointerDown: onChatResizeStart,
+  } = useResizableWidth({
     storageKey: "marlen-chat-width",
+    cssVar: "--chat-width",
     defaultWidth: 384,
     min: CHAT_WIDTH_MIN,
     max: CHAT_WIDTH_MAX,
     edge: "right",
-    // Dragging well past the minimum reads as "put it away" — same collapse
-    // the header chevron triggers.
     onOverdrag: () => setAgentCollapsed(true),
   });
   useServerLanguage();
@@ -200,13 +188,10 @@ export default function App() {
       .then(setStatus)
       .catch(() => {
         setStatus(null);
-        // Never trap the user behind a gate the server can't answer.
         setGate((g) => (g === "pending" ? "closed" : g));
       });
   }, []);
 
-  // Mount + whenever the tab regains focus (sign-in and account linking
-  // happen in other tabs, and status must not go stale).
   React.useEffect(() => {
     refreshStatus();
     const onFocus = () => refreshStatus();
@@ -223,7 +208,6 @@ export default function App() {
     };
   }, [refreshStatus]);
 
-  // Navigation requests from non-React code (e.g. a toast's click-through action).
   React.useEffect(() => {
     return registerNavigate((path) => {
       if (path.startsWith("/")) withViewTransition(() => navigate(path));
@@ -237,9 +221,7 @@ export default function App() {
     setGate((g) => (g === "pending" ? (complete ? "closed" : "open") : g));
   }, [status]);
 
-  // Entering/leaving the Chat tab resets the history rail's drawer/toggle state,
-  // so it never carries a stale "open" into the other layout.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: onChatRoute is the trigger, not a value read in the body — it must re-run on every route change
+  // biome-ignore lint/correctness/useExhaustiveDependencies: onChatRoute is the trigger, not a value read in the body, it must re-run on every route change
   React.useEffect(() => {
     setHistoryOpen(false);
     setHistoryQuery("");
@@ -295,9 +277,6 @@ export default function App() {
     select(openSettings ? "settings" : "home");
   };
 
-  // Once the gate is open, a failed status poll (server down / offline) must not
-  // fall through to the main app — SetupGate itself renders a "reconnecting" notice
-  // when `status` is null and keeps polling.
   if (gate === "open") {
     return (
       <>
@@ -316,10 +295,8 @@ export default function App() {
   }
 
   const meta = !isKnownPath(location.pathname)
-    ? // The path that matched nothing stands in for the description, so the
-      // missing address is named once, in the chrome that always shows it.
-      { title: t("notFound.title"), description: location.pathname }
-    : import.meta.env.DEV && currentPath === "showcase" // DEV showcase — remove this branch with the route
+    ? { title: t("notFound.title"), description: location.pathname }
+    : import.meta.env.DEV && currentPath === "showcase"
       ? { title: SHOWCASE_NAV.title, description: SHOWCASE_NAV.description }
       : {
           title: t(`views.${view}.title`),
@@ -327,10 +304,7 @@ export default function App() {
         };
 
   return (
-    <div
-      className="flex h-dvh overflow-hidden bg-sidebar"
-      style={{ "--chat-width": `${chatWidth}px` } as React.CSSProperties}
-    >
+    <div ref={chatWidthRef} className="flex h-dvh overflow-hidden bg-sidebar">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[70] focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -338,12 +312,11 @@ export default function App() {
         {t("app.skipToContent")}
       </a>
 
-      {mobileOpen && <Backdrop onClick={() => setMobileOpen(false)} />}
+      {mobileOpen && <Backdrop className="md:hidden" onClick={() => setMobileOpen(false)} />}
 
       <div
         className={cn(
-          // md:z-10 keeps the collapsed-nav hover tooltips above <main>, whose
-          // `isolate` stacking context would otherwise paint over them.
+          // Keep collapsed-nav tooltips above the isolated main canvas.
           "fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-out md:static md:z-10 md:translate-x-0",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
@@ -359,9 +332,7 @@ export default function App() {
       <main
         id="main-content"
         className={cn(
-          // The grey canvas, inset into the chrome shell on desktop — rounded,
-          // with a small vertical gap so the chrome frames it on all sides.
-          "relative isolate flex min-w-0 flex-1 flex-col overflow-hidden bg-background md:my-3 md:rounded-2xl",
+          "@container relative isolate flex min-w-0 flex-1 flex-col overflow-hidden bg-background md:my-3 md:rounded-2xl",
           onChatRoute && "hidden",
         )}
       >
@@ -380,14 +351,15 @@ export default function App() {
           </HeaderIconButton>
           <div className="min-w-0 flex-1">
             <h1 className="text-xl font-bold tracking-tight text-foreground">{meta.title}</h1>
-            <p className="truncate text-sm text-muted-foreground">{meta.description}</p>
+            <p className="hidden truncate text-sm text-muted-foreground sm:block">
+              {meta.description}
+            </p>
           </div>
           <div className="flex items-center gap-2 shrink-0">
-            {/* Reads as a field on desktop so the shortcut is discoverable; an icon on mobile. */}
             <button
               type="button"
               onClick={() => openSearch()}
-              className="hidden h-9 w-56 shrink-0 items-center gap-2 rounded-md bg-surface-2 px-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background sm:flex"
+              className="hidden h-9 w-56 shrink-0 items-center gap-2 rounded-md bg-surface-2 px-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background @2xl:flex"
             >
               <Search className="h-4 w-4 shrink-0" />
               <span className="min-w-0 flex-1 truncate">{t("search.openButton")}</span>
@@ -396,7 +368,7 @@ export default function App() {
             <HeaderIconButton
               label={t("search.openButton")}
               onClick={() => openSearch()}
-              className="shrink-0 sm:hidden"
+              className="shrink-0 @2xl:hidden"
             >
               <Search />
             </HeaderIconButton>
@@ -411,7 +383,7 @@ export default function App() {
               <HeaderIconButton
                 label={t("app.expandChat")}
                 onClick={() => setAgentCollapsed(false)}
-                className="hidden shrink-0 md:inline-flex"
+                className="hidden shrink-0 lg:inline-flex"
               >
                 <ChevronLeft />
               </HeaderIconButton>
@@ -422,7 +394,7 @@ export default function App() {
                 setMobileOpen(false);
                 setChatOpen(true);
               }}
-              className="shrink-0 md:hidden"
+              className="shrink-0 lg:hidden"
             >
               <MessagesSquare />
             </HeaderIconButton>
@@ -432,11 +404,7 @@ export default function App() {
         <div
           className={cn(
             "min-h-0 flex-1 overflow-y-auto scroll-stable @container",
-            // The Knowledge browser is a workspace, not a reading column: it
-            // fills the canvas edge to edge instead of scrolling (only small
-            // side/bottom insets), so the scroller becomes a flex column the
-            // wrapper can size against. Ternaries, not overrides: tailwind-merge
-            // can't cancel the breakpoint/container-query variants of these.
+            // Tailwind Merge cannot cancel the breakpoint variants here.
             currentPath === "knowledge" ? "flex flex-col px-3 pb-3" : "px-5 pb-10 pt-1 sm:px-8",
           )}
         >
@@ -444,18 +412,11 @@ export default function App() {
             className={cn(
               currentPath === "knowledge"
                 ? "min-h-0 w-full flex-1"
-                : // Steps up with the canvas (not the viewport — the sidebar and
-                  // chat panel eat variable width), so large monitors aren't all
-                  // gutter.
-                  "mx-auto max-w-3xl @6xl:max-w-4xl @7xl:max-w-5xl",
-              // DEV showcase — remove with the route. Its inner nav hugs the
-              // canvas's left edge, so the gallery spans the full width.
+                : "mx-auto max-w-3xl @6xl:max-w-4xl @7xl:max-w-5xl",
               import.meta.env.DEV && currentPath === "showcase" && "max-w-none",
             )}
           >
             <Routes>
-              {/* The full-page Chat tab is rendered by the persistent chat instance below,
-                  not here — this route just keeps the URL valid so it isn't redirected home. */}
               <Route path="/chat" element={null} />
               <Route path="/settings" element={<SettingsPanel onStatusChanged={refreshStatus} />} />
               {/* Leads exist only alongside a connected onOffice CRM. While status
@@ -473,7 +434,6 @@ export default function App() {
               />
               <Route path="/automations" element={<AutomationsPanel />} />
               <Route path="/knowledge" element={<KnowledgePanel />} />
-              {/* DEV showcase / theme lab — delete this line and the ShowcasePanel file to remove. */}
               {import.meta.env.DEV && <Route path="/showcase" element={<ShowcasePanel />} />}
               <Route
                 path="/"
@@ -491,16 +451,15 @@ export default function App() {
         </div>
       </main>
 
-      {/* Chat backdrop — mobile slide-over (panel mode only) */}
-      {!onChatRoute && chatOpen && <Backdrop onClick={() => setChatOpen(false)} />}
+      {!onChatRoute && chatOpen && (
+        <Backdrop className="lg:hidden" onClick={() => setChatOpen(false)} />
+      )}
 
-      {/* History-rail backdrop — full-page Chat tab on mobile, where the rail is a drawer */}
-      {onChatRoute && historyOpen && <Backdrop onClick={() => setHistoryOpen(false)} />}
+      {onChatRoute && historyOpen && (
+        <Backdrop className="md:hidden" onClick={() => setHistoryOpen(false)} />
+      )}
 
-      {/* Drag handle — desktop panel mode only. Hidden in the full-page Chat tab (the chat fills its column).
-          A focusable, value-bearing separator (not <hr>, which is a void element and can't host the
-          grip child or take the drag/focus interaction this splitter needs). */}
-      {/* biome-ignore lint/a11y/useSemanticElements: interactive draggable splitter, not a static divider — <hr> can't be focusable or hold the grip child */}
+      {/* biome-ignore lint/a11y/useSemanticElements: interactive splitter; <hr> cannot receive focus or contain the grip */}
       <div
         onPointerDown={onChatResizeStart}
         role="separator"
@@ -511,45 +470,40 @@ export default function App() {
         aria-valuemax={CHAT_WIDTH_MAX}
         tabIndex={0}
         className={cn(
-          "group z-40 hidden w-2 shrink-0 cursor-col-resize touch-none items-center justify-center md:flex",
-          (onChatRoute || agentCollapsed) && "md:hidden",
+          "group z-40 hidden w-2 shrink-0 cursor-col-resize touch-none items-center justify-center lg:flex",
+          (onChatRoute || agentCollapsed) && "lg:hidden",
         )}
       >
         <div className="h-8 w-1 rounded-full bg-foreground/10 transition-colors group-hover:bg-foreground/30 group-active:bg-accent/60" />
       </div>
 
-      {/* Chat — ONE persistent instance for both surfaces: the full-page Chat tab
-          (in flow, flex-1, history rail on the left) and the floating overlay /
-          slide-over on every other page. It is a single node in the tree, so
-          switching tabs never remounts it or drops an in-flight stream. */}
+      {/* Keep one chat instance mounted so navigation cannot drop an active stream.
+          It docks beside the canvas only from `lg`: rail plus a 320px-minimum panel
+          leaves a workable canvas from there, and below it the panel is a drawer. */}
       <div
         className={cn(
           "flex flex-col min-h-0 min-w-0 overflow-hidden",
           onChatRoute
-            ? // Same inset rounded canvas as <main> — the Chat tab replaces it in flow.
-              "static z-auto min-w-0 flex-1 translate-x-0 bg-background md:my-3 md:rounded-2xl"
+            ? "static z-auto min-w-0 flex-1 translate-x-0 bg-background md:my-3 md:rounded-2xl"
             : cn(
-                "fixed inset-y-0 right-0 w-full max-w-sm transition-[transform,width] duration-200 ease-out md:static md:z-auto md:max-w-none md:translate-x-0",
-                agentCollapsed ? "md:w-0" : "md:w-[var(--chat-width)]",
-                chatOpen ? "z-50 translate-x-0" : "z-40 translate-x-full md:translate-x-0",
+                "fixed inset-y-0 right-0 w-full max-w-sm lg:static lg:z-auto lg:max-w-none lg:translate-x-0",
+                // Width animation would make the panel trail the pointer during a drag.
+                chatResizing
+                  ? "transition-none"
+                  : "transition-[transform,width] duration-200 ease-out",
+                agentCollapsed ? "lg:w-0" : "lg:w-[var(--chat-width)]",
+                chatOpen ? "z-50 translate-x-0" : "z-40 translate-x-full lg:translate-x-0",
               ),
         )}
-        style={{ "--chat-width": `${chatWidth}px` } as React.CSSProperties}
       >
         <div
           className={cn(
             "flex min-h-0 min-w-0 flex-1 overflow-hidden pointer-events-auto",
-            // Chat tab: a grey canvas gutter framing the conversation. The history
-            // rail sits bare on it (chrome, like the nav); the chat column below
-            // becomes a rounded card with a free top row — same as every panel.
             onChatRoute ? "flex-row gap-4 p-4 sm:p-6" : "flex-col bg-sidebar",
-            // Panel mode: pin the content to the full panel width while the
-            // outer shell animates closed/open, so the text is clipped by the
-            // shrinking edge instead of re-wrapping on every frame.
-            !onChatRoute && "md:w-[var(--chat-width)]",
+            // Prevent text reflow while the panel opens and closes.
+            !onChatRoute && "lg:w-[var(--chat-width)]",
           )}
         >
-          {/* History rail — Chat tab only. Static column on desktop, slide-over drawer on mobile. */}
           {onChatRoute && (
             <div
               className={cn(
@@ -605,7 +559,7 @@ export default function App() {
             </div>
           )}
 
-          {/* Chat column — always present; the stable slot that owns the ChatPanel instance.
+          {/* This stable column always owns the ChatPanel instance.
               White surface (a rounded card on the Chat tab, flush chrome in panel mode), so
               its neutral controls (composer, focus chip, code blocks) recess to grey rather
               than rising to white as they would on the canvas. */}
@@ -636,15 +590,28 @@ export default function App() {
                   <ChevronRight />
                 </HeaderIconButton>
               )}
-              <p className="shrink-0 text-sm font-semibold tracking-tight">
-                {t("views.chat.title")}
-              </p>
-              <FocusChip
-                conversationId={activeConversationId}
-                pendingFocusAccountId={pendingFocusAccountId}
-                onPendingFocusChange={setPendingFocusAccountId}
-              />
-              {onChatRoute && (
+              {chatSearch ? (
+                <ChatSearchBar
+                  query={chatSearch.query}
+                  hit={chatSearch.hit}
+                  hits={chatHits}
+                  onQueryChange={(query) => setChatSearch({ query, hit: 0 })}
+                  onHitChange={(hit) => setChatSearch((s) => (s ? { ...s, hit } : s))}
+                  onClose={() => setChatSearch(null)}
+                />
+              ) : (
+                <>
+                  <p className="shrink-0 text-sm font-semibold tracking-tight">
+                    {t("views.chat.title")}
+                  </p>
+                  <FocusChip
+                    conversationId={activeConversationId}
+                    pendingFocusAccountId={pendingFocusAccountId}
+                    onPendingFocusChange={setPendingFocusAccountId}
+                  />
+                </>
+              )}
+              {onChatRoute && !chatSearch && (
                 <HeaderIconButton
                   label={theme === "dark" ? t("sidebar.lightMode") : t("sidebar.darkMode")}
                   onClick={toggleTheme}
@@ -653,10 +620,22 @@ export default function App() {
                   {theme === "dark" ? <Sun /> : <Moon />}
                 </HeaderIconButton>
               )}
+              {!chatSearch && (
+                <HeaderIconButton
+                  label={t("chat.search.open")}
+                  onClick={() => {
+                    setChatSearch({ query: "", hit: 0 });
+                    setHistoryOpen(false);
+                  }}
+                  className={cn(!onChatRoute && "ml-auto")}
+                >
+                  <Search />
+                </HeaderIconButton>
+              )}
               <HeaderIconButton
                 label={t("chat.newConversation")}
                 onClick={() => sendChatCommand({ kind: "new" })}
-                className={cn(!onChatRoute && "ml-auto", onChatRoute && "md:hidden")}
+                className={cn(onChatRoute && "md:hidden")}
               >
                 <Plus />
               </HeaderIconButton>
@@ -671,7 +650,7 @@ export default function App() {
                 <HeaderIconButton
                   label={t("app.collapseChat")}
                   onClick={() => setAgentCollapsed(true)}
-                  className="hidden md:inline-flex"
+                  className="hidden lg:inline-flex"
                 >
                   <ChevronRight />
                 </HeaderIconButton>
@@ -680,7 +659,7 @@ export default function App() {
                 <HeaderIconButton
                   label={t("app.closeChat")}
                   onClick={() => setChatOpen(false)}
-                  className="md:hidden"
+                  className="lg:hidden"
                 >
                   <X />
                 </HeaderIconButton>
@@ -693,6 +672,8 @@ export default function App() {
                 layout={onChatRoute ? "page" : "panel"}
                 onConversationChange={setActiveConversationId}
                 pendingFocusAccountId={pendingFocusAccountId}
+                search={chatSearch ?? undefined}
+                onSearchHits={setChatHits}
               />
             </div>
           </div>

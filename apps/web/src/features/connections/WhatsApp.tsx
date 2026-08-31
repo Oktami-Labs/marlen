@@ -18,11 +18,11 @@ import { useServerEvents } from "@/lib/serverEvents";
 import { toast } from "@/lib/toast";
 
 /**
- * The personal WhatsApp link — a native integration over the WhatsApp Web
+ * The personal WhatsApp link, a native integration over the WhatsApp Web
  * protocol, paired by scanning a QR code with the phone. It lives alongside
  * the Pipedream accounts in Settings → Accounts: a picker entry opens the
  * pairing card, and once linked it shows as a connected row. Pairing is
- * asynchronous — the QR, the scan and the final open state each arrive as a
+ * asynchronous, the QR, the scan and the final open state each arrive as a
  * "whatsapp" server event, so the status here stays live.
  */
 
@@ -333,7 +333,7 @@ export function WhatsAppBusinessRow({
   );
 }
 
-/** The WhatsApp permission editor: the one armable grant — sending. */
+/** The WhatsApp permission editor: the one armable grant, sending. */
 export function WhatsAppPermissionsEditor({
   status,
   onChanged,

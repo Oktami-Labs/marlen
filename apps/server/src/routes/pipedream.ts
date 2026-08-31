@@ -77,7 +77,7 @@ export const pipedreamRoutes: FastifyPluginAsyncTypebox = async (app) => {
     await saveConnectSettings(candidate);
     // Saving your own credentials implies you want to use them.
     await setUseCustom(true);
-    // Live agents hold MCP sessions built with the old credentials.
+    // Cached sessions capture credentials at creation.
     resetSessions();
     emitServerEvent("accounts");
     return getPipedreamStatus();

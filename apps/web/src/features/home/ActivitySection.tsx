@@ -20,7 +20,7 @@ import { toast } from "@/lib/toast";
 import { cn, stagger, toggleRowProps } from "@/lib/utils";
 
 /**
- * "Aktivität" — the complete run log, the page's quiet audit trail. Collapsed
+ * "Aktivität", the complete run log, the page's quiet audit trail. Collapsed
  * by default: fresh output already surfaces in the sections above, so the log
  * only unfolds on demand. Today's runs show grouped by day; older ones sit
  * behind a second disclosure.
@@ -36,14 +36,14 @@ export function ActivitySection({
   automations: Automation[] | null;
   colors: AccountColor[];
   onNavigate: (view: View) => void;
-  /** The latest digest already leads the page as the BriefingHero — don't also auto-expand it here. */
+  /** The latest digest already leads the page as the BriefingHero, don't also auto-expand it here. */
   hasHero: boolean;
 }) {
   const { t, i18n } = useTranslation();
   // Older runs stay collapsed behind this toggle; only today's ever show by
   // default so the section doesn't grow unbounded with automation history.
   const [showEarlier, setShowEarlier] = React.useState(false);
-  // The whole section folds away, and starts folded — it's history.
+  // This historical section starts folded and can be hidden completely.
   const [expanded, setExpanded] = React.useState(false);
 
   const dayLabel = (iso: string) => formatDayLabel(iso, i18n.language);
@@ -60,8 +60,8 @@ export function ActivitySection({
 
   const todayRuns = (runs ?? []).filter((r) => isToday(r.startedAt));
   const earlierRuns = (runs ?? []).filter((r) => !isToday(r.startedAt));
-  // `runs` arrives newest-first from the feed, so its head is the newest run
-  // — the one card expanded by default, whichever day group it lands in.
+  // `runs` arrives newest-first, so its head is the card expanded by default
+  // regardless of which day group contains it.
   const firstRunId = runs?.[0]?.id;
 
   const hasAutomations = (automations?.length ?? 0) > 0;
@@ -159,7 +159,7 @@ function ActivityRunCard({
   const { t } = useTranslation();
   const [expanded, setExpanded] = React.useState(defaultExpanded);
   // A run whose turn produced a briefing card is represented by that card
-  // alone — the same body the BriefingHero renders — since the prose result
+  // alone, the same body the BriefingHero renders, since the prose result
   // and the raw tool cards only restate what the briefing already carries.
   const briefing = findBriefingCard(run);
   const cards = run.cards ?? [];
@@ -170,7 +170,7 @@ function ActivityRunCard({
   // Re-run a failed automation in place. Fire-and-forget on the server (202):
   // the resulting "runs" server event reloads the feed, where the fresh run
   // appears as its own running row. Hidden for a deleted automation (null
-  // automationName) — there is nothing left to run.
+  // automationName), there is nothing left to run.
   const [retrying, setRetrying] = React.useState(false);
   const canRetry = run.status === "error" && run.automationName !== null;
   const retry = async (e: React.MouseEvent) => {

@@ -13,11 +13,11 @@ const buttonVariants = cva(
         default: "bg-accent text-accent-foreground hover:bg-accent/90",
         /* The confirm CTA in destructive dialogs (ConfirmDialog's default). */
         destructive: "bg-destructive text-destructive-foreground hover:bg-destructive/90",
-        // "outline" in name only — a quiet tonal fill, no border.
+        // "outline" in name only, a quiet tonal fill, no border.
         outline: "bg-surface-2 text-foreground hover:bg-secondary",
         secondary: "bg-secondary text-secondary-foreground hover:bg-secondary/70",
         ghost: "text-muted-foreground hover:bg-secondary hover:text-foreground",
-        /* Ghost for destructive row actions — pale red hover instead of the neutral fill. */
+        /* Ghost for destructive row actions, pale red hover instead of the neutral fill. */
         "ghost-danger": "text-muted-foreground hover:bg-destructive/10 hover:text-destructive",
       },
       size: {

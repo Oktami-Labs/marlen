@@ -5,14 +5,6 @@ import type { AgentCard } from "@marlen/shared";
 import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-/**
- * The agent turn driven through its public seam: a scripted fake session
- * stands in for the model, everything else (prompt assembly, activity
- * collection, persistence, the in-flight guard, history rebuild) is real code
- * against a real scratch database.
- */
-
-/** Imported dynamically after DATABASE_PATH points at a scratch file; env.ts reads it at import. */
 let turnRecorder: typeof import("../../src/agent/turnRecorder.js");
 let dbModule: typeof import("../../src/db/index.js");
 type AgentSession = import("../../src/agent/sessionCache.js").AgentSession;

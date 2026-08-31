@@ -23,10 +23,10 @@ export function ConnectionsPanel({ onStatusChanged }: { onStatusChanged?: () => 
   const { t } = useTranslation();
   const [status, setStatus] = React.useState<PipedreamStatus | null>(null);
   const [editing, setEditing] = React.useState(false);
-  // Plumbing is collapsed by default once accounts are connected — the toggle
+  // Plumbing is collapsed by default once accounts are connected, the toggle
   // and project credentials matter far less often than the account list.
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
-  // Only for the initial fetch — every error after that is a toast, not a blocking state.
+  // Only the initial fetch can block the panel. Later errors appear as toasts.
   const [loadError, setLoadError] = React.useState<string | null>(null);
 
   const refresh = React.useCallback(async () => {
@@ -126,7 +126,7 @@ export function ConnectionsPanel({ onStatusChanged }: { onStatusChanged?: () => 
   );
 
   // The accounts list carries the native onOffice and WhatsApp connections too,
-  // which need no Pipedream project — so it renders either way. Only where the
+  // which need no Pipedream project, so it renders either way. Only where the
   // Pipedream plumbing sits moves: front and centre until a project exists,
   // tucked under "Advanced" once one does.
   const accountsList = (
@@ -245,9 +245,8 @@ export function PipedreamWizard({
               i18nKey="connections.setupIntro"
               components={{
                 pd: (
-                  // Trans replaces this placeholder's children with the translated
-                  // text between the <pd> tags ("Pipedream" in every locale) — this
-                  // literal text just gives the anchor accessible content statically.
+                  // Trans replaces this placeholder's children with the text between
+                  // the <pd> tags. The literal gives the anchor static accessible text.
                   <a
                     href="https://pipedream.com"
                     target="_blank"

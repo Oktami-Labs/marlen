@@ -1,7 +1,7 @@
 import type { EmailRef } from "@marlen/shared";
 import * as React from "react";
 
-/** Matches the server's cap on ChatMessage.refs — additional picks past this are ignored. */
+/** Matches the server's cap on ChatMessage.refs, additional picks past this are ignored. */
 const MAX_CHAT_REFS = 8;
 
 /** Same email dedupe key ChatPanel uses everywhere refs are compared: a
@@ -14,7 +14,7 @@ function sameRef(a: EmailRef, b: EmailRef): boolean {
 /**
  * Owns the composer's pinned-email list: an @-mention pick or a card's "add
  * to chat" action both funnel through `add`, deduped by thread+message and
- * capped at MAX_CHAT_REFS (silently ignored past the cap — the server would
+ * capped at MAX_CHAT_REFS (silently ignored past the cap, the server would
  * reject a longer list anyway).
  */
 export function useComposerRefs() {

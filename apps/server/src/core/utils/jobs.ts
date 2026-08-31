@@ -70,7 +70,7 @@ export class KeyedJobs {
   enqueue<T>(key: string, fn: () => Promise<T>): Promise<T> {
     const prior = this.chains.get(key) ?? Promise.resolve();
     const next = prior.then(fn, fn);
-    // The stored chain link swallows the outcome so one failed call never wedges
+    // The stored chain link swallows the outcome so one failed call never blocks
     // later calls; `next` still carries the real rejection to its caller.
     this.chains.set(
       key,
@@ -159,7 +159,7 @@ export interface JobLoopOptions {
 
 /**
  * A single-flight loop: interval ticks and external trigger() calls funnel into
- * the same debounced kick, a trigger landing mid-run queues exactly one
+ * the same debounced kick. A trigger that lands mid-run queues exactly one
  * follow-up instead of stacking, and a failed run is logged without killing the
  * loop. Timers never keep the process alive; stop() also cancels a queued
  * follow-up.

@@ -6,9 +6,7 @@ import { Button } from "@/components/ui/button";
 import { desktopBridge, type UpdateState } from "@/lib/desktop";
 import { cn } from "@/lib/utils";
 
-/* DEV showcase override — delete with the /showcase route. The sidebar fills
- * only from the desktop bridge, so outside the shell there is no way to see
- * the pill in place; this lets the showcase stand one up in the real sidebar. */
+/* Lets the showcase preview an update without the desktop bridge. */
 let showcaseVersion: string | null = null;
 const showcaseListeners = new Set<() => void>();
 
@@ -46,22 +44,9 @@ export function useUpdateState(): UpdateState | null {
   return state?.version ? state : null;
 }
 
-/* Versions already announced this launch. An update the user dismissed should
- * not reopen on every remount of the sidebar, but it does come back on the next
- * launch: an install that stays behind is the failure mode worth being pushy
- * about, and the dialog is one Escape away. */
+// Announce each version once per launch.
 const announced = new Set<string>();
 
-/**
- * Sidebar footer CTA for a waiting update. It opens the changelog, where the new
- * version's notes sit above the restart (or, when the shell cannot install the
- * update itself, the download) CTA. Collapses to its icon with the sidebar, on
- * the same md breakpoint as the nav links.
- *
- * It also opens itself the first time each version is seen. Nothing else tells
- * the user they are running an old build, and a pill in a collapsed sidebar is
- * easy to never notice.
- */
 export function UpdatePill({ state, isCollapsed }: { state: UpdateState; isCollapsed: boolean }) {
   const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);

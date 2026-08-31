@@ -13,7 +13,7 @@ const REST_FILL = {
 /**
  * One selectable row in a menu, picker, or choice list: optional leading mark
  * (app icon, account dot), truncated label with an optional muted detail line,
- * and a trailing slot (spinner, hover-revealed glyph — the row is a `group`).
+ * and a trailing slot (spinner, hover-revealed glyph, the row is a `group`).
  * `selected` wears the pale accent tint, the same "chosen" mark as Select.
  */
 export function OptionRow({

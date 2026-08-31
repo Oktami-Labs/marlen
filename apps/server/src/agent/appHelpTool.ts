@@ -13,7 +13,7 @@ export const appHelpTool: AgentTool = tool({
   name: "app_help",
   label: "App help",
   description:
-    `Authoritative documentation for Marlen, the app you run inside. Call it BEFORE answering ` +
+    `Authoritative documentation for Marlene, the app you run inside. Call it BEFORE answering ` +
     `any question about the app itself — what it can do, where a page or setting lives, how a ` +
     `feature behaves (topic "guide"), or which version is running and what changed in an ` +
     `update (topic "changelog") — and answer from what it returns, never from general ` +
@@ -27,7 +27,7 @@ export const appHelpTool: AgentTool = tool({
   },
   execute: async ({ topic }) => {
     if (topic === "guide") {
-      return textResult(`Running version: Marlen v${appVersion}\n\n${prompts.appGuide}`);
+      return textResult(`Running version: Marlene v${appVersion}\n\n${prompts.appGuide}`);
     }
     const language = (await getLanguageSetting()) ?? "de";
     const entries = CHANGELOG.slice(0, CHANGELOG_LIMIT).map(
@@ -39,7 +39,7 @@ export const appHelpTool: AgentTool = tool({
     );
     const omitted = CHANGELOG.length - entries.length;
     return textResult(
-      `Running version: Marlen v${appVersion}\n\n${entries.join("\n\n")}` +
+      `Running version: Marlene v${appVersion}\n\n${entries.join("\n\n")}` +
         (omitted > 0
           ? `\n\n(${omitted} earlier release${omitted === 1 ? "" : "s"} omitted; the full ` +
             `changelog is in the app under Settings → About.)`

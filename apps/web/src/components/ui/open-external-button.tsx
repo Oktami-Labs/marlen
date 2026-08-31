@@ -3,7 +3,7 @@ import { Button, type ButtonProps } from "@/components/ui/button";
 import { openExternal } from "@/lib/utils";
 
 /**
- * Ghost icon button that opens a URL outside the app — the one
+ * Ghost icon button that opens a URL outside the app, the one
  * open-in-provider affordance on cards, rows, and tiles.
  */
 export function OpenExternalButton({

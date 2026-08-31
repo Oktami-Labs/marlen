@@ -3,12 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-/**
- * The agent home through its public seams: a real boot init against scratch
- * folders (the skills migration is where a regression would destroy user
- * data), then the skills API on a real Fastify app.
- */
-
 let home: typeof import("../../src/storage/home/agentHome.js");
 let appModule: typeof import("../../src/app.js");
 let app: Awaited<ReturnType<typeof appModule.buildApp>>;
@@ -36,7 +30,7 @@ afterAll(async () => {
 });
 
 describe("agent home", () => {
-  it("migrates a legacy skills folder into the home, converting to frontmatter", async () => {
+  it("folds a legacy skills folder into the wiki as a skill page", async () => {
     await writeFile(
       join(legacySkills, "reply-fast.md"),
       "Antwortet knapp auf Terminanfragen\n\nSchreibe zwei Sätze, bestätige den Termin.\n",
@@ -44,17 +38,18 @@ describe("agent home", () => {
     );
     await home.initAgentHome();
 
-    const migrated = await readFile(join(home.skillsDir(), "reply-fast.md"), "utf8");
-    expect(migrated).toBe(
-      "---\ndescription: Antwortet knapp auf Terminanfragen\n---\n\nSchreibe zwei Sätze, bestätige den Termin.\n",
+    const migrated = await readFile(join(home.wikiDir(), "reply-fast.md"), "utf8");
+    expect(migrated).toContain("type: skill");
+    expect(migrated).toContain(
+      "Antwortet knapp auf Terminanfragen\n\nSchreibe zwei Sätze, bestätige den Termin.\n",
     );
     // The source folder is gone; a second init is a no-op on the steady state.
     await expect(readdir(legacySkills)).rejects.toThrow();
     await home.initAgentHome();
-    expect(await readFile(join(home.skillsDir(), "reply-fast.md"), "utf8")).toBe(migrated);
+    expect(await readFile(join(home.wikiDir(), "reply-fast.md"), "utf8")).toBe(migrated);
   });
 
-  it("moves a legacy ~/Trailin home (memory/skills/knowledge) into the current home", async () => {
+  it("folds a legacy ~/Trailin home (memory/skills/knowledge) into the current home", async () => {
     for (const sub of ["memory", "skills", "knowledge"]) {
       await mkdir(join(legacyHome, sub), { recursive: true });
     }
@@ -68,39 +63,60 @@ describe("agent home", () => {
 
     await home.initAgentHome();
 
-    expect(await readFile(join(home.memoryDir(), "greeting.md"), "utf8")).toBe(
-      "Grüßt mit Vornamen.\n",
-    );
-    expect(await readFile(join(home.skillsDir(), "persona.md"), "utf8")).toBe(
-      "---\ndescription: X\n---\n\nY.\n",
-    );
+    // Memory and skill files become wiki pages; a knowledge root file stays a
+    // library document.
+    const greeting = await readFile(join(home.wikiDir(), "greeting.md"), "utf8");
+    expect(greeting).toContain("source: user");
+    expect(greeting.endsWith("Grüßt mit Vornamen.\n")).toBe(true);
+    const persona = await readFile(join(home.wikiDir(), "persona.md"), "utf8");
+    expect(persona).toContain("type: skill");
+    expect(persona.endsWith("X\n\nY.\n")).toBe(true);
     expect(await readFile(join(home.knowledgeDir(), "note.md"), "utf8")).toBe("# Note\n");
     // The legacy home is emptied and removed; a second init is a no-op.
     await expect(readdir(legacyHome)).rejects.toThrow();
     await home.initAgentHome();
   });
 
-  it("round-trips a skill through the API and stores it with frontmatter", async () => {
-    const put = await app.inject({
-      method: "PUT",
-      url: "/api/skills/Follow Up",
+  it("folds knowledge/notes/ into the wiki, path becoming the page name", async () => {
+    const notes = join(home.knowledgeDir(), "notes");
+    await mkdir(join(notes, "kunden"), { recursive: true });
+    await writeFile(
+      join(notes, "kunden", "mueller.md"),
+      "# Müller\n\nZwei Besichtigungen, wartet auf Finanzierung.\n",
+      "utf8",
+    );
+    await home.initAgentHome();
+
+    const page = await readFile(join(home.wikiDir(), "kunden-mueller.md"), "utf8");
+    expect(page).toContain("Zwei Besichtigungen, wartet auf Finanzierung.");
+    // The emptied notes tree is gone.
+    await expect(readdir(notes)).rejects.toThrow();
+    await home.initAgentHome();
+  });
+
+  it("round-trips a skill page through the API and stores it in the wiki", async () => {
+    const post = await app.inject({
+      method: "POST",
+      url: "/api/wiki",
       payload: {
-        description: "Nachfassen bei stillen Leads",
-        instructions: "Frage freundlich nach.",
+        name: "Follow Up",
+        type: "skill",
+        content: "Nachfassen bei stillen Leads.\n\nFrage freundlich nach.",
       },
     });
-    expect(put.statusCode).toBe(200);
+    expect(post.statusCode).toBe(200);
 
-    const list = await app.inject({ method: "GET", url: "/api/skills" });
-    const skills = list.json<{ name: string; description: string }[]>();
-    const followUp = skills.find((s) => s.name === "follow-up");
-    expect(followUp?.description).toBe("Nachfassen bei stillen Leads");
+    const list = await app.inject({ method: "GET", url: "/api/wiki" });
+    const pages = list.json<{ id: string; type: string | null; content: string }[]>();
+    const followUp = pages.find((p) => p.id === "follow-up");
+    expect(followUp?.type).toBe("skill");
+    expect(followUp?.content).toContain("Nachfassen bei stillen Leads.");
 
-    const onDisk = await readFile(join(home.skillsDir(), "follow-up.md"), "utf8");
+    const onDisk = await readFile(join(home.wikiDir(), "follow-up.md"), "utf8");
     expect(onDisk.startsWith("---\n")).toBe(true);
   });
 
-  it("exports a legacy memories table into files and remaps voice ids", async () => {
+  it("exports a legacy memories table into wiki pages and remaps voice ids", async () => {
     const { sqlite } = await import("../../src/db/index.js");
     const settings = await import("../../src/db/settings.js");
     // The shipped base schema step still creates this table on a fresh db;
@@ -132,10 +148,7 @@ describe("agent home", () => {
 
     await home.initAgentHome();
 
-    const file = await readFile(
-      join(home.memoryDir(), "der-vermieter-heißt-herr-maier.md"),
-      "utf8",
-    );
+    const file = await readFile(join(home.wikiDir(), "der-vermieter-heißt-herr-maier.md"), "utf8");
     expect(file).toContain("source: agent");
     expect(file).toContain("account: acc-1");
     expect(file).toContain("usedCount: 3");
@@ -165,7 +178,7 @@ describe("agent home", () => {
   });
 
   it("confines paths to a folder and expands tildes", () => {
-    const dir = home.skillsDir();
+    const dir = home.wikiDir();
     expect(home.resolveWithin(dir, "a.md")).toBe(join(dir, "a.md"));
     expect(home.resolveWithin(dir, ".")).toBe(dir);
     expect(home.resolveWithin(dir, "../outside.md")).toBeNull();

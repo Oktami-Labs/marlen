@@ -5,7 +5,7 @@
  *  1. Source files stay under 800 lines (seed/fixture data exempt).
  *  2. Tests live in apps/server/test/, never colocated in a src/ tree.
  *  3. Provider registration (registerDraftProvider / registerMailReadProvider /
- *     registerAttachmentProvider) is called only from register*.ts files —
+ *     registerAttachmentProvider) is called only from register*.ts files,
  *     never as a module side effect elsewhere.
  *
  * Zero dependencies; runs in <1s. Exits 1 with a list of violations.

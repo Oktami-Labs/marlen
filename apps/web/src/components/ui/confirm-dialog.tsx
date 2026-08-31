@@ -3,7 +3,7 @@ import type * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 
-/** Modal replacement for window.confirm() — used before destructive actions. */
+/** Modal replacement for window.confirm(), used before destructive actions. */
 export function ConfirmDialog({
   open,
   onOpenChange,

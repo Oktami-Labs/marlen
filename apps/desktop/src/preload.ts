@@ -2,11 +2,6 @@ import { contextBridge, ipcRenderer } from "electron";
 import { TITLEBAR_HEIGHT, titleBarMode } from "./titlebar";
 import type { UpdateCheckStatus, UpdateState } from "./updater";
 
-/**
- * window.marlenDesktop — the web app's only view of the shell: the update flow
- * plus the title-bar contract (how the bar was drawn, so the web reserves the
- * matching strip). Mirrored by the DesktopBridge type in apps/web/src/lib/desktop.ts.
- */
 contextBridge.exposeInMainWorld("marlenDesktop", {
   titleBar: titleBarMode(),
   titleBarHeight: TITLEBAR_HEIGHT,

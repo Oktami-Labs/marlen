@@ -13,7 +13,7 @@ type ChoicesData = Extract<AgentCard, { kind: "choices" }>;
  * The agent's clarifying question, answered with one click. Picking a row
  * sends its `reply` (falling back to `label`) as the next chat message via
  * an `answer` chat command, carrying the option's `ref` when it names a
- * specific email — ChatPanel sends it in the SAME conversation, never a new
+ * specific email, ChatPanel sends it in the SAME conversation, never a new
  * one, since this is the answer to a question already asked there.
  */
 export function ChoicesCard({ card, colors }: { card: ChoicesData; colors?: AccountColor[] }) {

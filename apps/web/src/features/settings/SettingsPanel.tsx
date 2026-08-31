@@ -70,14 +70,9 @@ export function SettingsPanel({ onStatusChanged }: { onStatusChanged?: () => voi
     [providers],
   );
 
-  // The chip counts what the section lists: mail and the other Pipedream apps,
-  // plus the two native connections (onOffice, WhatsApp). `emailAccounts` is
-  // the setup gate's narrower question and would undercount here.
   const connectedCount =
     accounts.length + (onOffice?.configured ? 1 : 0) + (whatsApp?.linked ? 1 : 0);
 
-  // Transient outages (Pipedream configured but the account count came back
-  // unknown) show no chip at all — it's not a setup problem worth flagging.
   const accountsChip = (() => {
     if (!status) return null;
     if (!status.pipedreamConfigured) {
@@ -177,9 +172,6 @@ export function SettingsPanel({ onStatusChanged }: { onStatusChanged?: () => voi
   );
 }
 
-/* ---------------- Local data ---------------- */
-
-/** Local database snapshot — everything except connection credentials, which live outside the DB. */
 function BackupRow() {
   const { t } = useTranslation();
   return (
@@ -192,10 +184,6 @@ function BackupRow() {
   );
 }
 
-/* ---------------- Preferences ---------------- */
-
-/** Shared idle/saving/error machine for the auto-saving preference controls:
- *  `run` wraps one persist call, surfacing its failure as the row's error. */
 function useSaveState() {
   const [state, setState] = React.useState<"idle" | "saving" | "error">("idle");
   const [error, setError] = React.useState<string | null>(null);
@@ -213,7 +201,6 @@ function useSaveState() {
   return { state, error, run };
 }
 
-/** Shared row shape for every preference: label + description at left, a Select at right. */
 function PreferenceRow({
   id,
   label,
@@ -275,8 +262,6 @@ function LanguageRow() {
   const { t, i18n } = useTranslation();
   const { state, error, run } = useSaveState();
 
-  // Auto-save like the model picker: persist on change, no Save button. The
-  // server resets agent sessions so the assistant answers in the new language.
   const persist = async (value: string) => {
     if (!isLanguage(value) || value === i18n.language) return;
     await run(async () => {
@@ -316,9 +301,7 @@ function timezoneOffset(tz: string): string {
   }
 }
 
-// Computing an offset per zone (~430 Intl.DateTimeFormat constructions) is too
-// costly for app startup, so the list is built lazily on first Settings render
-// and cached for the session.
+// Build the expensive timezone list only when Settings needs it.
 let timezoneOptionsCache: { value: string; label: string }[] | null = null;
 
 function getTimezoneOptions(): { value: string; label: string }[] {
@@ -343,7 +326,6 @@ function TimezoneRow() {
   const [timezone, setTimezone] = React.useState<string | null>(null);
   const { state, error, run } = useSaveState();
 
-  // A failed read just leaves the browser-zone fallback below in place.
   React.useEffect(() => {
     api
       .timezone()
@@ -351,14 +333,12 @@ function TimezoneRow() {
       .catch(() => {});
   }, []);
 
-  // Fall back to the browser's zone for display until the server answers.
   const fallback = React.useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
   const value = timezone ?? fallback;
 
   const persist = async (next: string) => {
     if (next === value) return;
     await run(async () => {
-      // The server resets agent sessions itself so schedules re-anchor to the new zone.
       const { timezone: saved } = await api.setTimezone(next);
       setTimezone(saved);
     });
@@ -373,7 +353,7 @@ function TimezoneRow() {
       timeZone: value,
     }).format(new Date());
   } catch {
-    // leave blank if the runtime can't resolve this zone
+    // Some runtimes do not know every IANA zone.
   }
 
   const description = localTime
@@ -414,11 +394,6 @@ function QuickActionsRow() {
   );
 }
 
-/**
- * Start with the computer. Only in the desktop app, and only meaningful there:
- * scheduled automations run in the app's own process, so nothing happens on a
- * machine where it was never opened.
- */
 function LaunchAtLoginRow() {
   const { t } = useTranslation();
   const bridge = desktopBridge();
@@ -435,8 +410,6 @@ function LaunchAtLoginRow() {
   if (!bridge || enabled === null) return null;
 
   const toggle = async (next: boolean) => {
-    // The OS is the source of truth: it can refuse (a managed machine), so the
-    // switch shows what it reports back rather than what was asked for.
     setEnabled(next);
     try {
       setEnabled(await bridge.setLaunchAtLogin(next));
@@ -462,8 +435,6 @@ function LaunchAtLoginRow() {
   );
 }
 
-/* ---------------- Model picker ---------------- */
-
 function ModelPicker({
   connectedIds,
   onSaved,
@@ -473,8 +444,6 @@ function ModelPicker({
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  // Shares the ["llm", "model"] cache with the composer's ModelControl, so a
-  // change in either place shows up in both immediately.
   const { data: settings, error: loadError } = useQuery({
     queryKey: ["llm", "model"],
     queryFn: api.modelSettings,
@@ -495,8 +464,6 @@ function ModelPicker({
     return loadError ? <ErrorBanner>{errorMessage(loadError)}</ErrorBanner> : <LoadingRow />;
   }
 
-  // Only offer models from providers you're connected to (but always keep the
-  // active provider selectable so the current value stays valid).
   const connectedSet = new Set(connectedIds);
   const usable = settings.catalog.filter(
     (c) => c.models.length > 0 && (connectedSet.has(c.id) || c.id === settings.provider),
@@ -508,7 +475,6 @@ function ModelPicker({
 
   const activeCatalog = usable.find((c) => c.id === provider);
 
-  // Auto-save: persist as soon as the provider or model changes — no Save button.
   const persist = async (nextProvider: string, nextModel: string) => {
     setProvider(nextProvider);
     setModel(nextModel);

@@ -3,11 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-/**
- * Voice input through the real app: with no STT-capable provider configured,
- * the route answers with a clear 400 instead of reaching any network endpoint.
- */
-
 let appModule: typeof import("../../src/app.js");
 let app: Awaited<ReturnType<typeof appModule.buildApp>>;
 

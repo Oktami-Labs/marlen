@@ -29,8 +29,8 @@ const components: Components = {
     }
 
     if (href?.startsWith("mailto:")) {
-      // Copies the address instead of navigating, so this is a button styled as
-      // a link, not a real anchor — it never leads anywhere.
+      // This copies the address instead of navigating, so it is a button styled
+      // as a link rather than an anchor.
       const email = href.replace("mailto:", "");
       return (
         <button
@@ -129,7 +129,7 @@ const STREAM_SKIP = new Set(["code", "pre"]);
 /**
  * Wraps each word of a streaming message in a `.stream-word` span so newly
  * arrived text fades in. Earlier words keep their positional identity across
- * deltas, so a word animates once, when it first appears — only markdown that
+ * deltas, so a word animates once, when it first appears, only markdown that
  * restructures around the tail (e.g. emphasis closing) replays its words.
  */
 function rehypeStreamWords() {

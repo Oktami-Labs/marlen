@@ -2,7 +2,7 @@ import type { LucideIcon } from "lucide-react";
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 
-/** Icon-circle + title/body placeholder for empty lists — the one shape for "nothing here yet". */
+/** Icon-circle + title/body placeholder for empty lists, the one shape for "nothing here yet". */
 export function EmptyState({
   icon: Icon,
   title,
@@ -18,7 +18,7 @@ export function EmptyState({
   action?: React.ReactNode;
   size?: "default" | "lg";
   /** Draw the raised card behind the state. Turn off when it already sits inside
-   *  a card — the borderless "no card-in-card" rule — leaving a bare, padded block
+   *  a card, the borderless "no card-in-card" rule, leaving a bare, padded block
    *  whose grey tile recesses against the card it lands on. */
   surface?: boolean;
   className?: string;

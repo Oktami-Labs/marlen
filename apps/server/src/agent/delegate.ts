@@ -5,13 +5,13 @@ import { mapWithConcurrency } from "../core/utils/jobs.js";
 import { errorMessage } from "../core/utils/util.js";
 import { automationReadTools } from "./automationTools.js";
 import { buildDelegationCard } from "./cards.js";
-import { buildKnowledgeContext, buildKnowledgeReadTools } from "./knowledgeTools.js";
 import { runOneShot } from "./oneShot.js";
 import { SYSTEM_PROMPT_MAX_CHARS } from "./prompt.js";
 import { prompts } from "./prompts.js";
 import { textResult, tool } from "./toolkit.js";
 import { webFetchTool } from "./webFetchTool.js";
 import { webSearchTool } from "./webSearchTool.js";
+import { buildWikiContext, buildWikiReadTools } from "./wikiTools.js";
 
 /**
  * The fan-out tool: the main agent hands off several independent read-only
@@ -63,10 +63,10 @@ lookup, call the email or web tools directly instead.`,
 
       const systemPrompt =
         prompts.delegateWorker +
-        (await buildKnowledgeContext(SYSTEM_PROMPT_MAX_CHARS - prompts.delegateWorker.length));
+        (await buildWikiContext(SYSTEM_PROMPT_MAX_CHARS - prompts.delegateWorker.length));
       const tools = [
         ...readTools,
-        ...buildKnowledgeReadTools(),
+        ...buildWikiReadTools(),
         ...automationReadTools,
         webSearchTool,
         webFetchTool,

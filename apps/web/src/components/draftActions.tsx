@@ -11,8 +11,8 @@ export type DraftAction = "send" | "discard";
 /**
  * The arm → confirm → execute machinery every surface that sends or discards
  * a draft shares (Home's DraftRow, the chat's EmailDraftCard). The callbacks
- * own their surface's API call and error semantics — inline banner on one,
- * card status/toast on the other — while the hook owns arming, the busy
+ * own their surface's API call and error semantics, inline banner on one,
+ * card status/toast on the other, while the hook owns arming, the busy
  * flag, and closing the dialog afterwards, so the two surfaces cannot drift
  * in how an action is confirmed.
  */

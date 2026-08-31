@@ -2,7 +2,7 @@ import type * as React from "react";
 import { Label } from "@/components/ui/label";
 import { cn } from "@/lib/utils";
 
-/** Label + control + helper/error text — the standard vertical form row. */
+/** Standard vertical form row with label, control, and helper or error text. */
 export function FormField({
   id,
   label,

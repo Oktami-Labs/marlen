@@ -5,15 +5,12 @@
 export type WhatsAppConnection = "off" | "pairing" | "connecting" | "open";
 
 export interface WhatsAppStatus {
-  /** Paired (credentials exist), connected or not. */
   linked: boolean;
   connection: WhatsAppConnection;
   qrDataUrl: string | null;
   phoneNumber: string | null;
   pushName: string | null;
   sendAccess: boolean;
-  /** A WhatsApp Business (Cloud API) account connected through Pipedream —
-   *  the send transport when no personal link exists. `accountId` is the
-   *  Pipedream account, so the row can disconnect it. */
+  /** Business fallback used when no personal account is linked. */
   business: { connected: boolean; name: string | null; accountId: string | null };
 }

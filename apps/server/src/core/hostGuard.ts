@@ -25,7 +25,7 @@ export function isAllowedHost(hostHeader: string | undefined, configuredHost: st
   return lower === configuredHost.toLowerCase();
 }
 
-/** Loopback names, the set shared by the host guard and the CORS origin check. */
+/** Loopback names shared by the host guard and CORS origin check. */
 export function isLoopbackHostname(hostname: string): boolean {
   const lower = hostname.toLowerCase();
   return (

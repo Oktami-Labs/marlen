@@ -2,16 +2,6 @@ import type { OnOfficeStatus, PipedreamStatus, WhatsAppStatus } from "@marlen/sh
 import { expect, openApp, test } from "../src/fixtures.js";
 import { t } from "../src/i18n.js";
 
-/**
- * The integration surfaces, as far as a hermetic run can reach them.
- *
- * Linking an account is by definition a round trip through Pipedream, onOffice
- * or WhatsApp, so what is tested here is everything on this side of that trip:
- * that a rejected credential never half-persists, and that the permission
- * grants — the toggles that decide whether the agent may send or write on the
- * user's behalf — actually reach the server and come back.
- */
-
 async function openConnections(page: import("@playwright/test").Page) {
   await openApp(page, "/settings");
   await expect(
@@ -27,8 +17,6 @@ test("a malformed Pipedream project is rejected without persisting anything", as
 
   await page.getByLabel(t("connections.clientId")).fill("e2e-client-id");
   await page.getByLabel(t("connections.clientSecret")).fill("e2e-client-secret");
-  // Anything without a proj_… id fails validation before any network call, so
-  // this never reaches Pipedream.
   await page.getByLabel(t("connections.project")).fill("not-a-project");
   await page.getByRole("button", { name: t("connections.saveVerify") }).click();
 
@@ -43,8 +31,6 @@ test("a CRM can be connected from the UI without a Pipedream project", async ({
   page,
   request,
 }) => {
-  // onOffice and WhatsApp are native connections that need no Pipedream, and
-  // this list is the only place they are offered.
   await openConnections(page);
   await page.getByRole("button", { name: t("connections.addAccount") }).click();
   await page.getByRole("button", { name: "onOffice" }).click();
@@ -54,7 +40,6 @@ test("a CRM can be connected from the UI without a Pipedream project", async ({
   await page.getByRole("button", { name: t("onoffice.save"), exact: true }).click();
 
   try {
-    // The disconnect action exists only on a connected onOffice row.
     await expect(page.getByRole("button", { name: t("onoffice.removeSaved") })).toBeVisible();
     const status = (await (await request.get("/api/onoffice")).json()) as OnOfficeStatus;
     expect(status.configured).toBe(true);
@@ -71,7 +56,6 @@ test("onOffice credentials round-trip and clear again", async ({ request }) => {
   const saved = (await (await request.get("/api/onoffice")).json()) as OnOfficeStatus;
   expect(saved.configured).toBe(true);
   expect(saved.source).toBe("settings");
-  // Both CRM grants stay off until the user arms them.
   expect(saved.writeAccess).toBe(false);
   expect(saved.automationCreates).toBe(false);
   expect(JSON.stringify(saved), "the secret never leaves the server").not.toContain("e2e-secret");
@@ -117,7 +101,6 @@ test("per-account grants default to read-only and survive a round trip", async (
     { accountId: "e2e-account", write: false, send: true, delete: false },
   ]);
 
-  // An all-false record is dropped rather than stored: absence IS read-only.
   await request.put("/api/settings/permissions", {
     data: { permissions: [{ accountId: "e2e-account", write: false, send: false, delete: false }] },
   });

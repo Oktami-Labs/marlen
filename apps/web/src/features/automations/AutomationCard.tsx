@@ -31,7 +31,7 @@ export function AutomationCard({
   onEdit,
 }: {
   automation: Automation;
-  /** Play the one-shot arrival flash — set when another panel navigated here to this card. */
+  /** Play the one-shot arrival flash, set when another panel navigated here to this card. */
   flash?: boolean;
   onChanged: () => Promise<void>;
   onEdit: () => void;

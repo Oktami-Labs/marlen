@@ -1,8 +1,8 @@
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 
-/** Colored status pill for an automation/activity run — the one status →
- *  variant mapping, shared by the Home activity feed and the Automations
+/** Shared status-to-variant mapping for automation and activity run pills.
+ *  Used by the Home activity feed and Automations
  *  run list. */
 export function RunStatusBadge({ status }: { status: "running" | "success" | "error" }) {
   const { t } = useTranslation();

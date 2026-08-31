@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import {
   createInitialRunState,
   type DisplayMessage,
+  isIdleStale,
   type RunAction,
   reduceRunEvent,
   toDisplayMessage,
@@ -13,15 +14,22 @@ import { subscribeServerEvents } from "@/lib/serverEvents";
 import { toast } from "@/lib/toast";
 import { errorMessage } from "@/lib/utils";
 
-/** Same-device continuity: the conversation to restore on the next load. */
 const LAST_CONVERSATION_KEY = "marlen-last-conversation";
+
+const AWAITING_REPLY: DisplayMessage = {
+  id: "awaiting-reply",
+  role: "assistant",
+  content: "",
+  createdAt: "1970-01-01T00:00:00.000Z",
+  toolCalls: [],
+  cards: [],
+  streaming: true,
+  thinking: true,
+};
 
 export interface UseChatRunsOptions {
   setHistoryOpen: React.Dispatch<React.SetStateAction<boolean>>;
-  /** Called after an async run/open settles, mirroring the composer's own focus timing. */
   onFocusComposer: () => void;
-  /** Mailbox picked in the header chip before a conversation exists; sent with the
-   *  first message so the new conversation (and its first turn) opens focused on it. */
   pendingFocusAccountId?: string | null;
 }
 
@@ -29,42 +37,26 @@ export interface UseChatRunsResult {
   messages: DisplayMessage[];
   busy: boolean;
   restoring: boolean;
+  idleStale: boolean;
   conversationId: string | undefined;
-  /** Streams a real turn — starts one server-side if no conversation is open yet. */
-  send: (message: string, refs?: EmailRef[]) => Promise<void>;
-  /** Ends the running turn; its outcome still arrives over the open stream. */
+  send: (message: string, refs?: EmailRef[]) => Promise<boolean>;
   stop: () => Promise<void>;
   openConversation: (id: string) => Promise<void>;
   newConversation: () => void;
-  /** Appends messages built outside a server run (e.g. /showcase). */
   appendMessages: (messages: DisplayMessage[]) => void;
-  /** Patches one message by id (e.g. the /sys command filling in its result). */
   updateMessage: (id: string, patch: Partial<DisplayMessage>) => void;
-  /** Occupies/releases the busy slot for a local (non-streamed) turn, e.g. /sys. */
   setBusy: (busy: boolean) => void;
 }
 
-/**
- * Owns the live-turn state machine: the active conversation, its message
- * list, and every run (streamed turn) writing to it — including ones for a
- * conversation the panel isn't currently showing. `reduceRunEvent` is the
- * single source of truth for how state changes; this hook only supplies the
- * things a pure reducer can't (ids, the stream/fetch plumbing, localStorage,
- * toasts, and the `conversations-changed` invalidation).
- */
 export function useChatRuns({
   setHistoryOpen,
   onFocusComposer,
   pendingFocusAccountId,
 }: UseChatRunsOptions): UseChatRunsResult {
   const { t } = useTranslation();
-  // Mirrored to a ref so `send` (memoized, not re-created per keystroke) always
-  // reads the latest header pick without widening its dependency list.
   const pendingFocusRef = React.useRef(pendingFocusAccountId);
   pendingFocusRef.current = pendingFocusAccountId;
-  // Mirrors `state` synchronously so a handler can read the freshest value
-  // even before React has re-rendered (e.g. newConversation() immediately
-  // followed by a send() in the same tick, as marlen:send-chat does).
+  // Commands in the same tick must see state before React renders again.
   const stateRef = React.useRef(createInitialRunState());
   const [state, setState] = React.useState(stateRef.current);
 
@@ -74,8 +66,6 @@ export function useChatRuns({
     setState(next);
   }, []);
 
-  // Pick up where this device left off. Text, cards, tool activity and turn
-  // errors are persisted together and restored here.
   React.useEffect(() => {
     const savedId = localStorage.getItem(LAST_CONVERSATION_KEY);
     if (!savedId) {
@@ -83,49 +73,19 @@ export function useChatRuns({
       return;
     }
     let cancelled = false;
-    let unsubscribe: (() => void) | null = null;
     let restored: { conversationId: string; messages: DisplayMessage[] } | null = null;
-
-    // A restored transcript ending in a user message means the reply is still
-    // being produced: turns survive page unloads (routes/chat.ts), so watch
-    // the "conversations" topic and re-pull until the outcome row lands.
-    const awaitReply = () => {
-      const refresh = () => {
-        void api
-          .conversationMessages(savedId)
-          .then((msgs) => {
-            if (cancelled || msgs[msgs.length - 1]?.role !== "assistant") return;
-            const current = stateRef.current;
-            // The user moved on to another conversation — its open flow owns
-            // the state now, and reopening this one fetches fresh anyway.
-            if (current.activeConversationId !== savedId) {
-              unsubscribe?.();
-              return;
-            }
-            // A live local run for this conversation streams its own state.
-            if (Object.values(current.runs).some((run) => run.conversationId === savedId)) return;
-            unsubscribe?.();
-            dispatch({
-              type: "restore",
-              result: { conversationId: savedId, messages: msgs.map(toDisplayMessage) },
-            });
-          })
-          .catch(() => {}); // Transient — the next topic event retries.
-      };
-      unsubscribe = subscribeServerEvents(["conversations"], refresh);
-      // The outcome may have landed between the restore fetch and subscribing.
-      refresh();
-    };
-
     api
       .conversationMessages(savedId)
       .then((msgs) => {
-        if (cancelled || msgs.length === 0) return;
-        restored = { conversationId: savedId, messages: msgs.map(toDisplayMessage) };
-        if (msgs[msgs.length - 1]?.role === "user") awaitReply();
+        if (msgs.length === 0) return;
+        const messages = msgs.map(toDisplayMessage);
+        if (isIdleStale(messages, Date.now())) {
+          localStorage.removeItem(LAST_CONVERSATION_KEY);
+          return;
+        }
+        restored = { conversationId: savedId, messages };
       })
       .catch((err) => {
-        // Unreachable or gone — start fresh, but don't make the failure silent.
         toast.error(err);
       })
       .finally(() => {
@@ -133,17 +93,59 @@ export function useChatRuns({
       });
     return () => {
       cancelled = true;
-      unsubscribe?.();
     };
   }, [dispatch]);
+
+  // Server turns outlive this client, so reload an unfinished transcript on updates.
+  const awaitingReply = state.messages[state.messages.length - 1]?.role === "user";
+  const awaitingId = awaitingReply ? state.activeConversationId : undefined;
+
+  const [now, setNow] = React.useState(() => Date.now());
+  React.useEffect(() => {
+    const tick = () => setNow(Date.now());
+    const id = window.setInterval(tick, 60_000);
+    window.addEventListener("focus", tick);
+    document.addEventListener("visibilitychange", tick);
+    return () => {
+      window.clearInterval(id);
+      window.removeEventListener("focus", tick);
+      document.removeEventListener("visibilitychange", tick);
+    };
+  }, []);
+  const idleStale = !state.busy && !state.resumed && isIdleStale(state.messages, now);
+  React.useEffect(() => {
+    if (!awaitingId) return;
+    let cancelled = false;
+    const refresh = () => {
+      void api
+        .conversationMessages(awaitingId)
+        .then((msgs) => {
+          if (cancelled || msgs[msgs.length - 1]?.role !== "assistant") return;
+          dispatch({
+            type: "open-conversation-loaded",
+            conversationId: awaitingId,
+            messages: msgs.map(toDisplayMessage),
+          });
+        })
+        .catch(() => {}); // The next topic event retries this transient failure.
+    };
+    const unsubscribe = subscribeServerEvents(["conversations"], refresh);
+    refresh();
+    return () => {
+      cancelled = true;
+      unsubscribe();
+    };
+  }, [awaitingId, dispatch]);
 
   const send = React.useCallback(
     async (message: string, refs?: EmailRef[]) => {
       const runId = crypto.randomUUID();
+      const sentAt = new Date().toISOString();
       const userMessage: DisplayMessage = {
         id: crypto.randomUUID(),
         role: "user",
         content: message,
+        createdAt: sentAt,
         toolCalls: [],
         cards: [],
         streaming: false,
@@ -153,39 +155,31 @@ export function useChatRuns({
         id: crypto.randomUUID(),
         role: "assistant",
         content: "",
+        createdAt: sentAt,
         toolCalls: [],
         cards: [],
         streaming: true,
       };
       const conversationIdAtStart = stateRef.current.activeConversationId;
-      // The header pick only seeds a brand-new conversation — an existing one
-      // already owns its focus (moved by the chip's PATCH, @-mentions, or the
-      // agent), which this must never clobber.
+      // An existing conversation owns its focus.
       const focusAccountId = conversationIdAtStart
         ? undefined
         : (pendingFocusRef.current ?? undefined);
       dispatch({ type: "start-run", runId, userMessage, assistantMessage });
 
+      let accepted = false;
       try {
         await streamChat(
           { conversationId: conversationIdAtStart, message, refs, focusAccountId },
           (event) => {
             if (event.type === "conversation") {
-              // Read before dispatching: mirrors the reducer's own "is this run
-              // still the active one" check, so the persisted id matches what
-              // just became visible.
+              accepted = true;
               const wasActive = stateRef.current.activeRunId === runId;
               dispatch({ type: "stream", runId, event });
               if (wasActive) localStorage.setItem(LAST_CONVERSATION_KEY, event.conversationId);
-              // The conversation row is already committed when this stream event
-              // arrives; the history rail refetches via the "conversations" SSE
-              // topic, whose stream is held open for the app's whole lifetime by
-              // the query bridge (lib/query.ts).
               return;
             }
             if (event.type === "error") {
-              // Rate limits toast the plain-language line; the raw provider
-              // error only helps for unclassified failures.
               toast.error(
                 event.kind === "rate_limit" ? t("chat.rateLimited.message") : event.message,
               );
@@ -195,11 +189,16 @@ export function useChatRuns({
         );
       } catch (err) {
         toast.error(err);
-        dispatch({ type: "run-error", runId, message: errorMessage(err) });
+        if (accepted) dispatch({ type: "run-error", runId, message: errorMessage(err) });
       } finally {
-        dispatch({ type: "run-settled", runId });
+        dispatch(
+          accepted
+            ? { type: "run-settled", runId, endedAt: new Date().toISOString() }
+            : { type: "run-rejected", runId },
+        );
         requestAnimationFrame(() => onFocusComposer());
       }
+      return accepted;
     },
     [dispatch, onFocusComposer, t],
   );
@@ -221,8 +220,6 @@ export function useChatRuns({
           conversationId: id,
           messages: msgs.map(toDisplayMessage),
         });
-        // Opening a conversation means continuing it — put the caret where the
-        // user's next message goes (e.g. the Drafts page's refine jump).
         onFocusComposer();
       } catch (err) {
         toast.error(err);
@@ -252,8 +249,6 @@ export function useChatRuns({
     [dispatch],
   );
 
-  /** Ask the server to end the running turn. The open stream delivers the
-   *  outcome as a "stopped" event, so nothing is dispatched here. */
   const stop = React.useCallback(async () => {
     const conversationId = stateRef.current.activeConversationId;
     if (!conversationId) return;
@@ -264,10 +259,16 @@ export function useChatRuns({
     }
   }, []);
 
+  const messages = React.useMemo(
+    () => (awaitingReply ? [...state.messages, AWAITING_REPLY] : state.messages),
+    [state.messages, awaitingReply],
+  );
+
   return {
-    messages: state.messages,
-    busy: state.busy,
+    messages,
+    busy: state.busy || awaitingReply,
     restoring: state.restoring,
+    idleStale,
     conversationId: state.activeConversationId,
     send,
     stop,

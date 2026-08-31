@@ -51,10 +51,8 @@ import { toast } from "@/lib/toast";
 import { stagger, UNASSIGNED_ACCOUNT_COLOR } from "@/lib/utils";
 
 const CONNECT_POLL_INTERVAL_MS = 3000;
-/** Give up watching for a linked account after this long (or at token expiry). */
 const CONNECT_WATCH_TIMEOUT_MS = 10 * 60_000;
 
-/** One selectable app in the picker — a grey listbox row. */
 function PickerRow({
   app,
   busy,
@@ -92,17 +90,11 @@ function PickerSkeleton() {
   );
 }
 
-/**
- * Native connectors are absent from the Pipedream catalog, so the picker
- * matches them here: every whitespace-separated token of the query must be a
- * substring of one of the connector's keywords. An empty query matches.
- */
 function matchesNative(query: string, keywords: string[]): boolean {
   const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
   return tokens.every((token) => keywords.some((keyword) => keyword.includes(token)));
 }
 
-/** A labelled group of picker rows (e.g. "Popular email apps"). */
 function PickerSection({
   heading,
   apps,
@@ -137,11 +129,9 @@ function appLabel(account: ConnectedAccount): string {
     .join(" ");
 }
 
-/** Generates a nice vibrant pastel tone by varying the hue. */
 function generateTonalHex(index: number): string {
-  // Golden angle approximation (137.5) distributes hues nicely around the 360 wheel
+  // The golden angle avoids adjacent colors clustering together.
   const hue = (index * 137.5) % 360;
-  // HSL: 70% saturation, 65% lightness
   const s = 0.7;
   const l = 0.65;
   const a = s * Math.min(l, 1 - l);
@@ -155,10 +145,6 @@ function generateTonalHex(index: number): string {
   return `#${f(0)}${f(8)}${f(4)}`;
 }
 
-/**
- * Connected accounts (any app, several per app) + the Connect-Link picker.
- * Shared between the first-run setup and Settings → Accounts.
- */
 export function Accounts({ onChanged }: { onChanged?: () => void }) {
   const { t } = useTranslation();
   const [accounts, setAccounts] = React.useState<ConnectedAccount[] | null>(null);
@@ -170,25 +156,16 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
   const [confirmId, setConfirmId] = React.useState<string | null>(null);
   const [removing, setRemoving] = React.useState(false);
   const [colors, setColors] = React.useState<AccountColor[]>([]);
-  // Per-account permission grants; an account without a record is read-only.
-  // null until the grant set is known. A write merges into this set and the
-  // server stores the result wholesale, so persisting against a set we never
-  // loaded would silently revoke every other account's grants.
+  // Never persist permissions before loading the complete grant set.
   const [permissions, setPermissions] = React.useState<AccountPermissions[] | null>(null);
   const [permissionsAccountId, setPermissionsAccountId] = React.useState<string | null>(null);
   const [onOfficePermsOpen, setOnOfficePermsOpen] = React.useState(false);
-  // onOffice is a native (non-Pipedream) CRM connection surfaced in the same
-  // picker and accounts list; it authenticates with a token + secret, so its
-  // picker entry opens the credential form instead of the Connect popup.
   const { status: onOffice, refresh: refreshOnOffice } = useOnOfficeStatus();
   const [onOfficeFormOpen, setOnOfficeFormOpen] = React.useState(false);
-  // WhatsApp is a native personal-account link paired by QR scan, so its
-  // picker entry opens the pairing card instead of the Connect popup.
   const { status: whatsApp, refresh: refreshWhatsApp } = useWhatsAppStatus();
   const [whatsAppPairingOpen, setWhatsAppPairingOpen] = React.useState(false);
   const [whatsAppPermsOpen, setWhatsAppPermsOpen] = React.useState(false);
 
-  // Debounced catalog search; empty query shows the e-mail suggestions.
   React.useEffect(() => {
     if (!pickerOpen) return;
     const q = query.trim();
@@ -214,9 +191,6 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
       setAccounts(next);
       return next;
     } catch (err) {
-      // No Pipedream project is a state, not a failure: onOffice and WhatsApp
-      // are native connections that work without one, and this list is where
-      // they live.
       if (isPipedreamMissing(err)) {
         setAccounts([]);
         return [];
@@ -236,7 +210,6 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
     }
   }, []);
 
-  // Auto-assign nice tonal colors for accounts that don't have one yet.
   const ensureColors = React.useCallback(
     async (accts: ConnectedAccount[], existing: AccountColor[]) => {
       const missing = accts.filter((a) => !existing.some((c) => c.accountId === a.id));
@@ -254,9 +227,7 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
       setColors(merged);
       try {
         await api.setAccountColors(merged);
-      } catch {
-        // best-effort persist
-      }
+      } catch {}
     },
     [],
   );
@@ -274,8 +245,6 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
     permissions?.find((p) => p.accountId === accountId) ?? READ_ONLY_GRANTS;
 
   const persistPermissions = async (accountId: string, next: PermissionGrants) => {
-    // Refuses rather than writing a set built on an unknown baseline; the
-    // editor surfaces the throw as a toast and leaves the switch untouched.
     if (!permissions) throw new Error(t("connections.permissions.notLoaded"));
     const merged = [
       ...permissions.filter((p) => p.accountId !== accountId),
@@ -292,14 +261,10 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
     });
   }, [load, loadColors, loadPermissions, ensureColors]);
 
-  // Stops the completion watch of the current connect attempt, if any.
   const stopWatchRef = React.useRef<(() => void) | null>(null);
   React.useEffect(() => () => stopWatchRef.current?.(), []);
 
-  // The Connect Link finishes in an external browser tab, which can't signal
-  // back — so watch the account list (each fetch is live from Pipedream)
-  // until an account not in priorIds appears, then finish up like a
-  // successful in-app connect: colors, voice learning, onChanged.
+  // The external connect page cannot signal back, so poll for the new account.
   const watchForNewAccount = (priorIds: Set<string>, expiresAt: string) => {
     stopWatchRef.current?.();
     let stopped = false;
@@ -316,7 +281,6 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
       while (!stopped && Date.now() < deadline) {
         await new Promise((r) => setTimeout(r, CONNECT_POLL_INTERVAL_MS));
         if (stopped) return;
-        // Silent fetch: a transient Pipedream error must not toast every tick.
         const next = await api.pipedreamAccounts().catch(() => null);
         if (!next) continue;
         setAccounts(next);
@@ -324,12 +288,7 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
         if (!added) continue;
         stopWatchRef.current = null;
         setConnecting(false);
-        // The new account has no color yet — assign one against the latest
-        // saved colors rather than waiting for a remount to pick it up.
         void loadColors().then((saved) => ensureColors(next, saved));
-        // Start voice learning for a freshly linked email account right
-        // away — no consent step. Should this trigger get lost, the
-        // server's boot reconcile pass picks the account up.
         if (isEmailApp(added.app)) {
           void api
             .learnAccountVoice(added.id)
@@ -348,14 +307,10 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
 
   const connect = async (app: string) => {
     setBusy(app);
-    // Account ids present before this link, so the watch can single out the
-    // one that gets added.
     const priorIds = new Set((accounts ?? []).map((a) => a.id));
     try {
       const token = await api.pipedreamConnectToken(app);
-      // The Connect Link must open in the user's own browser (the desktop
-      // shell routes window.open there): that's where their Pipedream and
-      // provider sessions live, an embedded window has neither.
+      // Provider sessions live in the user's browser, not the desktop webview.
       window.open(token.connectLinkUrl, "_blank", "noopener");
       setPickerOpen(false);
       setQuery("");
@@ -382,12 +337,7 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
     }
   };
 
-  // react-colorful fires onChange on every pointer-move tick while dragging, and
-  // the hex input fires on every keystroke — persisting each one issues dozens of
-  // concurrent POSTs whose responses can land out of order. Debounce the persist
-  // (the swatch itself still updates immediately via setColors below) and replay
-  // it once more if a newer color arrived while a write was in flight, so the
-  // last color the user picked is always the one that ends up saved.
+  // Serialize debounced color writes so an older response cannot win.
   const colorPersistRef = React.useRef<{
     timer: ReturnType<typeof setTimeout> | null;
     saving: boolean;
@@ -424,10 +374,7 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
     }, 300);
   };
 
-  // Account data changed server-side (connect, removal, recolor, permission
-  // edit — possibly from another surface): re-pull everything. Colors are
-  // skipped while a local color edit is still persisting; the debounced flush
-  // above stays authoritative for what it is about to save.
+  // Keep local color edits authoritative until their write settles.
   useServerEvents(["accounts"], () => {
     void loadPermissions();
     const colorState = colorPersistRef.current;
@@ -441,14 +388,9 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
   const colorFor = (accountId: string): AccountColor | undefined =>
     colors.find((c) => c.accountId === accountId);
 
-  // Split the pre-search suggestions into "email apps" and "everything else",
-  // so the picker shows email providers plus a taste of the wider catalog.
   const emailResults = (results ?? []).filter((a) => isEmailApp(a.slug));
   const moreResults = (results ?? []).filter((a) => !isEmailApp(a.slug));
 
-  // Connected accounts grouped by app, one overline heading per provider;
-  // insertion order follows the accounts list, so groups appear in
-  // first-connected order.
   const accountGroups = (() => {
     const byApp = new Map<string, ConnectedAccount[]>();
     for (const account of accounts ?? []) {
@@ -460,8 +402,6 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
     return [...byApp.entries()];
   })();
 
-  // Offer onOffice in the picker only until it's connected — after that it's
-  // managed through its connected row below.
   const showOnOfficePick =
     onOffice !== null &&
     !onOffice.configured &&
@@ -473,7 +413,6 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
     setOnOfficeFormOpen(true);
   };
 
-  // Same footing for WhatsApp: offered in the picker only until it's linked.
   const showWhatsAppPick =
     whatsApp !== null &&
     !whatsApp.linked &&

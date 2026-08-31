@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 
-// Borderless filled control — see `.field` in index.css.
+// Borderless filled control, see `.field` in index.css.
 // ComponentPropsWithRef, not InputHTMLAttributes: React 19 passes `ref` through
 // as a plain prop, and callers need it to drive focus.
 export function Input({ className, type, ...props }: React.ComponentPropsWithRef<"input">) {

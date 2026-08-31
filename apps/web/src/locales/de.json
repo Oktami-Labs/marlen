@@ -7,16 +7,16 @@
     "expandChat": "Chat ausklappen",
     "collapseChat": "Chat einklappen",
     "updateAvailable": "Update bereit",
-    "updateRestart": "Marlen neu starten & aktualisieren",
+    "updateRestart": "Marlene neu starten & aktualisieren",
     "updateWaiting": "Update verfügbar",
     "updateDownload": "Update herunterladen",
     "updateManualHint": "Diese Version kann sich nicht selbst aktualisieren."
   },
   "desktop": {
     "tray": {
-      "open": "Marlen öffnen",
-      "quit": "Marlen beenden",
-      "background": "Marlen läuft weiter und führt Ihre Automatisierungen aus. Beenden können Sie die App über das Symbol im Infobereich.",
+      "open": "Marlene öffnen",
+      "quit": "Marlene beenden",
+      "background": "Marlene läuft weiter und führt Ihre Automatisierungen aus. Beenden können Sie die App über das Symbol im Infobereich.",
       "waiting_one": "{{count}} Entwurf wartet auf Freigabe",
       "waiting_other": "{{count}} Entwürfe warten auf Freigabe"
     }
@@ -24,7 +24,7 @@
   "changelog": {
     "open": "Changelog",
     "title": "Neuigkeiten",
-    "subtitle": "Was sich in Marlen zuletzt verbessert hat",
+    "subtitle": "Was sich in Marlene zuletzt verbessert hat",
     "version": "Version {{version}}",
     "current": "Installiert",
     "ready": "Bereit"
@@ -48,7 +48,7 @@
     },
     "knowledge": {
       "title": "Wissen",
-      "description": "Notizen kennt Ihr Assistent in jedem Gespräch, Dokumente schlägt er bei Bedarf nach."
+      "description": "Die Zusammenfassungen seiner Wiki-Seiten kennt Ihr Assistent in jedem Gespräch, Dokumente schlägt er bei Bedarf nach."
     },
     "settings": {
       "title": "Einstellungen",
@@ -101,8 +101,9 @@
     "placeholder": "Ihren Assistenten fragen…",
     "send": "Nachricht senden",
     "stop": "Antwort stoppen",
+    "jumpToLatest": "Zur neuesten Nachricht springen",
     "resize": "Breite des Chat-Bereichs anpassen",
-    "searchPlaceholder": "Unterhaltungen durchsuchen…",
+    "searchPlaceholder": "Unterhaltungen",
     "noSearchResults": "Keine Treffer.",
     "collapseHistory": "Verlauf einklappen",
     "showHistory": "Verlauf anzeigen",
@@ -113,6 +114,9 @@
     "groupThisWeek": "Diese Woche",
     "groupEarlier": "Früher",
     "loadMore": "Mehr laden",
+    "runsMore_one": "1 älteren Lauf anzeigen",
+    "runsMore_other": "{{count}} ältere Läufe anzeigen",
+    "runsLess": "Weniger anzeigen",
     "rename": "Umbenennen",
     "delete": "Löschen",
     "deleteConfirmTitle": "Diese Unterhaltung löschen?",
@@ -130,6 +134,16 @@
       "copy": "Kopieren",
       "copied": "Kopiert"
     },
+    "message": {
+      "copy": "Antwort kopieren",
+      "copied": "Kopiert",
+      "retry": "Nachricht erneut senden",
+      "continue": "Weiterschreiben",
+      "continuePrompt": "Schreib die abgebrochene Antwort weiter, dort wo du aufgehört hast.",
+      "stopped": "Gestoppt",
+      "regenerate": "Mit anderem Modell neu beantworten",
+      "regenerateWith": "Neu beantworten mit"
+    },
     "refs": {
       "remove": "{{label}} entfernen"
     },
@@ -138,7 +152,7 @@
       "stop": "Aufnahme umwandeln",
       "discard": "Aufnahme verwerfen",
       "transcribing": "Wird umgewandelt…",
-      "micBlocked": "Das Mikrofon ist blockiert. Erlauben Sie den Zugriff für Marlen in den Systemeinstellungen und versuchen Sie es erneut.",
+      "micBlocked": "Das Mikrofon ist blockiert. Erlauben Sie den Zugriff für Marlene in den Systemeinstellungen und versuchen Sie es erneut.",
       "setupTitle": "Diktieren braucht einen Sprachanbieter",
       "setupBody": "Hinterlegen Sie einen API-Schlüssel für einen dieser Anbieter, dann landet Ihre Aufnahme als Text im Eingabefeld. Die Sprach-API von Groq hat ein kostenloses Kontingent.",
       "freeTier": "Kostenlos",
@@ -153,8 +167,9 @@
       "noValue": "Nicht verfügbar",
       "steps_one": "{{count}} Schritt",
       "steps_other": "{{count}} Schritte",
-      "stepsFailed_one": "{{count}} fehlgeschlagen",
-      "stepsFailed_other": "{{count}} fehlgeschlagen"
+      "attempt": "Versuch {{n}}",
+      "retry": "Diesen Aufruf erneut versuchen",
+      "retryPrompt": "Der Aufruf „{{tool}}“ ist fehlgeschlagen. Versuche genau diesen Aufruf noch einmal und mach dann weiter."
     },
     "focus": {
       "allAccounts": "Alle Konten",
@@ -180,9 +195,6 @@
       },
       "draft": {
         "badge": "Entwurf",
-        "to": "An:",
-        "cc": "Cc:",
-        "bcc": "Bcc:",
         "open": "Im Postfach öffnen",
         "send": "Senden",
         "sendConfirm": "Diesen Entwurf jetzt senden? Er geht genau so raus, wie er dasteht.",
@@ -240,12 +252,33 @@
         },
         "rolledUp_one": "Zusammengefasst · {{count}} Nachricht",
         "rolledUp_other": "Zusammengefasst · {{count}} Nachrichten"
+      },
+      "sources": {
+        "badge": "Quellen",
+        "open": "Quelle öffnen"
+      },
+      "wikiNote": {
+        "saved": "Gemerkt",
+        "updated": "Aktualisiert",
+        "discarded": "Verworfen",
+        "discard": "Aus dem Wissen entfernen",
+        "discardTitle": "Diesen Eintrag verwerfen?",
+        "changes": "{{added}} neu, {{removed}} entfernt"
+      },
+      "form": {
+        "badge": "Angaben",
+        "submit": "Absenden",
+        "sent": "Gesendet"
       }
     },
     "showcase": {
       "intro": "Hier sehen Sie alles, was ich im Chat zeigen kann: Tool-Aktivität, jede Kartenart, eine formatierte Antwort und den Denk-Zustand.",
       "toolsNote": "Jedes Tool zeigt sich einzeln: fertig, noch aktiv oder fehlgeschlagen.",
-      "toolsDone": "Nach einem längeren Lauf falten sich die fertigen Schritte zu einer Zeile zusammen:"
+      "toolsDone": "Nach einem längeren Lauf falten sich die fertigen Schritte zu einer Zeile zusammen:",
+      "stoppedNote": "Ein Aufruf kann fehlschlagen und eine Antwort gestoppt werden. Beides bleibt sichtbar, samt Weg zurück:",
+      "sourcesNote": "Was eine Web-Antwort trägt, steht als Quellenliste bei der Antwort:",
+      "savedNote": "Was ich mir merke, sehen Sie sofort, samt Änderungen an einer bestehenden Seite:",
+      "formNote": "Fehlen mehrere Angaben, frage ich sie in einem Rutsch ab:"
     },
     "attachmentViewer": {
       "openInBrowser": "Im Browser öffnen",
@@ -270,14 +303,46 @@
       "used": "{{pct}} % verbraucht",
       "contextTitle": "Chat-Kontext",
       "contextTokens": "≈{{used}}k von {{total}}k Tokens",
-      "buttonLabel": "KI-Modell und Kontingent"
-    }
+      "buttonLabel": "KI-Modell und Kontingent",
+      "contextConversation": "Unterhaltung",
+      "contextInstructions": "Anweisungen",
+      "contextTools": "Werkzeuge",
+      "contextSkills": "Skills",
+      "contextFree": "Frei",
+      "contextKnowledge": "Wissen"
+    },
+    "queue": {
+      "waiting_one": "{{count}} Nachricht wartet",
+      "waiting_other": "{{count}} Nachrichten warten",
+      "cancel": "Aus der Warteschlange nehmen",
+      "send": "Nach der laufenden Antwort senden",
+      "edit": "Nachricht bearbeiten"
+    },
+    "search": {
+      "open": "In dieser Unterhaltung suchen",
+      "placeholder": "In dieser Unterhaltung suchen…",
+      "next": "Nächster Treffer",
+      "previous": "Vorheriger Treffer",
+      "close": "Suche schließen",
+      "noHits": "Keine Treffer"
+    },
+    "slash": {
+      "skill": "Skill",
+      "automation": "Automatisierung",
+      "builtin": "Befehl",
+      "skillPrompt": "Folge dem Skill „{{name}}“: ",
+      "automationStarted": "„{{name}}“ läuft.",
+      "new": "Neue Unterhaltung",
+      "systemPrompt": "System-Prompt zeigen"
+    },
+    "quote": "Zitieren",
+    "offline": "Keine Verbindung zum Server. Der Bildschirm aktualisiert sich gerade nicht, laufende Antworten laufen weiter."
   },
   "search": {
     "openButton": "Suchen",
     "title": "Suche",
-    "placeholder": "Chats, Briefings, Entwürfe, Dokumente und Notizen durchsuchen…",
-    "hint": "Durchsuchen Sie Ihre Chats, Briefings, Entwürfe, Dokumente und Notizen.",
+    "placeholder": "Chats, Briefings, Entwürfe, Dokumente und Wiki durchsuchen…",
+    "hint": "Durchsuchen Sie Ihre Chats, Briefings, Entwürfe, Dokumente und Wiki-Seiten.",
     "shortcuts": "Direkt zu",
     "noResults": "Keine Ergebnisse für „{{q}}“.",
     "noResultsHint": "Schreibweise prüfen oder ein kürzeres Wort versuchen.",
@@ -289,7 +354,7 @@
       "chat": "Chats",
       "draft": "Entwürfe",
       "document": "Dokumente",
-      "memory": "Notizen"
+      "wiki": "Wiki"
     }
   },
   "whatsapp": {
@@ -325,7 +390,7 @@
   "connections": {
     "customToggle": "Eigenes Pipedream-Projekt verwenden",
     "customToggleOn": "E-Mail läuft über das unten konfigurierte Pipedream-Projekt.",
-    "builtinInUse": "E-Mail läuft über das eingebaute Pipedream von Marlen.",
+    "builtinInUse": "E-Mail läuft über das eingebaute Pipedream von Marlene.",
     "builtinMissing": "Diese Version hat kein eingebautes Pipedream. Schalten Sie das hier ein und tragen Sie unten Ihre eigenen Zugangsdaten ein.",
     "addAccount": "Neues Konto hinzufügen",
     "searchProviders": "Alle Apps durchsuchen… (Gmail, Zoho, IMAP, Notion, …)",
@@ -335,8 +400,8 @@
     "crmHeading": "CRM",
     "messagingHeading": "Messaging",
     "anyAppHint": "Das sind nur einige. Suchen Sie oben, dann finden Sie über 2.000 Apps, von anderen Mail-Diensten über Kalender und Notizen bis Chat.",
-    "setupTitle": "Einmalige Einrichtung: Marlen mit Pipedream verbinden",
-    "setupIntro": "Marlen verbindet Ihre E-Mail-Konten über <pd>Pipedream</pd>, einen kostenlosen Dienst. Verbinden Sie so viele Konten, wie Sie wollen, auch mehrere vom selben Anbieter. Dafür brauchen Sie drei Werte aus Ihrem Pipedream-Workspace:",
+    "setupTitle": "Einmalige Einrichtung: Marlene mit Pipedream verbinden",
+    "setupIntro": "Marlene verbindet Ihre E-Mail-Konten über <pd>Pipedream</pd>, einen kostenlosen Dienst. Verbinden Sie so viele Konten, wie Sie wollen, auch mehrere vom selben Anbieter. Dafür brauchen Sie drei Werte aus Ihrem Pipedream-Workspace:",
     "setupStep1": "Erstellen Sie ein kostenloses Pipedream-Konto.",
     "setupStep2": "Erstellen Sie unter Settings → API einen OAuth-Client und tragen Sie dessen Client ID und Client Secret unten ein.",
     "setupStep3": "Erstellen Sie ein Projekt (Name beliebig) und tragen Sie unten dessen URL oder die proj_…-ID ein.",
@@ -450,7 +515,7 @@
     "voiceLearnRetry": "Schreibstil erneut lernen"
   },
   "home": {
-    "setupBanner": "Marlen ist noch nicht fertig eingerichtet. Der Assistent erreicht Ihre E-Mails noch nicht.",
+    "setupBanner": "Marlene ist noch nicht fertig eingerichtet. Der Assistent erreicht Ihre E-Mails noch nicht.",
     "setupBannerCta": "Einrichtung abschließen",
     "offlineBanner": "Ihr E-Mail-Anbieter ist gerade nicht erreichbar. Prüfen Sie Ihre Verbindung.",
     "missedBanner_one": "1 Automatisierung lief nicht, während die App geschlossen war.",
@@ -523,8 +588,6 @@
   },
   "drafts": {
     "noSubject": "(kein Betreff)",
-    "to": "An:",
-    "cc": "Cc:",
     "open": "Im Postfach öffnen",
     "discard": "Entwurf verwerfen",
     "discardConfirm": "Diesen Entwurf verwerfen? Er wird aus Ihrem Mail-Konto entfernt.",
@@ -533,18 +596,28 @@
     "sent": "Gesendet",
     "sentToast": "Entwurf gesendet.",
     "emptyBodyText": "(leerer Inhalt)",
-    "subject": "Betreff",
     "refine": "Mit KI überarbeiten",
     "refineInChat": "Im zugehörigen Chat überarbeiten",
     "refinePrompt": "Bitte überarbeite den Entwurf „{{subject}}“",
     "save": "Speichern"
   },
+  "mail": {
+    "to": "An:",
+    "cc": "Cc:",
+    "bcc": "Bcc:",
+    "subject": "Betreff:",
+    "me": "mich"
+  },
+  "emailBody": {
+    "title": "Nachricht",
+    "imagesBlocked": "Externe Bilder sind blockiert.",
+    "loadImages": "Bilder laden",
+    "showQuoted": "Zitierten Text anzeigen"
+  },
   "threadHistory": {
     "show": "Frühere Nachrichten anzeigen",
     "hide": "Frühere Nachrichten ausblenden",
     "empty": "Keine früheren Nachrichten in dieser Konversation.",
-    "to": "An:",
-    "cc": "Cc:",
     "emptyBody": "(leere Nachricht)"
   },
   "automations": {
@@ -683,7 +756,7 @@
     },
     "folders": "Ordner",
     "breadcrumbs": "Pfad",
-    "searchPlaceholder": "Dateien durchsuchen",
+    "searchPlaceholder": "Dateien",
     "sortLabel": "Sortieren nach",
     "sort": {
       "name": "Name",
@@ -722,14 +795,12 @@
       "save": "Speichern",
       "scope": "Gilt für",
       "general": "Allgemein",
-      "memoryHint": "Notizen sind das Gedächtnis des Assistenten: Dieser Text steht ihm in jedem Gespräch zur Verfügung (im System-Prompt).",
-      "descriptionPlaceholder": "Kurzbeschreibung des Skills",
+      "pageHint": "Seiten sind das Gedächtnis des Assistenten: Der erste Absatz ist die Zusammenfassung, die er in jedem Gespräch dabei hat. Alles nach einer Leerzeile bleibt auf der Festplatte und wird bei Bedarf gelesen.",
       "new": "Neu",
       "newTitle": "Neue Datei",
       "namePlaceholder": "Dateiname",
       "kinds": {
-        "note": "Vermerk",
-        "memory": "Notiz",
+        "page": "Seite",
         "skill": "Skill",
         "folder": "Ordner"
       }
@@ -740,22 +811,22 @@
     "selectAll": "Alle auswählen"
   },
   "setup": {
-    "title": "Willkommen bei Marlen",
+    "title": "Willkommen bei Marlene",
     "intro": "Ihre E-Mails, erledigt von einem Assistenten, mit dem Sie sprechen können. Zwei Schritte, dann sind Sie drin:",
     "stepAiTitle": "Bei Ihrer KI anmelden",
     "stepAiDescription": "Nutzen Sie ein vorhandenes Abo (Claude, Copilot, ChatGPT) oder fügen Sie einen API-Schlüssel ein. Ihre Anmeldung bleibt auf diesem Computer.",
     "aiDone": "Angemeldet, verwendet {{model}}.",
     "stepEmailTitle": "E-Mail-Konto verbinden",
     "stepEmailDescription": "Verbinden Sie Gmail oder Outlook, damit der Assistent Ihre Post sehen kann. Weitere Konten können Sie später hinzufügen.",
-    "pipedreamMissingBody": "Diese Version hat keine eingebaute E-Mail-Brücke. Marlen verbindet sich stattdessen über Ihr eigenes kostenloses Pipedream-Projekt. Einmal hier einrichten, dann Konten verbinden:",
+    "pipedreamMissingBody": "Diese Version hat keine eingebaute E-Mail-Brücke. Marlene verbindet sich stattdessen über Ihr eigenes kostenloses Pipedream-Projekt. Einmal hier einrichten, dann Konten verbinden:",
     "advancedLink": "Erweitert: eigenes Pipedream-Projekt verwenden",
     "allSetTitle": "Alles bereit",
     "allSetBody": "Der Assistent kann jetzt Ihre Post lesen, Antworten entwerfen und Ihre Fragen beantworten.",
-    "allSetReadOnly": "Marlen startet schreibgeschützt: Der Assistent entwirft und antwortet, sendet und löscht aber nichts. Das erlauben Sie je Konto über das Schild-Symbol in den Einstellungen.",
-    "openApp": "Marlen öffnen",
+    "allSetReadOnly": "Marlene startet schreibgeschützt: Der Assistent entwirft und antwortet, sendet und löscht aber nichts. Das erlauben Sie je Konto über das Schild-Symbol in den Einstellungen.",
+    "openApp": "Marlene öffnen",
     "skip": "Später, ich sehe mich erst um",
     "offlineTitle": "Server nicht erreichbar",
-    "offlineBody": "Die Verbindung zum Marlen-Server wird alle paar Sekunden geprüft. Es geht von selbst weiter, sobald er wieder da ist."
+    "offlineBody": "Die Verbindung zum Marlene-Server wird alle paar Sekunden geprüft. Es geht von selbst weiter, sobald er wieder da ist."
   },
   "settings": {
     "sections": {
@@ -775,14 +846,14 @@
       },
       "preferences": {
         "title": "Darstellung & Sprache",
-        "description": "Wie Marlen aussieht, spricht und die Uhrzeit anzeigt."
+        "description": "Wie Marlene aussieht, spricht und die Uhrzeit anzeigt."
       },
       "data": {
         "title": "Lokale Daten",
-        "description": "Alles, was Marlen auf diesem Computer gespeichert hat, und wie Sie es sichern."
+        "description": "Alles, was Marlene auf diesem Computer gespeichert hat, und wie Sie es sichern."
       },
       "about": {
-        "title": "Über Marlen",
+        "title": "Über Marlene",
         "description": "Welche Version Sie verwenden, und Updates, sobald eine neuere erscheint."
       },
       "language": {
@@ -810,11 +881,11 @@
     },
     "launchAtLogin": {
       "label": "Mit dem Computer starten",
-      "description": "Marlen startet beim Anmelden im Hintergrund, damit geplante Automatisierungen laufen, ohne dass Sie die App vorher öffnen."
+      "description": "Marlene startet beim Anmelden im Hintergrund, damit geplante Automatisierungen laufen, ohne dass Sie die App vorher öffnen."
     },
     "backup": {
       "label": "Sicherung",
-      "description": "Ein Abbild der lokalen Datenbank: Chats, Entwürfe, Notizen und Automatisierungen. Die Zugangsdaten Ihrer Konten sind nicht dabei.",
+      "description": "Ein Abbild der lokalen Datenbank: Chats, Entwürfe, Wiki-Seiten und Automatisierungen. Die Zugangsdaten Ihrer Konten sind nicht dabei.",
       "cta": "Herunterladen"
     },
     "about": {
@@ -859,13 +930,13 @@
     "loginInputPlaceholder": "Code / Weiterleitungs-URL einfügen, falls der Vorgang nicht automatisch abschließt…",
     "fileAccess": {
       "title": "Dateizugriff",
-      "description": "Was der Assistent mit Dateien außerhalb seines Marlen-Ordners darf. In seinen eigenen Ordner (Notizen, Skills, Bibliothek) kommt er immer.",
+      "description": "Was der Assistent mit Dateien außerhalb seines Marlene-Ordners darf. In seinen eigenen Ordner (Wiki, Bibliothek) kommt er immer.",
       "chipOff": "Kein Zugriff",
       "read": {
         "title": "Dateien lesen",
         "badge": "Lesen",
         "on": "Darf Ordner auflisten, Dateien finden, Inhalte durchsuchen (grep) und lesen, wenn Sie es sagen.",
-        "off": "Kann nur Dateien in seinem eigenen Marlen-Ordner lesen.",
+        "off": "Kann nur Dateien in seinem eigenen Marlene-Ordner lesen.",
         "confirmTitle": "Der KI das Lesen von Dateien erlauben?",
         "confirmBody": "Der Assistent darf dann überall auf diesem Computer Ordner auflisten, Dateien finden, durchsuchen (grep) und lesen, also Downloads, Dokumente und alles, was Ihr Konto sieht. In E-Mails versteckte Anweisungen könnten ihn auf private Dateien ansetzen. Er gibt Dateiinhalte nie ohne Ihr Okay weiter. Jederzeit abschaltbar.",
         "confirmCta": "Lesen erlauben"
@@ -874,7 +945,7 @@
         "title": "Dateien schreiben",
         "badge": "Schreiben",
         "on": "Darf neue Dateien anlegen (write) und bestehende bearbeiten (edit), wenn Sie es sagen.",
-        "off": "Kann nur Dateien in seinem eigenen Marlen-Ordner anlegen und ändern.",
+        "off": "Kann nur Dateien in seinem eigenen Marlene-Ordner anlegen und ändern.",
         "confirmTitle": "Der KI das Schreiben von Dateien erlauben?",
         "confirmBody": "Der Assistent darf dann überall auf diesem Computer neue Dateien anlegen (write) und bestehende bearbeiten (edit). In E-Mails versteckte Anweisungen könnten ungewollte Änderungen anstoßen. Jederzeit abschaltbar.",
         "confirmCta": "Schreiben erlauben"
@@ -910,7 +981,7 @@
   },
   "notFound": {
     "title": "Diese Seite gibt es nicht",
-    "description": "Diese Adresse gehört nicht zu Marlen. Ein alter Link oder Bookmark kann hier landen.",
+    "description": "Diese Adresse gehört nicht zu Marlene. Ein alter Link oder Bookmark kann hier landen.",
     "goHome": "Zur Startseite"
   }
 }

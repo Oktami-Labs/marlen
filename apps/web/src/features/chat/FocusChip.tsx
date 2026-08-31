@@ -14,7 +14,7 @@ import { useAnchoredPopover } from "@/lib/useAnchoredPopover";
 import { cn } from "@/lib/utils";
 
 // The conversations endpoint has no by-id lookup, only the paginated list
-// (routes/chat.ts caps it at 200) — this reads the same page the history
+// (routes/chat.ts caps it at 200), this reads the same page the history
 // rail's first load would, wide enough that the open conversation is
 // virtually always in range by recency.
 const CONVERSATIONS_LOOKUP_LIMIT = 200;
@@ -125,7 +125,7 @@ export function FocusChip({
         }}
         className={cn(
           "min-w-0 max-w-56 disabled:pointer-events-none disabled:opacity-50",
-          // A focus is a quiet status marker, not a filter toggle — override the
+          // A focus is a quiet status marker, not a filter toggle, override the
           // shared Chip's ink fill with a neutral grey so the colored account dot
           // and label carry the state instead of a heavy high-contrast pill.
           hasFocus && "bg-secondary text-foreground hover:bg-secondary",
@@ -141,9 +141,8 @@ export function FocusChip({
 
       {open &&
         createPortal(
-          // Portaled content still bubbles React synthetic events up the
-          // component tree (not the DOM tree) — this wrapper only guards that
-          // propagation, so it isn't itself an interactive element.
+          // Portaled content bubbles React synthetic events through the component
+          // tree. This noninteractive wrapper stops that propagation.
           // biome-ignore lint/a11y/noStaticElementInteractions: propagation guard only, not a control itself
           <div
             ref={popoverRef}
@@ -186,7 +185,7 @@ function FocusOption({
   onClick,
 }: {
   selected: boolean;
-  /** Omitted for the "all accounts" row — the dot falls back to the unassigned grey. */
+  /** Omitted for the "all accounts" row, the dot falls back to the unassigned grey. */
   color?: string;
   label: string;
   onClick: () => void;

@@ -5,9 +5,8 @@ import { type SessionCapabilities, sessionCapabilities } from "./capabilities.js
 import { decoratePrompt } from "./emailRefs.js";
 import { buildFileAccessContext } from "./fileTools.js";
 import { conversationFocusNote } from "./focus.js";
-import { buildKnowledgeContext } from "./knowledgeTools.js";
 import { prompts } from "./prompts.js";
-import { buildSkillsContext } from "./skillTools.js";
+import { buildSkillsContext, buildWikiContext } from "./wikiTools.js";
 
 const DATE_LOCALE_BY_LANGUAGE: Record<Language, string> = {
   en: "en-US",
@@ -54,17 +53,23 @@ function formatNow(timezone: string, locale: string): string {
   }).format(new Date());
 }
 
+/** The system prompt in its parts, in prompt order. */
+export interface SystemPromptParts {
+  /** The app's own instructions, the Settings rules and the account list: fixed. */
+  instructions: string;
+  /** Memories and the knowledge index, sized to what the ceiling leaves over. */
+  knowledge: string;
+  /** The skills index, holding its reserved share of that leftover. */
+  skills: string;
+}
+
 /**
- * The base prompt plus the Settings rules. Defaults to the interactive profile
- * when no capabilities are given.
- *
- * Stays byte-stable across turns unless its inputs genuinely change: pi-ai
- * puts a provider cache breakpoint on the system prompt, so a volatile
- * interpolation here (a clock, a per-request id) would invalidate the cached
- * prefix on every turn. Per-turn context like the date/time rides the turn
- * prompt instead (buildTurnTimeNote).
+ * The prompt's parts, kept apart so the context readout can say which section
+ * a full window went to. Assembled exactly as buildSystemPrompt joins them.
  */
-export async function buildSystemPrompt(caps?: SessionCapabilities): Promise<string> {
+export async function buildSystemPromptParts(
+  caps?: SessionCapabilities,
+): Promise<SystemPromptParts> {
   const { interactive, onOffice, whatsapp } = caps ?? (await sessionCapabilities(true));
   let prompt = prompts.system;
 
@@ -105,15 +110,16 @@ export async function buildSystemPrompt(caps?: SessionCapabilities): Promise<str
   or once at a later date ("on the 15th…") — set it up with automation_create instead of doing it
   once and letting the request drop, then tell them what you created (name, schedule, next run).
 - When the user describes a repeatable way they want a task done — "always do it like this",
-  "from now on when I ask for X…" — save it as a skill with skill_write, then tell them what you
-  saved. A scheduled skill is an automation whose instruction says to follow it.`;
+  "from now on when I ask for X…" — save it as a skill (page_write with a name and type "skill"),
+  then tell them what you saved. A scheduled skill is an automation whose instruction says to
+  follow it.`;
   }
 
   // Everything in this block exists only alongside configured onOffice
   // credentials, so the leads/CRM tools and their guidance disappear together.
   if (onOffice.configured) {
     prompt += `
-- Marlen keeps a leads directory (lead_record / lead_list / lead_update): every prospect who
+- Marlene keeps a leads directory (lead_record / lead_list / lead_update): every prospect who
   shows interest — in a property, a viewing, the user's services — belongs in it. When handling
   such an email, record the sender with lead_record (email, name, what they're interested in, the
   message date as inboundAt); it merges by address, so recording twice is safe. As correspondence
@@ -190,7 +196,7 @@ export async function buildSystemPrompt(caps?: SessionCapabilities): Promise<str
 - Always answer in ${LANGUAGE_ENGLISH_NAMES[language]}, no matter what language the user's message
   or their emails are written in. Quoted email text and draft emails may keep their own language.
   Write in ${LANGUAGE_ENGLISH_NAMES[language]} too whenever you save something the user will read
-  later: memory entries, knowledge notes, and skills.`;
+  later: wiki pages, skills, and any files you write.`;
   }
 
   prompt += await buildAccountsContext(interactive);
@@ -201,9 +207,23 @@ export async function buildSystemPrompt(caps?: SessionCapabilities): Promise<str
   // and appended after memory to leave the prompt's reading order unchanged.
   const growable = Math.max(0, SYSTEM_PROMPT_MAX_CHARS - prompt.length);
   const skills = await buildSkillsContext(Math.floor(growable * SKILLS_BUDGET_SHARE));
-  prompt += await buildKnowledgeContext(growable - skills.length);
-  prompt += skills;
-  return prompt;
+  const knowledge = await buildWikiContext(growable - skills.length);
+  return { instructions: prompt, knowledge, skills };
+}
+
+/**
+ * The base prompt plus the Settings rules. Defaults to the interactive profile
+ * when no capabilities are given.
+ *
+ * Stays byte-stable across turns unless its inputs genuinely change: pi-ai
+ * puts a provider cache breakpoint on the system prompt, so a volatile
+ * interpolation here (a clock, a per-request id) would invalidate the cached
+ * prefix on every turn. Per-turn context like the date/time rides the turn
+ * prompt instead (buildTurnTimeNote).
+ */
+export async function buildSystemPrompt(caps?: SessionCapabilities): Promise<string> {
+  const { instructions, knowledge, skills } = await buildSystemPromptParts(caps);
+  return instructions + knowledge + skills;
 }
 
 /**

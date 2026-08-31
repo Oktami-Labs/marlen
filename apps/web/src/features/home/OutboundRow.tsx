@@ -21,9 +21,9 @@ import { errorMessage, rowTransition, withViewTransition } from "@/lib/utils";
 
 /**
  * One outbound message awaiting approval (WhatsApp today) in the attention
- * list — the channel counterpart of the email DraftRow, on the same
+ * list, the channel counterpart of the email DraftRow, on the same
  * arm→confirm→execute machinery, and editable in place the same way. Sending
- * dispatches through POST /api/outbound/:id/send — the click is the
+ * dispatches through POST /api/outbound/:id/send, the click is the
  * authorization.
  */
 export function OutboundRow({
@@ -38,7 +38,7 @@ export function OutboundRow({
   /** Called after a send/discard succeeds, so the list refetches without waiting on the event debounce. */
   onChanged: () => void;
   onError: (message: string | null) => void;
-  /** Drafted since the user last looked — fronts the title with the new dot. */
+  /** Drafted since the user last looked, fronts the title with the new dot. */
   isNew?: boolean;
 }) {
   const { t } = useTranslation();
@@ -48,7 +48,7 @@ export function OutboundRow({
   const [bodyDraft, setBodyDraft] = React.useState(draft.body);
   const [savedBody, setSavedBody] = React.useState(draft.body);
   const [saving, setSaving] = React.useState(false);
-  // True right after a send — a quiet terminal line until the "outbound"
+  // True right after a send, a quiet terminal line until the "outbound"
   // server event removes the row from the open list.
   const [sent, setSent] = React.useState(false);
   // Discarded rows leave at once rather than waiting on the refetch, so the
@@ -66,7 +66,7 @@ export function OutboundRow({
       toast.success(t("common.saved"));
       onChanged();
     } catch (err) {
-      // Keep the typed text — only the banner reflects the failure.
+      // Keep the typed text, only the banner reflects the failure.
       onError(errorMessage(err));
     } finally {
       setSaving(false);
@@ -122,29 +122,36 @@ export function OutboundRow({
 
   return (
     <div className="surface surface-hover group rounded-lg" style={rowTransition(draft.id)}>
-      <div className="flex w-full items-center gap-2 px-2.5 py-2.5">
+      <div className="flex w-full flex-wrap items-center gap-2 px-2.5 py-2.5">
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex flex-1 min-w-0 items-center gap-2 text-left"
+          className="flex min-w-0 flex-1 basis-full items-center gap-2 text-left @md:basis-auto"
         >
           <IconChip size="sm" tone="tint-success">
             <MessageSquare />
           </IconChip>
-          <div className="min-w-0">
+          <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 truncate text-sm font-medium">
               {isNew && <NewDot />}
               {title}
             </p>
             <p className="truncate text-xs text-muted-foreground">
-              {channelLabel} · {dateLabel(draft.createdAt)}
+              {channelLabel}
               {!open && <span className="text-muted-foreground/70"> · {draft.body}</span>}
             </p>
           </div>
+          {/* The waiting-since time sits where the email rows carry theirs, so
+              one approval list reads as one list. */}
+          <time
+            dateTime={draft.createdAt}
+            className="shrink-0 self-start pt-0.5 font-mono text-2xs tabular-nums text-muted-foreground"
+          >
+            {dateLabel(draft.createdAt)}
+          </time>
         </button>
-        <div className="flex shrink-0 items-center gap-1">
-          {/* Refining is secondary to the row's own decision — it stays out of
-              the way until the row is hovered. */}
+        <div className="ml-auto flex shrink-0 items-center gap-1">
+          {/* Keep the secondary refine action hidden until hover. */}
           <HoverActions className="gap-1">
             <RefineInChatButton conversationId={draft.conversationId} subject={title} />
           </HoverActions>

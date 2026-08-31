@@ -13,7 +13,7 @@ interface ColorPickerProps {
  * Ensures consistent UI across Windows/Mac instead of the native OS picker.
  *
  * The popover is portaled to <body> and positioned off the trigger's viewport
- * rect — rendering it in place traps it in whatever stacking context the row
+ * rect, rendering it in place traps it in whatever stacking context the row
  * happens to create (account rows set zIndex, cards animate transforms) and
  * lets scroll containers clip it.
  */
@@ -41,7 +41,7 @@ export function ColorPicker({ color, onSelect }: ColorPickerProps) {
         createPortal(
           // Portaled content still bubbles React synthetic events up the component
           // tree (not the DOM tree), so a click here would otherwise reach whatever
-          // row/card renders the trigger. This wrapper only guards that propagation —
+          // row/card renders the trigger. This wrapper only guards that propagation,
           // the real interactive controls below (canvas, input) carry their own roles.
           // biome-ignore lint/a11y/noStaticElementInteractions: propagation guard only, not a control itself
           <div

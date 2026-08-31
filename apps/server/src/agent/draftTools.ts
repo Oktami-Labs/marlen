@@ -32,12 +32,6 @@ const log = moduleLogger("draftTools");
 
 const DRAFT_CARD_NOTE = cardNote("the draft", "Don't repeat its subject or body in your reply.");
 
-/**
- * The account's learned style directives, for the draft card's provenance
- * chip. Honest by construction: directives live as account-scoped memories
- * riding the session's system prompt, so a draft from a voiced account was
- * written under them. Best-effort — a lookup failure never blocks the draft.
- */
 async function draftVoiceDirectives(accountId: string): Promise<string[] | undefined> {
   try {
     const infos = await listAccountVoiceInfos();
@@ -51,8 +45,6 @@ const SIGNATURE_TOOL_NOTE =
   `\n\nThe user's stored signature for this account is appended below the body ` +
   `automatically — write the body without a signature block or contact details; ` +
   `a short closing phrase is fine.`;
-
-/** Live from each account's provider (draftsCache.ts), not a local store. In every session: listing drafts never dispatches mail. */
 
 export const listDraftsTool: AgentTool = tool({
   name: "list_drafts",
@@ -101,11 +93,6 @@ export const listDraftsTool: AgentTool = tool({
   },
 });
 
-/**
- * Interactive-only (assembly.ts): keeping is the user's explicit approval, so
- * only a session with the user in it gets the tool. Autosend policy matches
- * create-draft: send=true dispatches only with the account's send grant.
- */
 export const keepDraftTool: AgentTool = tool({
   name: "keep_draft",
   label: "Keep draft",
@@ -148,11 +135,6 @@ export const keepDraftTool: AgentTool = tool({
   },
 });
 
-/**
- * Marlen's own create-draft tool for one connected account, generalized over
- * any app with a DraftProvider. Drafts never send anything, so it's allowed
- * even on a read-only account.
- */
 export function buildDraftTool(
   account: ConnectedAccount,
   name: string,
@@ -210,16 +192,7 @@ export function buildDraftTool(
     execute: async (params) => {
       const { attachLibraryDocumentIds, send, ...input } = params;
 
-      // One open agent draft per thread. Re-running the same instruction (a
-      // boot catch-up of a missed schedule, a refreshed briefing) reaches this
-      // tool with the same threadId and would otherwise stack a second draft on
-      // a thread the user has not looked at yet. The snapshot alone is not
-      // proof: a draft sent or deleted straight from webmail still reads open
-      // until the matcher resolves it, so a duplicate is only declared when the
-      // provider still lists the draft. A failed lookup blocks, since creating
-      // the duplicate is the outcome worth avoiding. The stale snapshot's own
-      // status is left alone — the matcher still needs it to pair an external
-      // send with its sent message.
+      // Confirm a snapshot still exists at the provider before treating it as a duplicate.
       if (input.threadId) {
         const existing = await findOpenDraftOnThread(account.id, input.threadId);
         if (existing) {
@@ -244,8 +217,7 @@ export function buildDraftTool(
         }
       }
 
-      // Attachments resolve first: a bad id or oversized set steers the
-      // model (as result text) without a half-configured draft being created.
+      // Resolve attachments before mutating the mailbox.
       let attachments: DraftAttachment[] = [];
       if (attachLibraryDocumentIds?.length) {
         try {
@@ -254,26 +226,16 @@ export function buildDraftTool(
           return textResult(errorMessage(error));
         }
       }
-      // The compose pipeline runs before the body reaches the provider, so
-      // every surface that saves a draft gets the same humanizer treatment.
       const composed = await composeDraftBody({
         body: input.body,
         subject: input.subject,
       });
-      // A sign-off the signature already carries is dropped from the body
-      // itself (not just the provider copy), so the snapshot, the card, and
-      // the learning loop all see the draft as it truly ends.
       const signatureHtml = await accountSignatureHtml(account.id);
       const finalBody = signatureHtml
         ? stripDuplicateSignoff(composed.body, stripHtml(signatureHtml))
         : composed.body;
 
-      // Interactive sessions PROPOSE instead of write: the mailbox draft is
-      // created only when the user keeps the proposal (card button, or
-      // keep_draft when they ask in chat), so an unreviewed chat draft can
-      // never reach the mailbox or Home. Unattended runs still write real
-      // drafts (no one is there to keep them), as does an explicitly
-      // requested, grant-armed send.
+      // Interactive sessions propose drafts unless an armed send was explicitly requested.
       const autosend = send === true && sendArmed && Boolean(provider.sendDraft);
       if (interactive && !autosend) {
         const proposalId = await createDraftProposal({
@@ -340,7 +302,6 @@ export function buildDraftTool(
         ...(attachments.length > 0 ? { attachments } : {}),
       });
 
-      // Snapshot the saved body for the learning loop.
       try {
         await createDraftSnapshot({
           accountId: account.id,
@@ -357,9 +318,7 @@ export function buildDraftTool(
         log.warn({ err: error, draftId: result.draftId }, "recording draft snapshot failed");
       }
 
-      // Autosend only on an explicit send=true AND a stored send grant, so a
-      // prompt-injected email can't dispatch: a human armed the grant, and the
-      // send has to be asked for.
+      // Sending requires both an explicit request and the stored grant.
       let sent = false;
       let sendNote = "";
       if (send) {
@@ -429,12 +388,6 @@ export function buildDraftTool(
   });
 }
 
-/**
- * Rewrite an existing draft in place, so a chat refinement ("make it firmer")
- * edits the SAME draft instead of creating a second one. Runs the same compose
- * pipeline as create and appends an agent-authored version to the snapshot
- * history. Built only for accounts whose provider implements updateDraft.
- */
 export function buildUpdateDraftTool(
   account: ConnectedAccount,
   name: string,
@@ -468,8 +421,6 @@ export function buildUpdateDraftTool(
 
       const signatureHtml = await accountSignatureHtml(account.id);
 
-      // A proposal id rewrites the proposal row; the mailbox is untouched
-      // until the user keeps it.
       const proposal = await getDraftProposal(draftId);
       if (proposal) {
         if (proposal.accountId !== account.id) {
@@ -518,8 +469,6 @@ export function buildUpdateDraftTool(
       let finalBody = body;
       if (body !== undefined) {
         const composed = await composeDraftBody({ body, subject });
-        // Same as create: a sign-off the signature already carries leaves the
-        // body before it is saved anywhere.
         finalBody = signatureHtml
           ? stripDuplicateSignoff(composed.body, stripHtml(signatureHtml))
           : composed.body;
@@ -529,9 +478,6 @@ export function buildUpdateDraftTool(
         ...(subject !== undefined ? { subject } : {}),
       });
 
-      // Agent rewrites append to the snapshot's version history (author
-      // "agent") so the learning loop diffs against the last agent version.
-      // Best-effort: a draft without a snapshot just isn't tracked.
       await appendDraftVersion(account.id, draftId, "agent", {
         body: finalBody,
         subject,
@@ -539,8 +485,6 @@ export function buildUpdateDraftTool(
         log.warn({ err: error, draftId }, "appending agent draft version failed"),
       );
 
-      // Re-render the draft card so the conversation shows the updated text;
-      // the card from the create turn keeps its old body forever.
       const details = await getDraftCardDetails(account.id, draftId);
       if (details) {
         const card = buildEmailDraftCard({
@@ -563,8 +507,6 @@ export function buildUpdateDraftTool(
         );
       }
 
-      // No snapshot (not agent-written): no recipients to build a card from, so
-      // the saved text travels in the reply instead.
       let text = `Draft ${draftId} updated in ${account.name}. It remains unsent.`;
       if (finalBody !== undefined && finalBody !== body) {
         text += `\n\nThe saved body reads:\n\n${finalBody}`;

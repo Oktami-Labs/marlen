@@ -7,9 +7,9 @@ import en from "@/locales/en.json";
 const STORAGE_KEY = "marlen-language";
 
 /**
- * Language for the first paint: the last server-confirmed choice (mirrored in
- * localStorage), falling back to German — the app's default language. The
- * server setting is the source of truth — App syncs against it on load.
+ * Language for the first paint: the last server-confirmed choice mirrored in
+ * localStorage, with German as the default. The
+ * server setting is the source of truth, App syncs against it on load.
  */
 function detectInitialLanguage(): Language {
   const saved = localStorage.getItem(STORAGE_KEY);

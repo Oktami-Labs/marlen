@@ -21,7 +21,7 @@ interface SidebarNavLinkProps {
   isCollapsed: boolean;
   onClick: () => void;
   active?: boolean;
-  /** "warning" is the "finish setup" nudge — always warning-toned, never tracks route match. */
+  /** "warning" is the "finish setup" nudge, always warning-toned, never tracks route match. */
   tone?: "default" | "warning";
 }
 
@@ -53,6 +53,7 @@ function SidebarNavLink({
       aria-current={!isWarning && active ? "page" : undefined}
       className={cn(
         "group relative flex items-center gap-3 rounded-lg py-2 text-sm font-medium transition-colors",
+        "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
         isCollapsed ? "md:px-0 md:w-10 md:justify-center px-3" : isWarning ? "px-3 w-full" : "px-3",
         isWarning
           ? "text-warning hover:bg-accent/[0.08]"
@@ -64,7 +65,7 @@ function SidebarNavLink({
       <Icon className="h-4 w-4 shrink-0" />
       <span className={cn(isCollapsed && "md:hidden")}>{label}</span>
       {isCollapsed && (
-        <div className="absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md bg-foreground px-2 py-1 text-xs font-medium text-background opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100 pointer-events-none z-50 md:block hidden whitespace-nowrap">
+        <div className="tooltip-chip absolute left-full top-1/2 ml-2 -translate-y-1/2 rounded-md px-2 py-1 text-xs font-medium opacity-0 transition-all group-hover:translate-x-1 group-hover:opacity-100 pointer-events-none z-50 md:block hidden whitespace-nowrap">
           {label}
         </div>
       )}
@@ -102,7 +103,7 @@ export function Sidebar({ status, onClose, isCollapsed, onCollapsedChange }: Sid
         >
           <img
             src="/logo.svg"
-            alt="Marlen Logo"
+            alt="Marlene Logo"
             className="h-8 w-auto object-contain transition-opacity hover:opacity-80"
           />
           <span
@@ -111,7 +112,7 @@ export function Sidebar({ status, onClose, isCollapsed, onCollapsedChange }: Sid
               isCollapsed && "md:hidden",
             )}
           >
-            Marlen
+            Marlene
           </span>
         </Link>
 

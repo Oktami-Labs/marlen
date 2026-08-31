@@ -2,7 +2,7 @@ import type * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Pill filter chip — ink fill when active, recessed tonal fill otherwise.
+ * Pill filter chip, ink fill when active, recessed tonal fill otherwise.
  * The one shared shape for every "pick one/many of these" row: knowledge
  * filters, weekday pickers, the search palette's scope bar.
  */

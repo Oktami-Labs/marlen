@@ -6,81 +6,66 @@ import type {
   EmailRef,
 } from "@marlen/shared";
 
-/**
- * One message as the chat panel renders it — a user turn, or an assistant
- * turn that may still be streaming, carrying tool activity and cards.
- */
 export interface DisplayMessage {
   id: string;
   role: "user" | "assistant";
   content: string;
+  createdAt: string;
   toolCalls: ChatToolCall[];
-  /** Structured tool results, keyed by tool call so a retried tool replaces its card. */
   cards: { toolCallId: string; card: AgentCard }[];
   streaming: boolean;
   thinking?: boolean;
+  stopped?: boolean;
   error?: string;
-  /** Set for classified provider failures; drives the tailored inline notice. */
   errorKind?: "rate_limit";
-  /** Local-only /sys result. */
   systemPrompt?: string;
-  /** Emails the user pinned to this message (composer @-mentions or a card's "add to chat" action); user messages only. */
   refs?: EmailRef[];
 }
 
-/** One turn's own message buffer, independent of what the panel currently shows. */
 export interface RunEntry {
-  /** Assigned once the server confirms/creates the conversation; undefined until then. */
   conversationId: string | undefined;
   messages: DisplayMessage[];
 }
 
 export interface RunState {
-  /** The conversation shown in the panel right now; undefined = a fresh, unsaved chat. */
   activeConversationId: string | undefined;
-  /** Messages rendered for the active conversation right now. */
   messages: DisplayMessage[];
-  /** True while the active slot is occupied by a turn — a streamed run or a local one (/sys). */
   busy: boolean;
-  /** True until the boot-time "restore last conversation" lookup settles. */
   restoring: boolean;
-  /** The run currently driving `messages`/`busy`; undefined when idle or the occupant is a local turn. */
+  resumed: boolean;
   activeRunId: string | undefined;
-  /** Every turn still writing, keyed by runId — including ones for a conversation the panel isn't showing. */
   runs: Record<string, RunEntry>;
-  /** Live runId for a conversation once the server has assigned it an id, so reopening that conversation finds the in-progress run. */
   runIdByConversation: Record<string, string>;
-  /** Last known messages per conversation id, so switching conversations doesn't require a re-fetch mid-stream. */
   messageCache: Record<string, DisplayMessage[]>;
 }
 
 export type RunAction =
-  /** Boot-time restore of the last open conversation; `result` is null when there was nothing to restore (or the lookup failed). */
   | { type: "restore"; result: { conversationId: string; messages: DisplayMessage[] } | null }
-  /** A new turn is being sent in the active conversation (or a brand-new one). */
   | {
       type: "start-run";
       runId: string;
       userMessage: DisplayMessage;
       assistantMessage: DisplayMessage;
     }
-  /** One event off a run's stream. */
   | { type: "stream"; runId: string; event: ChatStreamEvent }
-  /** The stream's request itself failed (network/transport), rather than reporting an in-band `error` event. */
   | { type: "run-error"; runId: string; message: string }
-  /** The run's stream has ended (success, failure, or abandonment) — release its slot. */
-  | { type: "run-settled"; runId: string }
-  /** The user opened a conversation: adopt its live run (if any) and cached messages (if any). */
+  | { type: "run-rejected"; runId: string }
+  | { type: "run-settled"; runId: string; endedAt: string }
   | { type: "open-conversation"; conversationId: string }
-  /** A conversation's messages finished loading from the server. */
   | { type: "open-conversation-loaded"; conversationId: string; messages: DisplayMessage[] }
   | { type: "new-conversation" }
-  /** Appends messages built outside a server run (e.g. /showcase). */
   | { type: "append-messages"; messages: DisplayMessage[] }
-  /** Patches one message by id (e.g. the /sys command filling in its result). */
   | { type: "update-message"; id: string; patch: Partial<DisplayMessage> }
-  /** Occupies/releases the busy slot for a local (non-streamed) turn, e.g. /sys. */
   | { type: "set-busy"; busy: boolean };
+
+export const IDLE_RESET_MS = 60 * 60 * 1000;
+
+/** Active turns never expire. */
+export function isIdleStale(messages: DisplayMessage[], now: number): boolean {
+  const last = messages[messages.length - 1];
+  if (last?.role !== "assistant" || last.streaming) return false;
+  return now - Date.parse(last.createdAt) > IDLE_RESET_MS;
+}
 
 export function createInitialRunState(): RunState {
   return {
@@ -88,6 +73,7 @@ export function createInitialRunState(): RunState {
     messages: [],
     busy: false,
     restoring: true,
+    resumed: false,
     activeRunId: undefined,
     runs: {},
     runIdByConversation: {},
@@ -95,12 +81,12 @@ export function createInitialRunState(): RunState {
   };
 }
 
-/** Maps a persisted server message onto the panel's display shape. */
 export function toDisplayMessage(m: ChatMessage): DisplayMessage {
   return {
     id: m.id,
     role: m.role,
     content: m.content,
+    createdAt: m.createdAt,
     toolCalls: m.toolCalls ?? [],
     cards: m.cards ?? [],
     streaming: false,
@@ -116,27 +102,16 @@ function withoutKey<T>(map: Record<string, T>, key: string): Record<string, T> {
   return next;
 }
 
-/**
- * Replaces a run's trailing streaming-assistant message via `updater`, then
- * fans the result out to the run's own buffer, the conversation's message
- * cache (once it has a conversationId), and the visible `messages` — but
- * only when this run is the one the panel is currently showing (by run
- * identity, or by conversation id once the run has been assigned one).
- */
-function applyToRun(
+/** Update a run, its cache, and the visible transcript when they refer to the same run. */
+function applyToRunMessages(
   state: RunState,
   runId: string,
-  updater: (message: DisplayMessage) => DisplayMessage,
+  update: (messages: DisplayMessage[]) => DisplayMessage[],
 ): RunState {
   const run = state.runs[runId];
   if (!run) return state;
 
-  const nextMessages = [...run.messages];
-  const last = nextMessages[nextMessages.length - 1];
-  if (last && last.role === "assistant" && last.streaming) {
-    nextMessages[nextMessages.length - 1] = updater(last);
-  }
-
+  const nextMessages = update(run.messages);
   const nextRun: RunEntry = { ...run, messages: nextMessages };
   const runs = { ...state.runs, [runId]: nextRun };
   const messageCache =
@@ -153,6 +128,36 @@ function applyToRun(
     messageCache,
     messages: isVisible ? nextMessages : state.messages,
   };
+}
+
+function settleRun(state: RunState, runId: string): RunState {
+  const run = state.runs[runId];
+  if (!run) return state;
+  const runs = withoutKey(state.runs, runId);
+  const runIdByConversation =
+    run.conversationId !== undefined && state.runIdByConversation[run.conversationId] === runId
+      ? withoutKey(state.runIdByConversation, run.conversationId)
+      : state.runIdByConversation;
+  const wasActive = state.activeRunId === runId;
+  return {
+    ...state,
+    runs,
+    runIdByConversation,
+    activeRunId: wasActive ? undefined : state.activeRunId,
+    busy: wasActive ? false : state.busy,
+  };
+}
+
+function applyToRun(
+  state: RunState,
+  runId: string,
+  updater: (message: DisplayMessage) => DisplayMessage,
+): RunState {
+  return applyToRunMessages(state, runId, (messages) => {
+    const last = messages[messages.length - 1];
+    if (last?.role !== "assistant" || !last.streaming) return messages;
+    return [...messages.slice(0, -1), updater(last)];
+  });
 }
 
 function reduceStreamEvent(
@@ -226,8 +231,6 @@ function reduceStreamEvent(
           { toolCallId: event.toolCallId, card: event.card },
         ],
       }));
-    // A stopped turn is a finished turn: the server sends back the row it
-    // recorded, so the live message and a later reload read the same.
     case "done":
     case "stopped":
       return applyToRun(state, runId, (m) => ({
@@ -235,6 +238,7 @@ function reduceStreamEvent(
         content: event.text || m.content,
         streaming: false,
         thinking: false,
+        stopped: event.type === "stopped",
       }));
     case "error":
       return applyToRun(state, runId, (m) => ({
@@ -258,6 +262,7 @@ export function reduceRunEvent(state: RunState, action: RunAction): RunState {
         messages,
         messageCache: { ...state.messageCache, [conversationId]: messages },
         restoring: false,
+        resumed: false,
       };
     }
     case "start-run": {
@@ -282,6 +287,7 @@ export function reduceRunEvent(state: RunState, action: RunAction): RunState {
         activeRunId: runId,
         messages: nextMessages,
         busy: true,
+        resumed: false,
       };
     }
     case "stream": {
@@ -296,24 +302,22 @@ export function reduceRunEvent(state: RunState, action: RunAction): RunState {
         streaming: false,
         thinking: false,
       }));
-    case "run-settled": {
-      const run = state.runs[action.runId];
-      if (!run) return state;
-      const runs = withoutKey(state.runs, action.runId);
-      const runIdByConversation =
-        run.conversationId !== undefined &&
-        state.runIdByConversation[run.conversationId] === action.runId
-          ? withoutKey(state.runIdByConversation, run.conversationId)
-          : state.runIdByConversation;
-      const wasActive = state.activeRunId === action.runId;
-      return {
-        ...state,
-        runs,
-        runIdByConversation,
-        activeRunId: wasActive ? undefined : state.activeRunId,
-        busy: wasActive ? false : state.busy,
-      };
-    }
+    // No stream event arrived, so the optimistic pair is still the tail.
+    case "run-rejected":
+      return settleRun(
+        applyToRunMessages(state, action.runId, (messages) => messages.slice(0, -2)),
+        action.runId,
+      );
+    // Idle time starts when the reply was recorded.
+    case "run-settled":
+      return settleRun(
+        applyToRunMessages(state, action.runId, (messages) => {
+          const last = messages[messages.length - 1];
+          if (last?.role !== "assistant") return messages;
+          return [...messages.slice(0, -1), { ...last, createdAt: action.endedAt }];
+        }),
+        action.runId,
+      );
     case "open-conversation": {
       const { conversationId } = action;
       const liveRunId = state.runIdByConversation[conversationId];
@@ -324,6 +328,7 @@ export function reduceRunEvent(state: RunState, action: RunAction): RunState {
         activeRunId: liveRunId,
         busy: Boolean(liveRunId),
         messages: cached ?? state.messages,
+        resumed: true,
       };
     }
     case "open-conversation-loaded": {
@@ -341,6 +346,7 @@ export function reduceRunEvent(state: RunState, action: RunAction): RunState {
         activeRunId: undefined,
         busy: false,
         messages: [],
+        resumed: false,
       };
     case "append-messages":
       return { ...state, messages: [...state.messages, ...action.messages] };

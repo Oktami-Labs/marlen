@@ -130,7 +130,7 @@ async function matchDraft(
   }
   if (!matchedId) return false;
   const hit = hits.find((candidate) => candidate.providerMessageId === matchedId);
-  if (!hit) return false; // the model named an id outside the candidate set — treat as no match
+  if (!hit) return false; // An id outside the candidate set is not a match.
   await markDraftStatus(draft.accountId, draft.providerDraftId, "sent", hit.providerMessageId);
   return true;
 }

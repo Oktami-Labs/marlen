@@ -23,7 +23,7 @@ function scrollRowIntoView(list: HTMLDivElement | null, selector: string) {
 
 /**
  * Dropdown select. Plain by default; pass `searchable` for a type-to-filter
- * combobox — only worth it on long lists (languages, timezones), not on
+ * combobox, only worth it on long lists (languages, timezones), not on
  * two-or-three-option pickers.
  *
  * Mouse and keyboard share one `highlighted` row so the active option is
@@ -60,7 +60,7 @@ export function Select({
   const listRef = React.useRef<HTMLDivElement>(null);
   const inputRef = React.useRef<HTMLInputElement>(null);
   // While arrowing, the list scrolls under a stationary cursor and would fire
-  // mouse events that steal the highlight back — real mouse movement clears it.
+  // mouse events that steal the highlight back, real mouse movement clears it.
   const keyNav = React.useRef(false);
 
   const selectedOption = options.find((o) => o.value === value);
@@ -125,7 +125,7 @@ export function Select({
   }, [isOpen]);
 
   // Keep the active row visible while arrowing through a long list.
-  // biome-ignore lint/correctness/useExhaustiveDependencies: highlighted isn't read here — it drives which DOM node the [data-highlighted] query matches after re-render, so the effect must re-run whenever it changes
+  // biome-ignore lint/correctness/useExhaustiveDependencies: highlighted isn't read here, it drives which DOM node the [data-highlighted] query matches after re-render, so the effect must re-run whenever it changes
   React.useEffect(() => {
     if (!isOpen || !keyNav.current) return;
     scrollRowIntoView(listRef.current, '[data-highlighted="true"]');
@@ -234,8 +234,8 @@ export function Select({
                 // Options stay out of the tab order by design: the input above is the
                 // combobox's one real focus target, and aria-activedescendant (set from
                 // `highlighted`) plus the input's own onKeyDown carry all keyboard
-                // interaction — giving each option its own tab stop would fight that.
-                // biome-ignore lint/a11y/useFocusableInteractive: aria-activedescendant pattern — the input owns focus, not the option
+                // interaction, giving each option its own tab stop would fight that.
+                // biome-ignore lint/a11y/useFocusableInteractive: aria-activedescendant pattern, the input owns focus, not the option
                 // biome-ignore lint/a11y/useKeyWithClickEvents: keyboard interaction goes through the input's onKeyDown, not this row
                 <div
                   key={option.value}

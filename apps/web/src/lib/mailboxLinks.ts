@@ -1,7 +1,7 @@
 /**
  * Web-UI hosts for providers whose links get the "open in mailbox" chip in
  * rendered markdown (see components/ui/markdown.tsx). Provider-specific by
- * nature, but kept in this one spot so the renderer itself stays generic —
+ * nature, but kept in this one spot so the renderer itself stays generic,
  * add a new provider's webmail host here, not as a special case in the UI.
  */
 const MAILBOX_HOSTS = new Set([

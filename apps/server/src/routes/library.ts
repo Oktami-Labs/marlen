@@ -207,7 +207,7 @@ export const libraryRoutes: FastifyPluginAsyncTypebox = async (app) => {
   // share a machine.
   app.post("/api/library/reveal", { schema: { body: folderBody } }, async (req) => {
     const absPath = resolveWithin(getAgentHomeDir(), req.body.path.trim() || ".");
-    if (!absPath) throw badRequest("path escapes the Marlen folder");
+    if (!absPath) throw badRequest("path escapes the Marlene folder");
     let stats: Awaited<ReturnType<typeof stat>>;
     try {
       stats = await stat(absPath);

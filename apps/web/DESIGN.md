@@ -1,10 +1,10 @@
-# Marlen — Design Rules
+# Marlen design rules
 
-Borderless neutral minimalism: a quiet document, not a dashboard. Structure comes
+Borderless neutral minimalism: a document, not a dashboard. Structure comes
 from space and surface tone, never from lines. Color is scarce and means something.
 
 Binding. To break a rule, change it here first. When a rule names an export, use
-that export — a described effect gets reinvented, a named helper does not.
+it. Named helpers keep the effect consistent across call sites.
 
 ## The three hard constraints
 
@@ -30,36 +30,65 @@ clean call sites; when you add one, add it to this list.
 
 - **Buttons:** `default` = accent fill (the CTA); `secondary`/`ghost` = tonal
   fills; `outline` is a tonal fill too, despite the name. Compact icon actions
-  use `icon-sm`/`icon-xs` — never hand-roll `h-8 w-8` or restate ghost colors.
+  use `icon-sm`/`icon-xs`. Never hand-roll `h-8 w-8` or restate ghost colors.
   Destructive row actions are `ghost-danger` + `Trash2`, one action one icon,
   whether the row is deleted or only moved to a terminal status. `X` is the
   non-destructive counterpart (close, clear) and stays `ghost`.
 - **Spinners:** the shared `Spinner`. A busy button takes `loading` (which
-  disables it and swaps its icon) — never a raw `Loader2` or a spin-class ternary.
+  disables it and swaps its icon). Never use a raw `Loader2` or a spin-class ternary.
 - **Inputs / textareas / selects:** filled `surface-2`, no border; focus lightens
   the fill and adds the ring.
 - **Badges:** pill, pastel tonal fill, no border.
-- **Account dots:** `AccountDot` (`ui/account-dot.tsx`) — every round dot marker.
+- **Account dots:** `AccountDot` (`ui/account-dot.tsx`) for every round dot marker.
   Never hand-mix a dot fill or repeat `UNASSIGNED_ACCOUNT_COLOR`.
-- **App logos:** `AppIcon` — provider logo with mail-glyph fallback.
-- **Agent avatar:** `AgentAvatar` (`features/chat/AgentAvatar.tsx`) — the
+- **Person marks:** `AvatarMark` (`ui/avatar-mark.tsx`), the round initials mark
+  standing for a person on a message, a draft row, or a card header. Its tone is
+  the item's type color, never a per-sender color: mail stays as neutral as the
+  rest of the app.
+- **Mail header:** `MessageHeader` + `RecipientLine` (`components/MessageHeader.tsx`).
+  Every email surface opens the same way: the counterpart's avatar and name, the
+  recipient lines under it, the timestamp on the right. Addresses are read as
+  people (`lib/addresses.ts`) and the raw list stays in the tooltip; the account's
+  own address reads as "me".
+- **Draft as a letter:** a draft sets its mail headers over a hairline and its
+  prose below, on the bare surface, in the chat card and in the open Home row
+  alike. Its subject and body fields carry no
+  fill at rest: they take a `surface-2` fill on hover and the ring on focus, so
+  the draft reads as a message and answers as a form only once you reach for it.
+  This is the one place an input is not a filled control at rest.
+- **App logos:** `AppIcon` with a mail-glyph fallback.
+- **Received message body:** `EmailBody` (`components/EmailBody.tsx`). It renders the
+  sender's own HTML in a sandboxed frame that sizes itself to its content,
+  blocks remote images until the reader asks, and collapses quoted history.
+  Provider HTML reaches the screen this way and no other: it is never markup
+  in the app document.
+- **Agent cards vs chips:** a card (`CardShell`) is a work product of the turn.
+  A note *about* the turn (what the agent saved to the wiki) is a chip instead:
+  one recessed `rounded-xl` row, mono overline, text, one action. Never give a
+  chip a card's outline, and never make a work product a chip.
+- **Chat reading column:** `.thread-column`. Everything that lines up in the
+  thread (transcript, queued messages, composer, version line) carries it; the
+  width itself is `--thread-max-width`, set once by `.thread-page` on the chat
+  root and unset in the side panel, where the thread runs full bleed. Never
+  restate a `max-w-*` ladder at a thread call site.
+- **Agent avatar:** `AgentAvatar` (`features/chat/AgentAvatar.tsx`). This is the
   assistant's round mark chip fronting assistant turns and the empty chat;
   `active` breathes its bloom while the turn is live. It sits above the turn's
   prose, which is a plain full-width block: only the user's message is a bubble.
-- **Icon tiles:** `IconChip` — the tinted square fronting section titles and
+- **Icon tiles:** `IconChip`, the tinted square fronting section titles and
   palette rows; it sizes the icon.
 - **Section titles:** `SectionTitle` (`ui/section-header.tsx`) for every
   top-level page section; `SectionHeader`/`Section` for settings/setup pages.
-- **Group labels:** `GroupLabel` — the uppercase muted overline over a group of
+- **Group labels:** `GroupLabel`, the uppercase muted overline over a group of
   rows; `sm` for dense meta lists.
-- **Settings rows:** `SettingRow` — label+description left, control right; `bare`
+- **Settings rows:** `SettingRow`, with label and description left and control right. Use `bare`
   inside a raised card, `ListRow`-raised otherwise. Settings auto-save; secrets
   save on Enter/blur. The Pipedream credentials form is the one verify exception.
-- **Menu/picker rows:** `OptionRow` — leading mark, truncated label, optional
+- **Menu/picker rows:** `OptionRow`, with a leading mark, truncated label, optional
   detail and trailing slot.
 - **Row actions:** `HoverActions` (always visible below `sm`); external links use
   `OpenExternalButton`.
-- **Filter chips:** `Chip` — ink fill when active, `surface-2` otherwise.
+- **Filter chips:** `Chip`, with ink fill when active and `surface-2` otherwise.
 - **Search filters:** `SearchField` for every list filter box.
 - **Show more/less:** `DisclosureToggle` (omit `open` for a one-way reveal);
   `ExpandButton` for a row's trailing chevron; paged lists use `usePagedVisible`
@@ -69,10 +98,11 @@ clean call sites; when you add one, add it to this list.
 - **Empty states:** `EmptyState`.
 - **Step marks:** `StepCircle`. **Keyboard hints:** `Kbd`.
 - **Draft rows:** `SentRow`, `RefineInChatButton`, `EditSaveActions`
-  (`components/draftActions.tsx`) — the shared parts of an approve/send row.
+  (`components/draftActions.tsx`) provide the shared parts of an approve/send row.
 - **Icon verbs:** `.icon-send`/`.icon-discard`/`.icon-refine` move a glyph in its
   verb's direction on hover. Transform only, so hover never reflows.
-- **Lists:** rows separated by spacing or a hover fill, never a divider.
+- **Lists:** rows separated by spacing or a hover fill, never a divider. A long
+  chat runs under centered day headings (`text-2xs` uppercase, no rule).
 - **Panel controls** are icon buttons in the panel header, never control rows in
   the content area. No suggestion/template chips.
 - **Form actions** are right-aligned, primary rightmost.
@@ -98,7 +128,11 @@ via derived variables (`--surface-2-fill`, `--secondary-fill`). Use
 make a control read; if contrast is short, fix the fill variables in `index.css`.
 
 Anchored floating panels (select menus, color picker) use `.surface-pop`, not
-`.surface`. Dialogs keep `.surface` — the scrim separates them.
+`.surface`. Dialogs keep `.surface`; the scrim separates them.
+
+The cursor tooltip is the exception to both: no scrim, no border, so it carries
+its own `.tooltip-chip` tone, a fill far enough from white panels and the grey
+canvas to read over either.
 
 ## Color
 
@@ -113,11 +147,15 @@ Anchored floating panels (select menus, color picker) use `.surface-pop`, not
   background: accent = email draft, emerald = outbound message, amber =
   needs-attention, neutral = schedule/log/to-dos. Section title chips reuse
   them but are never amber: a section stays neutral even when its rows are
-  overdue — urgency reads from the rows, not from the heading.
+  overdue. Urgency reads from the rows, not from the heading.
 - **Semantic colors are muted pastels**, status only: emerald = success, amber =
-  attention/paused, red = destructive/error. Pale fill + darker text (see `Badge`).
+  attention/paused, red = destructive/error. One token per colour is both the
+  tint fill and the text on it (`.tint-*`), so each is set dark enough to clear
+  4.5:1 on its own wash. Never wash a row background in one: the tint belongs on
+  the icon chip or the `Badge`.
 - Body text is cool charcoal (`foreground`), never pure black; secondary is
-  `muted-foreground`.
+  `muted-foreground`. Both clear 4.5:1 on every ground they meet, canvas and
+  recessed fills included, not only on white.
 
 ## Type
 
@@ -126,19 +164,22 @@ Anchored floating panels (select menus, color picker) use `.surface-pop`, not
 - Hierarchy is weight and color, not size jumps. Section titles are
   `text-sm font-semibold`, descriptions `text-xs`/`text-sm text-muted-foreground`.
 - The ladder is `text-3xs` (10, tiny marks), `text-2xs` (11, meta/overline),
-  `text-xs`, `text-sm`, `text-base`. There is no 13px step — resolve to `text-xs`
+  `text-xs`, `text-sm`, `text-base`. There is no 13px step. Resolve to `text-xs`
   or `text-sm`. Never write an arbitrary `text-[13px]`.
 - Tighten tracking on headings (`tracking-tight`).
 
 ## Shape
 
 Radius `--radius` (0.7rem) for panels/inputs/buttons, smaller for chips. No
-`rounded-full` on primary buttons or in-flow containers — pills are for status
+`rounded-full` on primary buttons or in-flow containers. Pills are for status
 badges, filter chips, and tiny marks.
 
 ## Motion
 
 - Content rises `6px` and fades over ~360ms. Animate only `transform`/`opacity`.
+  One exception: `.stream-word`, where a newly generated word also lands in the
+  accent and settles into ink over its fade. Colour, on a span, with no layout
+  effect; nothing else animates a paint property.
 - **One easing curve**: `cubic-bezier(0.22, 1, 0.36, 1)`. Don't invent new ones.
 - **Every animation needs a `prefers-reduced-motion` entry** in `index.css`'s
   reduce block. No exceptions.
@@ -147,7 +188,7 @@ badges, filter chips, and tiny marks.
 - **A list never snaps.** Rows that leave or move ride `withViewTransition` +
   `rowTransition(id)` (`lib/utils.ts`) so the list closes its own gaps.
   `rowTransition(id)` names the row; `withViewTransition` wraps the
-  **synchronous** write — an `invalidateQueries` refetch lands too late to
+  **synchronous** write. An `invalidateQueries` refetch lands too late to
   animate, so a row that must leave sets local state and lets the refetch
   reconcile behind it. A row reaching a **terminal state keeps its name**: the
   sent line carries the same `rowTransition(id)` as the live row, so sending
@@ -157,14 +198,14 @@ badges, filter chips, and tiny marks.
   write wrapped in `withViewTransition`; the row (named via `rowTransition(id)`)
   grows to its new height and its siblings slide, never snap.
 - **In-flight labels shimmer.** The thinking line and a running tool's name use
-  `.text-shimmer`, a sweeping text highlight — never `animate-pulse`.
+  `.text-shimmer`, a sweeping text highlight. Never use `animate-pulse`.
 - **The agent's presence is ambient.** While a chat turn is live, the chat panel
   sets `data-agent-busy` on `<html>` and the aurora breathes toward full
   strength. Nothing else keys off this attribute, and no other surface gets a
   busy tint.
 - **Route motion:** panel switches run through `withViewTransition` too (the
   sidebar `<Link>` and `select()` in `App.tsx`). `BrowserRouter` is not a data
-  router, so react-router's `viewTransition` prop does nothing — drive it from
+  router, so react-router's `viewTransition` prop does nothing. Drive it from
   the helper. Leave modified clicks (cmd/ctrl/shift/alt) to the browser. One
   duration for every group is what keeps a leaving row from outliving its canvas.
 
@@ -177,14 +218,14 @@ needs a refresh, a remount, or reopening a panel, the wiring is wrong.
   lives in React state or the URL. A key's first element is its topic.
 - **Mutations reflect immediately.** The handler that writes also updates or
   invalidates the cache, so the row appears, changes, or leaves right away.
-- **Loading:** `LoadingSweep` (`ui/feedback.tsx`) — one delayed accent strip on
+- **Loading:** `LoadingSweep` (`ui/feedback.tsx`) adds one delayed accent strip on
   the canvas edge. Never a per-panel spinner for a refetch; a busy *control*
   takes `loading`. Refetches keep previous data on screen, never a blank flash.
 - **Failure has one policy per shape, and silence is not one of them:**
   - A failed **panel fetch** renders `RetryableError` (`ui/feedback.tsx`).
   - A failed **user-initiated mutation** toasts.
   - An **inline form** shows its error in the form.
-  - Never swallow a fetch whose result is a **baseline for a later write** — a
+  - Never swallow a fetch whose result is a **baseline for a later write**. A
     write merged into an empty set silently destroys what it should have merged
     with. Refuse the write instead.
   - An **armed confirm dialog closes only on success.** Report the outcome from
@@ -205,10 +246,10 @@ Floating things stack in a fixed order. Pick the existing rung, don't invent one
 | `z-[120]` | Modal panel (dialog, palette) |
 | `z-[130]` | Anchored panel opened above a modal |
 | `z-[140]` | Toasts (overrides sonner's own z-index) |
-| `z-[150]` | Cursor tooltip — the top rung; non-interactive, so nothing may sit above it |
+| `z-[150]` | Cursor tooltip, the top rung; non-interactive, so nothing may sit above it |
 
-Everything modal shares the `.scrim` backdrop: a light dim plus a **2px** blur —
-the page stays readable through it, never frosted. Zones inside a floating panel
+Everything modal shares the `.scrim` backdrop: a light dim plus a **2px** blur.
+The page stays readable through it, never frosted. Zones inside a floating panel
 separate by tone, never by line (the palette footer is a recessed fill). Matched
 text uses the same pale accent tint as `::selection`, so "found" and "selected"
 read as one idea.
@@ -217,11 +258,18 @@ read as one idea.
 
 - Lead with macro-whitespace; sections separate by `gap-8`/`gap-10`, not rules.
 - Content column is constrained: `max-w-3xl` for settings-style pages, stepping to
-  `max-w-4xl`/`max-w-5xl` via container queries — the canvas decides, not the
+  `max-w-4xl`/`max-w-5xl` via container queries. The canvas decides, not the
   viewport, since the sidebar and chat panel eat variable width.
 - Chrome frames the canvas: the nav rail, chat column, and the frame behind the
   working canvas are `sidebar`. On desktop the grey canvas is inset and rounded
   (`rounded-2xl`); on mobile it runs edge to edge.
+- Three columns need room: the chat panel docks from `lg` and is a drawer below
+  it, and the header's controls size against the canvas (`@container` on `main`),
+  never the window.
+- **A row yields its actions, never its content.** A list row is `flex-wrap`:
+  its title takes `basis-full` and the trailing actions fall to their own line
+  once the column is under `@md`. Truncating the subject to keep five icons on
+  one line is the bug this prevents.
 - Scrollbars are thin, trackless, rounded; `scrollbar-gutter: stable` wherever a
   list can grow.
 

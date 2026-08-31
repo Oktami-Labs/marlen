@@ -23,7 +23,7 @@ export function sendChatCommand(command: ChatCommand): void {
   else queuedCommands.push(command);
 }
 
-/** ChatPanel's subscription — one listener, the persistent instance. */
+/** ChatPanel's subscription, one listener, the persistent instance. */
 export function onChatCommand(listener: (command: ChatCommand) => void): () => void {
   commandListener = listener;
   while (queuedCommands.length > 0) {
@@ -36,7 +36,7 @@ export function onChatCommand(listener: (command: ChatCommand) => void): () => v
 }
 
 /**
- * Reveal the chat surface — the mobile slide-over; a no-op where the panel
+ * Reveal the chat surface, the mobile slide-over; a no-op where the panel
  * is already visible. App registers the real implementation.
  */
 let revealListener: (() => void) | null = null;
@@ -68,7 +68,7 @@ export function openAttachment(attachment: AttachmentOpen): void {
   attachmentListener?.(attachment);
 }
 
-/** The viewer's subscription — a single instance mounted at the app shell. */
+/** The viewer's subscription, a single instance mounted at the app shell. */
 export function onOpenAttachment(listener: (attachment: AttachmentOpen) => void): () => void {
   attachmentListener = listener;
   return () => {

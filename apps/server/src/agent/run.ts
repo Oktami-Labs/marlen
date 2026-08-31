@@ -26,28 +26,14 @@ export interface RunOptions {
   handlers?: RunHandlers;
   signal?: AbortSignal;
   log?: TurnLogger;
-  /**
-   * Trims the session's transcript when it nears the model's context window
-   * (see compaction.ts); called again with `force` after a provider
-   * context-overflow error, which shrinks the transcript so a retry is worth
-   * attempting. Absent for one-shot agents, whose single prompt cannot outgrow
-   * the window.
-   */
   compact?: (options?: { force?: boolean }) => Promise<boolean>;
 }
 
 const defaultLog = moduleLogger("agent");
 
-/** Turn-retry budget for transient provider failures (rate limits, 5xx, dropped streams). */
 const MAX_TRANSIENT_RETRIES = 2;
 const RETRY_BASE_DELAY_MS = 2_000;
 
-/**
- * A request the provider refused for size. `irreducible` means compaction had
- * nothing left to give: the system prompt and tool definitions alone don't fit,
- * so every conversation on this install fails the same way and a new chat is not
- * the way out.
- */
 export class ContextOverflowError extends Error {
   constructor(
     message: string,
@@ -58,19 +44,16 @@ export class ContextOverflowError extends Error {
   }
 }
 
-/** Provider throttle rejections (429s); waiting or switching provider is the remedy. */
 const RATE_LIMIT_PATTERN = /rate.?limit|too many requests|\b429\b/i;
 
 export function isRateLimitFailure(message: string): boolean {
   return RATE_LIMIT_PATTERN.test(message);
 }
 
-/** True when the errored turn already streamed visible text; a retry would repeat it. */
 function streamedVisibleText(message: AssistantMessage): boolean {
   return message.content.some((block) => block.type === "text" && block.text.trim() !== "");
 }
 
-/** Abortable backoff: 2s then 6s, plus jitter, resolving early when the signal fires. */
 function backoff(attempt: number, signal?: AbortSignal): Promise<void> {
   const delay = RETRY_BASE_DELAY_MS * 3 ** (attempt - 1) + Math.random() * 500;
   return new Promise((resolve) => {
@@ -84,16 +67,7 @@ function backoff(attempt: number, signal?: AbortSignal): Promise<void> {
   });
 }
 
-/**
- * Retries a turn that ended in a transient provider failure with no
- * user-visible output. pi doesn't throw on provider errors: it appends the
- * errored assistant message and records state.errorMessage, so recovery is
- * classify the failure, drop the errored message, and continue() from the
- * user/toolResult tail. A context-overflow failure gets one forced compaction
- * first (the estimate was proven wrong, so the transcript shrinks);
- * everything else backs off briefly. Failures that already streamed visible
- * text, aborted turns, and non-transient errors surface unchanged.
- */
+/** Retry transient failures only before they produce visible output. */
 async function retryTransientFailures(
   agent: Agent,
   log: TurnLogger,
@@ -107,28 +81,17 @@ async function retryTransientFailures(
     const last = agent.state.messages[agent.state.messages.length - 1];
     if (last?.role !== "assistant") return irreducible;
     const errored = last as AssistantMessage;
-    // "aborted" is the caller's own cancellation, never retried.
     if (errored.stopReason !== "error") return irreducible;
     if (streamedVisibleText(errored)) return irreducible;
 
-    // pi maintains the overflow signatures for every provider it supports, plus
-    // the exclusions that keep a throttling message ("too many tokens") from
-    // reading as one. Passing the window also catches the providers that accept
-    // an oversized request instead of refusing it.
     const overflow = isContextOverflow(errored, agent.state.model.contextWindow);
     if (!overflow && !isRetryableAssistantError(errored)) return irreducible;
 
     if (overflow) {
-      // Compact before touching the transcript tail: when nothing can be
-      // compacted, the errored message stays in place and the failure
-      // surfaces as-is rather than retrying into the same overflow. That case
-      // is the diagnosis worth keeping — the request's fixed part is what does
-      // not fit, so no conversation on this install can succeed.
+      // Leave irreducible overflow messages intact for diagnosis.
       if (!compact || !(await compact({ force: true }))) return true;
     }
 
-    // continue() resumes from a user/toolResult tail: drop the errored
-    // assistant message it re-attempts.
     agent.state.messages = agent.state.messages.slice(0, -1);
 
     if (!overflow) {
@@ -147,14 +110,11 @@ export async function runPrompt(
   options: RunOptions = {},
 ): Promise<string> {
   const { handlers = {}, signal, log = defaultLog, compact } = options;
-  // Already aborted before we start; don't open a turn at all.
   if (signal?.aborted) return "";
 
   let text = "";
   const turnStartedAt = Date.now();
-  // Tool name -> display label, resolved once: the toolset is fixed for the turn.
   const toolLabels = new Map(session.agent.state.tools.map((t) => [t.name, t.label]));
-  // toolCallId -> start time, so tool_execution_end can report a duration.
   const toolStarts = new Map<string, number>();
   let toolCalls = 0;
   let toolErrors = 0;
@@ -163,7 +123,6 @@ export async function runPrompt(
   const unsubscribe = session.agent.subscribe((event) => {
     switch (event.type) {
       case "message_update": {
-        // Forward only visible text; thinking deltas keep their own type.
         const inner = event.assistantMessageEvent;
         if (inner.type === "text_delta") {
           text += inner.delta;
@@ -184,10 +143,7 @@ export async function runPrompt(
         break;
       }
       case "tool_execution_update": {
-        // partialResult is a tool's streamed AgentToolResult, typed `any` by
-        // pi; extract the first text block defensively. A card in the partial
-        // details updates the tool call's card live (same replace-by-toolCallId
-        // as the final card at tool end).
+        // pi exposes partial tool results as untyped provider data.
         const partial = event.partialResult as { content?: unknown; details?: unknown } | undefined;
         const blocks = Array.isArray(partial?.content) ? partial.content : [];
         const first = blocks[0] as { type?: string; text?: unknown } | undefined;
@@ -206,8 +162,7 @@ export async function runPrompt(
         const startedAt = toolStarts.get(toolCallId);
         toolStarts.delete(toolCallId);
 
-        // A tool's arguments and its result are the user's mail. Only the
-        // tool's name, outcome and timing are ever written to the log.
+        // Never log tool arguments or results because they may contain mail.
         const fields = {
           tool: toolName,
           ms: startedAt === undefined ? undefined : Date.now() - startedAt,
@@ -215,9 +170,6 @@ export async function runPrompt(
         if (isError) log.warn(fields, "tool call failed");
         else log.info(fields, "tool call");
 
-        // event.result is the tool's raw { content, details } return, typed
-        // `any` by pi; details may be malformed or absent, parseAgentCard
-        // never throws.
         const result = event.result as { details?: unknown } | undefined;
         const card = parseAgentCard(result?.details);
         if (card) handlers.onCard?.(toolCallId, card);
@@ -227,19 +179,12 @@ export async function runPrompt(
     }
   });
 
-  // The pi Agent owns its own AbortController per run; forward the external
-  // signal into it so the model stream and tool execution actually stop.
   const onAbort = () => session.agent.abort();
   signal?.addEventListener("abort", onAbort);
 
   try {
-    // Trim the transcript in advance if it's nearing the context window; fails
-    // open (never throws), so a compaction hiccup can't sink the turn.
     await compact?.();
     await session.agent.prompt(prompt);
-    // Transient provider failures are retried in place while the subscription
-    // above is still attached, so a successful retry streams through the same
-    // handlers.
     irreducibleOverflow = await retryTransientFailures(session.agent, log, signal, compact);
   } finally {
     signal?.removeEventListener("abort", onAbort);
@@ -248,16 +193,13 @@ export async function runPrompt(
 
   const durationMs = Date.now() - turnStartedAt;
 
-  // pi doesn't throw on provider failures (missing credentials, refused
-  // requests); it records them on the state. Surface them to the caller.
+  // pi records provider failures on state instead of throwing them.
   const failure = session.agent.state.errorMessage;
   if (failure) {
     log.warn(
       { durationMs, toolCalls, toolErrors, failure, irreducibleOverflow },
       "agent turn failed",
     );
-    // Typed, so the transcript row can tell the two overflows apart without
-    // re-classifying prose: one is fixed by a new chat, the other never is.
     if (irreducibleOverflow) throw new ContextOverflowError(failure, true);
     throw new Error(failure);
   }

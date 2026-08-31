@@ -31,23 +31,22 @@ import { learnRoutes } from "./routes/learn.js";
 import { libraryRoutes } from "./routes/library.js";
 import { llmRoutes } from "./routes/llm.js";
 import { mailRoutes } from "./routes/mail.js";
-import { memoryRoutes } from "./routes/memories.js";
 import { onOfficeRoutes } from "./routes/onoffice.js";
 import { outboundRoutes } from "./routes/outbound.js";
 import { pipedreamRoutes } from "./routes/pipedream.js";
 import { searchRoutes } from "./routes/search.js";
 import { seenRoutes } from "./routes/seen.js";
 import { settingsRoutes } from "./routes/settings.js";
-import { skillRoutes } from "./routes/skills.js";
 import { sttRoutes } from "./routes/stt.js";
 import { todosRoutes } from "./routes/todos.js";
 import { whatsAppRoutes } from "./routes/whatsapp.js";
+import { wikiRoutes } from "./routes/wiki.js";
 
 const here = dirname(fileURLToPath(import.meta.url));
 
 /**
- * Build the fully configured Fastify instance: error handling, CORS, host
- * guard, every route plugin, and static serving of the web app. Everything
+ * Build the fully configured Fastify instance with error handling, CORS, the
+ * host guard, all route plugins, and static web serving. It includes everything
  * except background services and listening (index.ts adds those; tests drive
  * this instance via app.inject()).
  */
@@ -100,8 +99,7 @@ export async function buildApp(): Promise<FastifyInstance> {
   await app.register(outboundRoutes);
   await app.register(todosRoutes);
   await app.register(seenRoutes);
-  await app.register(memoryRoutes);
-  await app.register(skillRoutes);
+  await app.register(wikiRoutes);
   await app.register(sttRoutes);
   await app.register(leadsRoutes);
   await app.register(learnRoutes);

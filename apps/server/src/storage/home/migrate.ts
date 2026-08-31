@@ -1,39 +1,38 @@
-import { cp, readdir, readFile, rename, rm, rmdir, stat } from "node:fs/promises";
+import { cp, readdir, readFile, rename, rm, rmdir, stat, utimes } from "node:fs/promises";
 import { join, resolve } from "node:path";
-import type { MemoryEntry } from "@marlen/shared";
+import type { WikiPage } from "@marlen/shared";
 import { env } from "../../core/env.js";
 import { moduleLogger } from "../../core/logger.js";
 import { writeFileAtomic } from "../../core/utils/atomicFile.js";
+import { slugify } from "../../core/utils/util.js";
 import { sqlite } from "../../db/index.js";
 import {
   deleteSetting,
   getAccountVoices,
   getSetting,
   patchAccountVoice,
+  repointVoiceStyleMemory,
 } from "../../db/settings.js";
-import { allocateMemoryId, writeMemoryEntryFile } from "../memories/store.js";
-import { getAgentHomeDir, knowledgeDir, memoryDir, resolveFolder, skillsDir } from "./agentHome.js";
-import { serializeFrontmatter } from "./frontmatter.js";
+import { allocatePageId, writeWikiPageFile } from "../wiki/store.js";
+import { getAgentHomeDir, knowledgeDir, resolveFolder, wikiDir } from "./agentHome.js";
+import { parseFrontmatter, serializeFrontmatter } from "./frontmatter.js";
 
-/**
- * One-shot boot migrations into the agent home. Each detects its steady
- * state (source folder or table absent) and no-ops, so a crash at any point
- * re-runs cleanly on the next boot. These are the deliberate exception to
- * "data upgrades live in schema steps": schema steps are SQL-only, and the
- * data's destination here is the filesystem.
- */
+/** Idempotent migrations whose destination is the filesystem. */
 
 const log = moduleLogger("home");
 
-/**
- * Skill files from the pre-home folder (env.skillsPath), converted from the
- * old "line one is the description" layout to frontmatter. Conversion is
- * deterministic, so re-running overwrites identically; each source file is
- * deleted only after its converted copy is in place.
- */
+function legacyMemoryDir(): string {
+  return join(getAgentHomeDir(), "memory");
+}
+
+function legacySkillsDir(): string {
+  return join(getAgentHomeDir(), "skills");
+}
+
+/** Move skill files after converting line-one descriptions to frontmatter. */
 export async function migrateSkillsFolder(): Promise<void> {
   const source = resolve(env.skillsPath);
-  const target = skillsDir();
+  const target = legacySkillsDir();
   if (source === target) return;
   let entries: string[];
   try {
@@ -53,15 +52,7 @@ export async function migrateSkillsFolder(): Promise<void> {
   if (moved > 0) log.info({ moved, target }, "migrated skills into the agent home");
 }
 
-/**
- * The pre-home `memories` table, exported as one file per row and then
- * dropped. Raw SQL against a table the drizzle schema no longer declares —
- * this migration is the one thing allowed to know it existed. Rows are read
- * in (created_at, id) order so id allocation is deterministic: a re-run after
- * a crash overwrites each file with identical content before reaching the
- * drop. Voice learns store memory ids in the account.voices setting, so those
- * are remapped before the table goes.
- */
+/** Export memory rows deterministically, remap voice references, then drop the table. */
 export async function migrateMemoriesTable(): Promise<void> {
   const table = sqlite
     .prepare("SELECT name FROM sqlite_master WHERE type = 'table' AND name = 'memories'")
@@ -83,11 +74,19 @@ export async function migrateMemoriesTable(): Promise<void> {
 
   const idMap = new Map<string, string>();
   const taken = new Set<string>();
+  try {
+    for (const file of await readdir(wikiDir())) {
+      if (file.endsWith(".md")) taken.add(file.slice(0, -".md".length).normalize("NFC"));
+    }
+  } catch {
+    // No wiki folder yet; nothing to collide with.
+  }
   for (const row of rows) {
     const content = row.content.trim();
     if (!content) continue;
-    const entry: MemoryEntry = {
-      id: allocateMemoryId(content, taken),
+    const page: WikiPage = {
+      id: allocatePageId(content, taken),
+      type: null,
       content,
       source: row.source === "agent" ? "agent" : "user",
       accountId: row.account_id,
@@ -97,9 +96,9 @@ export async function migrateMemoriesTable(): Promise<void> {
       createdAt: row.created_at,
       updatedAt: row.updated_at,
     };
-    taken.add(entry.id);
-    idMap.set(row.id, entry.id);
-    await writeMemoryEntryFile(entry);
+    taken.add(page.id);
+    idMap.set(row.id, page.id);
+    await writeWikiPageFile(page);
   }
 
   for (const voice of await getAccountVoices()) {
@@ -113,19 +112,12 @@ export async function migrateMemoriesTable(): Promise<void> {
   }
 
   sqlite.exec("DROP TABLE memories");
-  if (rows.length > 0) log.info({ exported: idMap.size }, "migrated memories into the agent home");
+  if (rows.length > 0) log.info({ exported: idMap.size }, "migrated memories into the wiki");
 }
 
-/** The setting that once held a user-chosen library folder; only this migration still knows it. */
 const LEGACY_LIBRARY_FOLDER_KEY = "library.folder";
 
-/**
- * Library files from pre-home locations into the knowledge folder. The
- * default/desktop folder (env.libraryPath) is MOVED — rename preserves
- * mtimes, so existing index rows reconcile as unchanged on the next scan. A
- * folder the user explicitly pointed the app at is COPIED and left in place:
- * the migration never empties a folder the user chose for other purposes.
- */
+/** Move the managed library, but copy any user-chosen external folder. */
 export async function migrateLibraryFolder(): Promise<void> {
   const target = knowledgeDir();
   const defaultSource = resolveFolder(env.libraryPath);
@@ -146,16 +138,13 @@ export async function migrateLibraryFolder(): Promise<void> {
   await deleteSetting(LEGACY_LIBRARY_FOLDER_KEY);
 }
 
-/**
- * The pre-relocation agent home (default ~/Trailin). Its memory/, skills/ and
- * knowledge/ contents move into the current home; no-ops once that folder is
- * the current home or has been emptied.
- */
+/** Move each managed folder into the current agent home. */
 export async function migrateLegacyHome(): Promise<void> {
   const legacy = resolveFolder(env.legacyAgentHomePath);
   if (legacy === getAgentHomeDir()) return;
-  await moveContentsInto(join(legacy, "memory"), memoryDir());
-  await moveContentsInto(join(legacy, "skills"), skillsDir());
+  await moveContentsInto(join(legacy, "memory"), legacyMemoryDir());
+  await moveContentsInto(join(legacy, "skills"), legacySkillsDir());
+  await moveContentsInto(join(legacy, "wiki"), wikiDir());
   await moveContentsInto(join(legacy, "knowledge"), knowledgeDir());
   await rmdir(legacy).catch(() => {});
 }
@@ -181,7 +170,7 @@ async function moveContentsInto(source: string, target: string): Promise<void> {
     try {
       await rename(from, to);
     } catch {
-      // Another filesystem (EXDEV) — copy with timestamps, then remove.
+      // Another filesystem (EXDEV), copy with timestamps, then remove.
       await cp(from, to, { recursive: true, preserveTimestamps: true });
       await rm(from, { recursive: true, force: true });
     }
@@ -219,7 +208,147 @@ async function exists(path: string): Promise<boolean> {
   }
 }
 
-/** Old format: line 1 = description, rest = instructions. Already-converted files pass through. */
+/** Fold memory, skills, and notes into wiki pages without changing source mtimes. */
+export async function migrateToWiki(): Promise<void> {
+  const taken = new Set<string>();
+  try {
+    for (const file of await readdir(wikiDir())) {
+      if (file.endsWith(".md")) taken.add(file.slice(0, -".md".length).normalize("NFC"));
+    }
+  } catch {
+    // No wiki folder yet; nothing to collide with.
+  }
+  const renamed = new Map<string, string>();
+
+  await foldFolder(legacyMemoryDir(), taken, renamed, (text, mtime) => {
+    const { fields, body } = parseFrontmatter(text);
+    if (!body) return null;
+    return {
+      fields: {
+        source: fields.source === "agent" ? "agent" : "user",
+        account: fields.account ?? "",
+        contact: fields.contact ?? "",
+        createdAt: fields.createdAt || mtime.toISOString(),
+        usedCount: fields.usedCount ?? "",
+        lastUsedAt: fields.lastUsedAt ?? "",
+      },
+      body,
+    };
+  });
+
+  await foldFolder(legacySkillsDir(), taken, renamed, (text, mtime) => {
+    const { fields, body } = parseFrontmatter(text);
+    const description = fields.description ?? "";
+    const content = description && body ? `${description}\n\n${body}` : description || body;
+    if (!content) return null;
+    return {
+      fields: { type: "skill", source: "user", createdAt: mtime.toISOString() },
+      body: content,
+    };
+  });
+
+  await foldNotes(join(knowledgeDir(), "notes"), taken);
+
+  // Voice pointers name style files by id; follow any collision renames.
+  for (const [oldId, newId] of renamed) {
+    if (oldId !== newId) await repointVoiceStyleMemory(oldId, newId);
+  }
+}
+
+interface ConvertedPage {
+  fields: Record<string, string>;
+  body: string;
+}
+
+async function foldFolder(
+  source: string,
+  taken: Set<string>,
+  renamed: Map<string, string>,
+  convert: (text: string, mtime: Date) => ConvertedPage | null,
+): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await readdir(source);
+  } catch {
+    return;
+  }
+  let moved = 0;
+  for (const file of entries) {
+    if (!file.endsWith(".md")) continue;
+    const from = join(source, file);
+    const [text, info] = [await readFile(from, "utf8"), await stat(from)];
+    const page = convert(text, info.mtime);
+    if (page) {
+      const id = file.slice(0, -".md".length).normalize("NFC");
+      renamed.set(id, await placePage(id, page, info.mtime, taken));
+    }
+    await rm(from);
+    moved += 1;
+  }
+  await rmdir(source).catch(() => {});
+  if (moved > 0) log.info({ moved, source }, "folded into the wiki");
+}
+
+/** Move markdown notes to the wiki and leave other library files in place. */
+async function foldNotes(source: string, taken: Set<string>): Promise<void> {
+  let entries: string[];
+  try {
+    entries = await readdir(source, { recursive: true });
+  } catch {
+    return;
+  }
+  let moved = 0;
+  for (const rel of entries) {
+    if (!rel.endsWith(".md")) continue;
+    const from = join(source, rel);
+    const info = await stat(from).catch(() => null);
+    if (!info?.isFile()) continue;
+    const body = (await readFile(from, "utf8")).trim();
+    if (body) {
+      const preferred = slugify(rel.slice(0, -".md".length)) || allocatePageId(body, taken);
+      await placePage(
+        preferred,
+        { fields: { source: "user", createdAt: info.mtime.toISOString() }, body },
+        info.mtime,
+        taken,
+      );
+    }
+    await rm(from);
+    moved += 1;
+  }
+  // Remove only directories emptied by the move.
+  const dirs: string[] = [];
+  for (const rel of entries) {
+    const path = join(source, rel);
+    const info = await stat(path).catch(() => null);
+    if (info?.isDirectory()) dirs.push(path);
+  }
+  for (const dir of dirs.sort((a, b) => b.length - a.length)) await rmdir(dir).catch(() => {});
+  await rmdir(source).catch(() => {});
+  if (moved > 0) log.info({ moved, source }, "folded notes into the wiki");
+}
+
+async function placePage(
+  preferredId: string,
+  page: ConvertedPage,
+  mtime: Date,
+  taken: Set<string>,
+): Promise<string> {
+  const serialized = serializeFrontmatter(page.fields, page.body);
+  let id = preferredId;
+  if (taken.has(id)) {
+    const existing = await readFile(join(wikiDir(), `${id}.md`), "utf8").catch(() => null);
+    // Reuse an identical file from an interrupted run.
+    if (existing === serialized) return id;
+    for (let n = 2; taken.has(id); n += 1) id = `${preferredId}-${n}`;
+  }
+  const path = join(wikiDir(), `${id}.md`);
+  await writeFileAtomic(path, serialized, 0o644);
+  await utimes(path, mtime, mtime);
+  taken.add(id);
+  return id;
+}
+
 function convertSkillFile(text: string): string {
   const normalized = text.replace(/\r\n/g, "\n").trim();
   if (normalized.startsWith("---\n")) return `${normalized}\n`;

@@ -1,22 +1,33 @@
 import type { EmailThreadMessage } from "@marlen/shared";
-import { ChevronDown, ChevronRight } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { EmailBody } from "@/components/EmailBody";
+import { MessageHeader, RecipientLine } from "@/components/MessageHeader";
 import { DisclosureToggle } from "@/components/ui/disclosure-toggle";
 import { LoadingRow, RetryableError } from "@/components/ui/feedback";
+import { parseAddress } from "@/lib/addresses";
 import { api, isNotFound } from "@/lib/api";
-import { relativeTime } from "@/lib/dates";
+import { dayTimeLabel } from "@/lib/dates";
 import { errorMessage } from "@/lib/utils";
 
 /**
  * Collapsible conversation history for anything that references a provider
- * thread — reply drafts in the chat card and the Home review list. The thread
+ * thread, reply drafts in the chat card and the Home review list. The thread
  * is read live on first expand (nothing is stored locally), with the last
  * message opened since that's the one being replied to. A thread with no
  * earlier messages (a draft that isn't a reply sits alone in its own thread)
  * renders a quiet empty line instead of an error.
  */
-export function ThreadHistory({ accountId, threadId }: { accountId: string; threadId: string }) {
+export function ThreadHistory({
+  accountId,
+  threadId,
+  self,
+}: {
+  accountId: string;
+  threadId: string;
+  /** The account's own address, so its messages read as "me". */
+  self?: string;
+}) {
   const { t, i18n } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const [messages, setMessages] = React.useState<EmailThreadMessage[] | null>(null);
@@ -25,8 +36,7 @@ export function ThreadHistory({ accountId, threadId }: { accountId: string; thre
 
   const load = React.useCallback(async () => {
     setError(null);
-    // No provider thread id (unlinked/legacy draft): same as a thread holding
-    // nothing beyond the draft — the server rejects an empty id.
+    // A draft without a provider thread id has no history.
     if (!threadId) {
       setMessages([]);
       return;
@@ -36,8 +46,7 @@ export function ThreadHistory({ accountId, threadId }: { accountId: string; thre
       setMessages(detail.messages);
       setOpenIndexes(new Set(detail.messages.length > 0 ? [detail.messages.length - 1] : []));
     } catch (err) {
-      // A 404 means the thread holds nothing beyond the draft itself — that's
-      // the standalone-draft case, not a failure.
+      // A 404 means the thread contains only the standalone draft. It is not a failure.
       if (isNotFound(err)) setMessages([]);
       else setError(errorMessage(err));
     }
@@ -79,6 +88,7 @@ export function ThreadHistory({ accountId, threadId }: { accountId: string; thre
                 open={openIndexes.has(index)}
                 onToggle={() => toggleMessage(index)}
                 lang={i18n.language}
+                self={self}
               />
             ))}
           </div>
@@ -87,19 +97,26 @@ export function ThreadHistory({ accountId, threadId }: { accountId: string; thre
   );
 }
 
-/** One message: a collapsed sender/time line that expands to recipients + body. */
+/**
+ * One message, set like a mail client: the sender's avatar and name, the time
+ * on the right, and a snippet standing in for the body until the row is opened.
+ * The whole header is the toggle, so there is no chevron to aim at.
+ */
 export function ThreadMessageRow({
   message,
   open,
   onToggle,
   lang,
+  self,
 }: {
   message: EmailThreadMessage;
   open: boolean;
   onToggle: () => void;
   lang: string;
+  self?: string;
 }) {
   const { t } = useTranslation();
+  const sender = parseAddress(message.from);
 
   return (
     <div>
@@ -107,37 +124,35 @@ export function ThreadMessageRow({
         type="button"
         onClick={onToggle}
         aria-expanded={open}
-        className="flex w-full items-center gap-2 rounded-lg px-2 py-2 text-left transition-colors hover:bg-surface-2"
+        className="w-full rounded-lg px-2 py-3 text-left transition-colors hover:bg-surface-2"
       >
-        {open ? (
-          <ChevronDown className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        ) : (
-          <ChevronRight className="h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-        )}
-        <span className="min-w-0 flex-1 truncate text-sm font-medium">{message.from}</span>
-        <time className="shrink-0 font-mono text-2xs text-muted-foreground">
-          {relativeTime(message.date, lang)}
-        </time>
+        <MessageHeader
+          name={sender.name}
+          detail={open ? sender.address : undefined}
+          time={dayTimeLabel(message.date, lang, "long")}
+          dateTime={message.date}
+        >
+          {open ? (
+            <>
+              <RecipientLine kind="to" addresses={message.to} self={self} />
+              <RecipientLine kind="cc" addresses={message.cc} self={self} />
+            </>
+          ) : (
+            <p className="truncate text-xs text-muted-foreground">{message.body}</p>
+          )}
+        </MessageHeader>
       </button>
 
       {open && (
-        /* Body indents to the sender's text edge, keeping the chevron column clear. */
-        <div className="flex flex-col gap-2 pb-3 pl-7.5 pr-3 pt-0.5">
-          {message.to.length > 0 && (
-            <p className="truncate text-xs text-muted-foreground">
-              <span className="font-mono text-2xs">{t("threadHistory.to")}</span>{" "}
-              {message.to.join(", ")}
+        /* Body indents to the sender's text edge, keeping the avatar column clear. */
+        <div className="flex flex-col gap-2 pb-6 pl-13 pr-2 pt-2">
+          {message.bodyHtml ? (
+            <EmailBody html={message.bodyHtml} />
+          ) : (
+            <p className="whitespace-pre-wrap text-sm leading-relaxed">
+              {message.body || t("threadHistory.emptyBody")}
             </p>
           )}
-          {message.cc && message.cc.length > 0 && (
-            <p className="truncate text-xs text-muted-foreground">
-              <span className="font-mono text-2xs">{t("threadHistory.cc")}</span>{" "}
-              {message.cc.join(", ")}
-            </p>
-          )}
-          <p className="whitespace-pre-wrap text-sm leading-relaxed">
-            {message.body || t("threadHistory.emptyBody")}
-          </p>
         </div>
       )}
     </div>

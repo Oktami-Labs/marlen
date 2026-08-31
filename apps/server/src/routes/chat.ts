@@ -43,8 +43,6 @@ const chatBody = Type.Object({
   conversationId: Type.Optional(Type.String()),
   focusAccountId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   message: Type.String(),
-  // Composer @-mentions (agent/emailRefs.ts): appended to the prompt run as an
-  // authoritative note, while the persisted row keeps `message` raw.
   refs: Type.Optional(
     Type.Array(
       Type.Object({
@@ -61,10 +59,7 @@ const chatBody = Type.Object({
   ),
 });
 
-// Conversation ids with a visibly in-flight turn, only for the history rail's
-// "responding…" badge (the `running` flag below). Deliberately separate from the
-// correctness guard in agent/turnRecorder.ts (beginTurn/TurnInFlightError): this
-// Set only drives a UI badge, so it's safe to manage locally around the request.
+// UI state only; beginTurn owns the concurrency guard.
 const runningConversations = new Set<string>();
 
 const messageMatchStmt = lazyStatement(`
@@ -80,8 +75,7 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
     const limit = Math.min(req.query.limit ?? 50, 200);
     const offset = req.query.offset ?? 0;
 
-    // buildFtsMatch is null when the query has no word/number chars, so "***"
-    // degrades to a title-only match rather than an empty MATCH (which SQLite rejects).
+    // Empty FTS syntax falls back to title matching.
     const pattern = q ? likeContains(q) : undefined;
     const ftsMatch = q ? buildFtsMatch(q, "AND") : null;
     const matchedConversationIds = ftsMatch
@@ -121,8 +115,6 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
       if (title === undefined && focusAccountId === undefined) {
         throw badRequest("nothing to update");
       }
-      // Validate before the existence check: a malformed request is a 400
-      // regardless of whether the id resolves.
       const trimmed = title?.trim();
       if (title !== undefined && !trimmed) throw badRequest("title is required");
       await requireRow(
@@ -141,8 +133,6 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
         emitServerEvent("conversations");
       }
 
-      // A manual pick sets the account and clears the thread; null clears focus
-      // entirely. Both emit "conversations" themselves.
       if (focusAccountId === null) {
         await clearConversationFocus(req.params.id);
       } else if (focusAccountId !== undefined) {
@@ -163,18 +153,11 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
         .where(eq(schema.conversations.id, req.params.id)),
       "not found",
     );
-    // A turn still running for this conversation could insert its assistant row
-    // (turnRecorder's recordOutcome) after the delete below; refuse with the
-    // same 409 as a concurrent send rather than race it. runningConversations is
-    // set synchronously right after beginTurn with no await between, so this
-    // can't miss a just-started turn.
+    // Do not delete while the turn can still append its assistant row.
     if (runningConversations.has(req.params.id)) {
       throw conflict("a reply is in progress for this conversation");
     }
-    // Dispose the live session before deleting rows, not after: it drops the
-    // session from the cache synchronously, so from here nothing can start a
-    // new turn (the next getOrCreateSession would rebuild from `messages`,
-    // about to be gone) and no write lands after the delete commits.
+    // Remove the cached session before deleting its transcript.
     disposeSession(req.params.id);
     deleteConversationCascade(req.params.id);
     return { ok: true };
@@ -183,7 +166,6 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
   app.get("/api/chat/system-prompt", async () => ({ prompt: await buildSystemPrompt() }));
 
   app.get("/api/conversations/:id/messages", { schema: { params: idParams } }, async (req) => {
-    // Compaction rows are model-history bookkeeping, not the visible transcript.
     const rows = await db
       .select()
       .from(schema.messages)
@@ -207,9 +189,7 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
     const message = req.body.message.trim();
     if (!message) throw badRequest("message is required");
 
-    // Resolve the id and acquire the turn guard before hijacking the reply: once
-    // hijack() hands over the socket there is no way to answer with an HTTP
-    // status, so an overlapping send is refused here.
+    // Acquire the turn guard before hijacking the HTTP response.
     const conversationId = req.body.conversationId ?? randomUUID();
     let turn: Turn;
     try {
@@ -221,11 +201,7 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
       throw error;
     }
 
-    // The turn is deliberately NOT tied to the client's connection: a refresh
-    // or closed tab only ends the stream (sends become no-ops) while the turn
-    // runs on and records its outcome to the transcript. The reattaching
-    // client restores the finished reply from there; runningConversations
-    // covers the gap with the "responding…" badge.
+    // A disconnected client does not cancel the durable turn.
     const stream = openSse<ChatStreamEvent>(reply, () => {});
     const send = (event: ChatStreamEvent) => stream.send(event);
 
@@ -236,10 +212,6 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
 
       send({ type: "conversation", conversationId });
 
-      // ensureConversation (in turnRecorder) is idempotent, so a client-supplied
-      // id naming a conversation this server never recorded (stale client state
-      // after a delete) never orphans this turn's messages. No other route
-      // creates type: "chat" rows.
       let thinkingSent = false;
       const { text } = await turn.run({
         prompt: message,
@@ -283,14 +255,10 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
 
       send({ type: "done", text });
     } catch (error) {
-      // Stopped on request: the turn already capped its own transcript, so this
-      // is the normal end of a turn, not a failure to report.
       if (error instanceof TurnStoppedError) {
         send({ type: "stopped", text: error.text });
         return;
       }
-      // turn.run() already closed out the transcript; this only notifies a
-      // still-connected client. stream.send is a no-op once the stream has ended.
       req.log.error(error, "chat failed");
       const message = errorMessage(error);
       send(
@@ -305,8 +273,6 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
     }
   });
 
-  // Stopping is idempotent: a turn that finished on its own between the click
-  // and this request is not an error, so `stopped` reports what was found.
   app.post("/api/chat/:id/stop", { schema: { params: idParams } }, async (req) => {
     return { stopped: stopTurn(req.params.id) };
   });

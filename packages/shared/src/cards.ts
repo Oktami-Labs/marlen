@@ -24,17 +24,20 @@ export interface EmailThreadMessage {
   to: string[];
   cc?: string[];
   date: string;
-  /** Rendered literally: email bodies are never markdown. */
   body: string;
+  /**
+   * The message's HTML, already sanitized server-side, when it has any. The
+   * viewer must still render it inside the sandboxed iframe (`EmailBody`) and
+   * never inject it into the app document.
+   */
+  bodyHtml?: string;
   subject?: string;
   isUnread?: boolean;
   isFromMe?: boolean;
 }
 
 export interface DraftPreview {
-  /** The mailbox draft id; absent while the draft is only a proposal. */
   draftId?: string;
-  /** The chat proposal this card fronts; keeping it creates the mailbox draft. */
   proposalId?: string;
   threadId?: string;
   subject: string;
@@ -42,13 +45,11 @@ export interface DraftPreview {
   cc?: string[];
   bcc?: string[];
   body: string;
-  /** The account signature appended below the body on send; shown, never part of the editable body. */
   signatureText?: string;
   webUrl?: string;
   attachments?: { filename: string; size?: number }[];
 }
 
-/** A real enum the UI groups on, never a marker parsed back out of prose. */
 export const BRIEFING_PRIORITIES = ["urgent", "reply", "action", "fyi"] as const;
 export type BriefingPriority = (typeof BRIEFING_PRIORITIES)[number];
 
@@ -75,21 +76,16 @@ export interface BriefingRollup {
 export interface ChoiceOption {
   label: string;
   detail?: string;
-  /** Reply sent when picked; defaults to `label`. */
   reply?: string;
   ref?: EmailRef;
 }
 
-/** A real enum the UI renders marks from, never a state parsed out of prose. */
 export const DELEGATION_STATUSES = ["pending", "running", "done", "failed"] as const;
 export type DelegationStatus = (typeof DELEGATION_STATUSES)[number];
 
-/** One background worker's lane in a delegation card. */
 export interface DelegationTask {
-  /** Display label derived from the worker's task instruction. */
   label: string;
   status: DelegationStatus;
-  /** Worker runtime, present once the task has finished. */
   elapsedMs?: number;
 }
 
@@ -97,20 +93,17 @@ export interface AttachmentItem {
   accountId: string;
   messageId: string;
   filename: string;
-  /** Provider's declared type, for display only: the served MIME is derived from the filename. */
   mimeType?: string;
   size?: number;
   viewable: boolean;
   saveable: boolean;
 }
 
-/** A leads-directory row the agent surfaces in chat: the row's display fields. */
 export interface LeadCardData {
   id: string;
   email: string;
   status: LeadStatus;
   name?: string;
-  /** Tier A/B/C; omitted when unassessed. */
   priority?: "A" | "B" | "C";
   language?: string;
   interest?: string;
@@ -124,7 +117,6 @@ export interface LeadCardData {
 export const CHART_KINDS = ["bar", "line"] as const;
 export type ChartKind = (typeof CHART_KINDS)[number];
 
-/** A bar's color by meaning, reusing the app's semantic tones; default is the accent. */
 export const CHART_TONES = ["accent", "success", "warning", "danger", "neutral"] as const;
 export type ChartTone = (typeof CHART_TONES)[number];
 
@@ -134,12 +126,37 @@ export interface ChartPoint {
   tone?: ChartTone;
 }
 
+/** One changed line of a rewritten wiki page. */
+export interface WikiDiffRow {
+  op: "+" | "-";
+  text: string;
+}
+
+/** One thing the agent still needs before it can act. */
+export interface FormField {
+  name: string;
+  label: string;
+  kind: "text" | "long" | "number" | "date" | "choice";
+  /** The picks, for kind "choice". */
+  options?: string[];
+  placeholder?: string;
+  required?: boolean;
+}
+
+/** One web result an answer stands on. */
+export interface SourceItem {
+  url: string;
+  title: string;
+  description?: string;
+  /** How old the result is, as the search provider reported it. */
+  age?: string;
+}
+
 export type AgentCard =
   | {
       kind: "email_draft";
       account?: CardAccount;
       draft: DraftPreview;
-      /** Learned style directives this draft was written under; absent when the account has no learned voice. */
       voiceDirectives?: string[];
     }
   | { kind: "delegation"; tasks: DelegationTask[] }
@@ -148,7 +165,6 @@ export type AgentCard =
       kind: "chart";
       chartType: ChartKind;
       title?: string;
-      /** Unit suffix for values, e.g. "€", "%", "emails". */
       unit?: string;
       points: ChartPoint[];
     }
@@ -163,6 +179,20 @@ export type AgentCard =
       kind: "choices";
       question: string;
       options: ChoiceOption[];
+    }
+  | { kind: "sources"; query: string; items: SourceItem[] }
+  | { kind: "form"; title: string; fields: FormField[] }
+  | {
+      kind: "wiki_note";
+      pageId: string;
+      /** The page's summary line, what the agent will read back later. */
+      summary: string;
+      /** The page's type, "skill" or an advisory noun; absent for a plain note. */
+      pageType?: string;
+      /** The page already existed and was rewritten. */
+      updated?: boolean;
+      /** What the rewrite changed, when it was one. */
+      diff?: { added: number; removed: number; rows: WikiDiffRow[] };
     }
   | {
       kind: "briefing";

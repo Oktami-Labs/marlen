@@ -6,7 +6,7 @@ import { IconButton } from "@/components/ui/icon-button";
 import { cn } from "@/lib/utils";
 
 /**
- * General-purpose modal — forms, pickers, anything bigger than a yes/no
+ * General-purpose modal, forms, pickers, anything bigger than a yes/no
  * prompt (use ConfirmDialog for that). One shape so features stop rolling
  * their own overlay/portal/close-button plumbing.
  */

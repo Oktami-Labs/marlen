@@ -1,14 +1,7 @@
 import type { ConnectedAccount } from "@marlen/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/**
- * The Gmail raw MIME shape is where broken signature images would silently
- * come back: without multipart/related + Content-ID parts, cid: references in
- * the html dangle and recipients see broken image boxes.
- */
-
 const proxyCalls: { method: string; url: string; body?: unknown }[] = [];
-/** Response for the next `get` (a drafts.get payload), when a test needs one. */
 let draftGetResponse: unknown = { id: "draft-1", message: { id: "msg-1", threadId: "thread-1" } };
 
 vi.mock("../../src/integrations/pipedream/connect.js", () => ({
@@ -95,7 +88,7 @@ describe("gmail drafts with inline signature images", () => {
  * Gmail's drafts.update replaces the whole message, so everything the caller
  * does not override has to be carried over verbatim. An edit that touches only
  * the subject must leave the html body and the signature's inline images
- * exactly as they were — rebuilding them from the plain-text reading would
+ * exactly as they were, rebuilding them from the plain-text reading would
  * strip the signature's formatting and drop its images for good.
  */
 describe("gmail draft updates", () => {
@@ -164,7 +157,6 @@ describe("gmail draft updates", () => {
 
     const mime = sentRawMime("put");
     expect(mime).toContain(Buffer.from(html, "utf8").toString("base64"));
-    // The old signature image is gone with the body that referenced it.
     expect(mime).not.toContain(`Content-ID: <${CONTENT_ID}>`);
   });
 });

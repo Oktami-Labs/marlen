@@ -9,7 +9,7 @@ import { moduleLogger } from "../core/logger.js";
 
 /**
  * Reading the images a pasted signature points at, so the signature carries its
- * own bytes. Two handoffs, neither of which the browser is allowed to do:
+ * own bytes. The browser cannot perform either source handoff:
  * a webmail copy references its logo by URL (googleusercontent, a company web
  * server) and a cross-origin response is opaque to canvas and to fetch; a copy
  * out of Outlook or Word on the desktop references the temp files it wrote for

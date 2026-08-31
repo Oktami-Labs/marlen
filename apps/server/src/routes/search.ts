@@ -7,8 +7,8 @@ import {
   searchChats,
   searchDocuments,
   searchDrafts,
-  searchMemories,
   searchRuns,
+  searchWiki,
 } from "../services/search/sources.js";
 
 const searchQuery = Type.Object({ q: Type.Optional(Type.String()) });
@@ -19,15 +19,15 @@ export const searchRoutes: FastifyPluginAsyncTypebox = async (app) => {
     if (!query) return { results: [] };
     const pattern = likeContains(query);
 
-    const [runs, chats, drafts, documents, memories] = await Promise.all([
+    const [runs, chats, drafts, documents, wiki] = await Promise.all([
       safeSource("runs", searchRuns(query, pattern)),
       safeSource("chats", searchChats(query, pattern)),
       safeSource("drafts", searchDrafts(query)),
       safeSource("documents", searchDocuments(query)),
-      safeSource("memories", searchMemories(query)),
+      safeSource("wiki", searchWiki(query)),
     ]);
 
-    const results: SearchResult[] = [...runs, ...chats, ...drafts, ...documents, ...memories];
+    const results: SearchResult[] = [...runs, ...chats, ...drafts, ...documents, ...wiki];
     return { results };
   });
 };

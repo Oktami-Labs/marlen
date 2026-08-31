@@ -15,26 +15,24 @@ import { buildDelegateTool } from "./delegate.js";
 import { keepDraftTool, listDraftsTool } from "./draftTools.js";
 import type { EmailToolset } from "./emailToolset.js";
 import { buildFileTools } from "./fileTools.js";
+import { presentFormTool } from "./formTool.js";
 import { recordCompactionMarker } from "./history.js";
-import { buildKnowledgeReadTools, buildKnowledgeTools } from "./knowledgeTools.js";
 import { leadDeleteTool, leadTools } from "./leadTools.js";
 import { getThinkingLevel, resolveActiveModel } from "./llm/registry.js";
 import { streamViaModelRegistry } from "./oneShot.js";
 import { buildSystemPrompt } from "./prompt.js";
-import { skillReadTool, skillWriteTool } from "./skillTools.js";
 import { buildTodoTools } from "./todoTools.js";
 import { voiceLearnTool } from "./voiceLearn.js";
 import { webFetchTool } from "./webFetchTool.js";
 import { webSearchTool } from "./webSearchTool.js";
+import { buildWikiReadTools, buildWikiTools } from "./wikiTools.js";
 
 const log = moduleLogger("assembly");
 
-/** The user's thinking setting; forced off for models that can't reason. */
 async function resolveThinkingLevel(model: { reasoning: boolean }): Promise<ThinkingLevel> {
   return model.reasoning ? getThinkingLevel() : "off";
 }
 
-/** Roughly what a tool costs on the wire: its name, description and JSON schema. */
 function toolSchemaChars(tools: AgentTool[]): number {
   let chars = 0;
   for (const tool of tools) {
@@ -47,30 +45,17 @@ export async function buildAgent(
   toolset: EmailToolset,
   history: Message[],
   caps: SessionCapabilities,
-  /**
-   * The session's conversation id (a run id for automation sessions).
-   * Forwarded to providers for session-scoped caching/affinity, and the
-   * address the between-turns compaction hook persists its marker under.
-   */
   sessionId?: string,
 ): Promise<Agent> {
   const model = await resolveActiveModel();
-  // onOffice CRM tools (native, non-Pipedream): reads always, plus whichever
-  // create/write surfaces the profile arms. Empty without onOffice credentials.
   const onOfficeTools = await loadOnOfficeTools({
     allowWrites: caps.onOffice.writes,
     allowCreates: caps.onOffice.creates,
   });
-  // WhatsApp tools: local-mirror reads (personal link only) plus a draft-first
-  // send tool (autosend gated at call time by the Settings grant). Empty while
-  // neither a personal link nor a Business account exists.
   const whatsappTools = caps.whatsapp.linked
     ? buildWhatsAppTools(caps.whatsapp.mirror, sessionId)
     : [];
-  // SECURITY: every session gets the agent-home-confined file tools, but an
-  // unattended run reads attacker-controllable mail with nobody watching, so
-  // it gets the read-only set and the whole-filesystem grants are never
-  // consulted (fileTools.ts owns both rules).
+  // Unattended sessions never receive whole-filesystem grants.
   const fileTools = await buildFileTools(caps.interactive);
   const systemPrompt = await buildSystemPrompt(caps);
   const agent = new Agent({
@@ -80,8 +65,6 @@ export async function buildAgent(
       thinkingLevel: await resolveThinkingLevel(model),
       tools: [
         listDraftsTool,
-        // Keeping a proposed draft is the user's explicit approval, so the
-        // tool exists only where a user is present to give it.
         ...(caps.interactive ? [keepDraftTool] : []),
         ...toolset.tools,
         ...onOfficeTools,
@@ -89,53 +72,28 @@ export async function buildAgent(
         ...fileTools,
         webSearchTool,
         webFetchTool,
-        // SECURITY: an unattended run reads attacker-controllable mail with no
-        // human to review a write, so it gets read-only knowledge tools. A
-        // memory persisted from a malicious email would otherwise be injected
-        // into every later session's system prompt. Same surface delegate
-        // workers get.
-        ...(caps.interactive ? buildKnowledgeTools() : buildKnowledgeReadTools()),
-        // Read-only self-description (app guide + changelog), so questions about
-        // the app are answered from shipped docs instead of model priors.
+        // Unattended mail cannot persist content into later prompts.
+        ...(caps.interactive ? buildWikiTools() : buildWikiReadTools()),
         appHelpTool,
-        // SECURITY: automation management is interactive-only. An automation's
-        // instruction is a standing prompt executed unattended every tick, so
-        // mail content can't plant or alter one. Past-run reads are inert.
+        // Unattended content cannot create or alter standing prompts.
         ...(caps.interactive ? automationManageTools : []),
         ...automationReadTools,
-        // Lead rows are inert structured data, so intake and updates stay
-        // available unattended (that's how mail becomes leads). Deleting
-        // cascades over the lead's automations, so it's interactive-only.
-        // Without CRM credentials the whole lead surface is absent.
+        // Lead deletion stays interactive because it cascades to automations.
         ...(caps.onOffice.configured ? leadTools : []),
         ...(caps.onOffice.configured && caps.interactive ? [leadDeleteTool] : []),
-        // Todos are inert data like leads, so create/list/update stay available
-        // unattended: that is how a run that hits a decision it can't make files
-        // one for the user. create_todo links back to this session's conversation.
         ...buildTodoTools(sessionId),
         buildDelegateTool(toolset.readTools),
-        // SECURITY: skills are read everywhere (unattended runs follow them),
-        // but written only interactively: a skill is a standing instruction
-        // executed on later runs, so mail content can't plant or alter one.
-        skillReadTool,
-        ...(caps.interactive ? [skillWriteTool] : []),
         ...(caps.interactive ? [voiceLearnTool] : []),
         composeBriefingTool,
-        ...(caps.interactive ? [presentChoicesTool] : []),
+        ...(caps.interactive ? [presentChoicesTool, presentFormTool] : []),
         ...(caps.interactive ? [presentChartTool] : []),
       ],
       messages: history,
     },
-    // Route model calls through the registry so stored credentials apply
-    // (subscription OAuth, saved API keys, then env vars).
     streamFn: streamViaModelRegistry,
     sessionId,
   });
-  // The part of a request that grows with the install rather than the
-  // conversation: the prompt and every tool definition ride on every turn, and
-  // neither is anything compaction can trim, so together they are the floor
-  // under which no conversation can fit. Recorded per session build so a
-  // context-window refusal can be read off the log instead of guessed at.
+  // Prompt and tool definitions are the fixed context compaction cannot trim.
   log.info(
     {
       tools: agent.state.tools.length,
@@ -146,12 +104,7 @@ export async function buildAgent(
     "agent session built",
   );
 
-  // A tool-heavy run can outgrow the context window between the turns of one
-  // run, where runPrompt's pre-prompt compaction can't reach. This hook trims
-  // mid-run: hand the loop a compacted replacement and mirror it onto agent
-  // state so the durable transcript matches what the model sees next. The
-  // state setter copies the array, so loop context and agent transcript stay
-  // independent for later appends.
+  // Compact between tool calls as well as before a prompt.
   agent.prepareNextTurnWithContext = async ({ context }, signal) => {
     const compacted = await compactedMessages(
       {

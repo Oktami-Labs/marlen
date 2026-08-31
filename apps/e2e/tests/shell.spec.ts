@@ -1,12 +1,6 @@
 import { expect, openApp, test } from "../src/fixtures.js";
 import { t } from "../src/i18n.js";
 
-/**
- * The shell: does a fresh install actually reach the app, and does the primary
- * navigation land on each view. This is the test that fails first when routing,
- * i18n wiring, or the static serving of the built SPA breaks.
- */
-
 test("a fresh install opens the app and navigates between views", async ({ page }) => {
   await openApp(page);
 
@@ -22,8 +16,6 @@ test("an unknown address says so instead of quietly landing on Home", async ({ p
   await openApp(page, "/gibt-es-nicht");
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(t("notFound.title"));
-  // The address that missed is named, and kept: a redirect would hide which
-  // link was wrong.
   await expect(page.getByText("/gibt-es-nicht")).toBeVisible();
   expect(new URL(page.url()).pathname).toBe("/gibt-es-nicht");
 
@@ -38,7 +30,6 @@ test("Leads stays hidden until a CRM is connected", async ({ page, request }) =>
 
   await request.put("/api/onoffice", { data: { token: "e2e-token", secret: "e2e-secret" } });
   try {
-    // The nav reads AppStatus, which App refreshes when the tab regains focus.
     await page.reload();
     await expect(leads).toBeVisible();
     await leads.click();

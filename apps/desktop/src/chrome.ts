@@ -7,10 +7,7 @@ import {
 } from "electron";
 import { titleBarMode } from "./titlebar";
 
-// Native window-background tone shown before the renderer paints and along the
-// window edge while resizing. Mirrors the web palette's --sidebar so a dark
-// launch doesn't flash white; kept in sync by hand (only the pre-paint flash
-// rides on it — the visible chrome is the web sidebar itself).
+// Keep these in sync with the web sidebar colors to avoid a launch flash.
 const CHROME_LIGHT = "#ffffff";
 const CHROME_DARK = "#0b0b0d";
 
@@ -22,17 +19,7 @@ export function initialBackground(): string {
   return chromeBackground(nativeTheme.shouldUseDarkColors);
 }
 
-/**
- * Data-URL progress page shown in the window while the local server boots.
- * Inline so it needs no packaged asset.
- *
- * The bar is time-driven, not measured: the server spends its startup inside
- * the module graph, before any of its own code could report a phase, so there
- * is nothing real to sample. It eases toward a ceiling it never reaches, so it
- * always moves and never reads as finished early; the window navigating to the
- * app is what ends it. The notes carry the actual information, and only appear
- * once a wait is long enough to need explaining.
- */
+/** Inline startup page with time-based progress that never reaches completion. */
 export function splashUrl(): string {
   const dark = nativeTheme.shouldUseDarkColors;
   const track = dark ? "#27272a" : "#e4e4e7";
@@ -45,11 +32,11 @@ export function splashUrl(): string {
     ],
     [
       60_000,
-      "Das dauert ungewöhnlich lange. Marlen protokolliert den Start in logs/marlen.log im Datenordner.",
+      "Das dauert ungewöhnlich lange. Marlene protokolliert den Start in logs/marlen.log im Datenordner.",
     ],
   ] as const;
   const html =
-    `<!doctype html><title>Marlen</title><style>` +
+    `<!doctype html><title>Marlene</title><style>` +
     `html,body{height:100%;margin:0;background:${chromeBackground(dark)}}` +
     `body{display:flex;align-items:center;justify-content:center;color:${fill};` +
     `font:400 13px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,sans-serif}` +
@@ -58,7 +45,7 @@ export function splashUrl(): string {
     `#f{height:100%;width:0;background:${fill}}` +
     `p{margin:14px 0 0}#n{margin-top:6px;font-size:12px;opacity:.65}` +
     `</style><main><div id="t"><div id="f"></div></div>` +
-    `<p>Marlen wird gestartet</p><p id="n"></p></main><script>` +
+    `<p>Marlene wird gestartet</p><p id="n"></p></main><script>` +
     `var p=0,s=Date.now(),n=${JSON.stringify(notes)};` +
     `setInterval(function(){` +
     `p+=(92-p)*0.06;document.getElementById("f").style.width=p.toFixed(1)+"%";` +
@@ -68,8 +55,6 @@ export function splashUrl(): string {
   return `data:text/html;charset=utf-8,${encodeURIComponent(html)}`;
 }
 
-/** macOS drops the title bar and lets the web chrome run edge to edge under the
- *  floating traffic lights; other platforms keep their native bar. */
 export function windowChrome(): BrowserWindowConstructorOptions {
   if (titleBarMode() === "inset") {
     return { titleBarStyle: "hiddenInset", trafficLightPosition: { x: 16, y: 14 } };
@@ -77,10 +62,6 @@ export function windowChrome(): BrowserWindowConstructorOptions {
   return {};
 }
 
-/** macOS keeps a minimal native menu — the app/edit/window roles that the
- *  standard shortcuts (copy, paste, quit) are wired through — minus the
- *  File/Help clutter. Elsewhere the menu bar is dropped entirely; Chromium still
- *  handles the edit shortcuts inside the web content. */
 export function installAppMenu(): void {
   if (process.platform !== "darwin") {
     Menu.setApplicationMenu(null);

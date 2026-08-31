@@ -6,12 +6,7 @@ import { env } from "../core/env.js";
 import * as schema from "./schema.js";
 import { SCHEMA_STEPS } from "./schemaSteps.js";
 
-/**
- * Lazy singleton: importing never touches the filesystem; the database is
- * created, opened, and DDL-initialized on first use, so tests can point
- * DATABASE_PATH at a scratch file before any query runs. Module-scope prepared
- * statements/transactions use lazyStatement / lazyTransaction for the same reason.
- */
+/** Importing the database must not touch the filesystem. */
 
 type DrizzleDb = BetterSQLite3Database<typeof schema>;
 
@@ -22,11 +17,7 @@ interface DbHandle {
 
 let handle: DbHandle | null = null;
 
-/**
- * Run every step past the file's user_version, each in its own transaction so
- * a failed step leaves the version at the last completed one. A file from a
- * newer build is refused outright: no downgrades (see schemaSteps.ts).
- */
+/** Apply each pending schema step atomically and reject downgrades. */
 function applySchema(sqlite: Database.Database): void {
   const version = sqlite.pragma("user_version", { simple: true }) as number;
   if (version > SCHEMA_STEPS.length) {
@@ -44,8 +35,7 @@ function applySchema(sqlite: Database.Database): void {
   }
 }
 
-// Rebrand carry-over: adopt a pre-rename trailin.db (with its WAL sidecars) as
-// the current db, so an existing install keeps its data instead of opening empty.
+// Preserve the database and WAL sidecars across the app rename.
 function adoptLegacyDbFile(dbPath: string): void {
   if (existsSync(dbPath)) return;
   const legacy = join(dirname(dbPath), "trailin.db");
@@ -63,9 +53,7 @@ function openHandle(): DbHandle {
 
   const sqlite = new Database(dbPath);
   sqlite.pragma("journal_mode = WAL");
-  // Wait up to 5s for a competing writer instead of throwing SQLITE_BUSY: under
-  // WAL a second server process (pnpm start alongside pnpm dev) can hold the DB,
-  // and a locked moment shouldn't fail a request.
+  // Let a competing WAL writer finish before returning SQLITE_BUSY.
   sqlite.pragma("busy_timeout = 5000");
 
   applySchema(sqlite);
@@ -74,7 +62,6 @@ function openHandle(): DbHandle {
   return handle;
 }
 
-/** Forwards property access to the lazily opened target, so call sites use plain db.select() / sqlite.prepare(). */
 function lazyView<T extends object>(resolveTarget: () => T): T {
   return new Proxy({} as T, {
     get(_stub, prop) {

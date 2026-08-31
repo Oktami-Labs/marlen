@@ -1,13 +1,6 @@
 import type { ConnectedAccount } from "@marlen/shared";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
-/**
- * A reply draft's In-Reply-To/References are copied verbatim off a message the
- * thread received, so a sender controls their bytes. If one carried a line
- * break it would close the header and open another, letting an inbound email
- * add a Bcc to a draft the user later sends by hand.
- */
-
 const proxyCalls: { method: string; url: string; body?: unknown }[] = [];
 let threadMessageId = "<clean@example.com>";
 

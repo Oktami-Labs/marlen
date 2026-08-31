@@ -22,29 +22,18 @@ import { api } from "@/lib/api";
 import type { View } from "@/lib/nav";
 import { errorMessage } from "@/lib/utils";
 
-/**
- * The default view, top to bottom: the pinned automation's latest output
- * (hero), everything actionable now (attention), fresh output from the other
- * automations (results), the schedule ahead (coming up), and the collapsed
- * run log (activity).
- */
 export function HomePanel({
   setupIncomplete,
   offline,
   onNavigate,
 }: {
   setupIncomplete: boolean;
-  /** Pipedream is configured but the last account list couldn't be fetched. */
   offline: boolean;
   onNavigate: (view: View) => void;
 }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
 
-  // Independent queries, so each section paints the moment its own data lands
-  // — drafts fan out to live mailbox APIs and can take seconds cold while the
-  // rest are fast local-DB reads. The query cache is also what makes a return
-  // to Home paint instantly from the last known data while refreshing behind.
   const draftsQuery = useQuery({ queryKey: ["drafts", "review"], queryFn: () => api.drafts() });
   const runsQuery = useQuery({ queryKey: ["runs", "feed"], queryFn: () => api.runsFeed() });
   const automationsQuery = useQuery({
@@ -53,8 +42,6 @@ export function HomePanel({
   });
   const pinnedQuery = useQuery({ queryKey: ["runs", "pinned"], queryFn: () => api.pinnedRun() });
   const missedQuery = useQuery({ queryKey: ["runs", "missed"], queryFn: () => api.missedRuns() });
-  // Same keys as AttentionSection's own queries, so these read its cache
-  // rather than fetching again; Home needs them only to count what is new.
   const todosQuery = useQuery({ queryKey: ["todos"], queryFn: () => api.todos("open") });
   const outboundQuery = useQuery({
     queryKey: ["outbound", "open"],
@@ -76,17 +63,12 @@ export function HomePanel({
     missedQuery.error;
   const error = queryError ? errorMessage(queryError) : null;
 
-  // Set by the search palette (see SearchPalette.tsx) when a draft hit is opened.
   const [focusDraft, setFocusDraft] = React.useState<{ accountId: string; draftId: string } | null>(
     null,
   );
 
-  // A draft was sent or discarded from a row: refresh the review list without
-  // waiting for the server event's debounce.
   const refreshDrafts = () => void queryClient.invalidateQueries({ queryKey: ["drafts"] });
 
-  // The palette lands here with ?draft=<accountId>:<draftId>. Consumed once —
-  // the param is cleared — so back/forward doesn't replay the focus.
   const [searchParams, setSearchParams] = useSearchParams();
   const draftParam = searchParams.get("draft");
   React.useEffect(() => {
@@ -101,12 +83,7 @@ export function HomePanel({
     setSearchParams({}, { replace: true });
   }, [draftParam, setSearchParams]);
 
-  // The flagship output: the pinned automation's latest successful run, when
-  // one is pinned. Otherwise fall back to the most recent successful run that
-  // carries a structured briefing card. Sorted explicitly rather than
-  // trusting feed order, since that's a server-side detail this component
-  // shouldn't depend on. A run without a briefing card is never picked as
-  // the hero — it still shows up in the plain activity feed.
+  // Prefer the pinned run, then the newest successful briefing.
   const heroRun = React.useMemo(() => {
     if (pinned?.run) return pinned.run;
     if (!runs) return null;
@@ -121,15 +98,11 @@ export function HomePanel({
     return best;
   }, [runs, pinned]);
 
-  // Keep `runs` as-is while loading (null) so ActivitySection still shows its
-  // own loading state; once loaded, drop the run already shown in the hero.
   const activityRuns = React.useMemo(() => {
     if (!runs) return runs;
     return heroRun ? runs.filter((r) => r.id !== heroRun.id) : runs;
   }, [runs, heroRun]);
 
-  // Everything that can wear a new dot, counted for the "seen all" strip: the
-  // rows the sections below mark, and nothing they don't.
   const newCount = [
     ...(todosQuery.data ?? []).map((todo) => [todoSeenKey(todo.id), todo.createdAt] as const),
     ...(outboundQuery.data ?? []).map(
@@ -145,9 +118,6 @@ export function HomePanel({
     ),
   ].filter(([key, createdAt]) => seen.isNew(key, createdAt)).length;
 
-  // No top-level loading gate: each section renders its own loading state
-  // while its data is null, so the fast local reads (runs/automations) paint
-  // straight away instead of waiting on the slow live mailbox drafts fetch.
   return (
     <div className="flex flex-col gap-10 pt-1">
       {error && !offline && <ErrorBanner>{error}</ErrorBanner>}
@@ -217,14 +187,6 @@ export function HomePanel({
   );
 }
 
-/* ---------------- Missed scheduled runs ---------------- */
-
-/**
- * Shown only when the server reports automations whose latest scheduled slot
- * elapsed without a covering run — i.e. boot catch-up couldn't run them. The
- * button starts them; the resulting "runs" server event reloads Home, which
- * recomputes the missed list to empty and unmounts this banner.
- */
 function MissedRunsBanner({ missed }: { missed: MissedAutomation[] }) {
   const { t } = useTranslation();
   const [running, setRunning] = React.useState(false);

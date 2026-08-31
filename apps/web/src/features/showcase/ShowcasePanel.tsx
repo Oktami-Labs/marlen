@@ -1,24 +1,10 @@
-/*
- * ─────────────────────────────────────────────────────────────────────────────
- *  DEV SHOWCASE / THEME LAB — safe to delete.
- *
- *  A gallery of every UI primitive plus a live theme editor, split into tabs
- *  behind an inner left nav. The tab groups live in `controlTabs.tsx` /
- *  `contentTabs.tsx` (built from the interactive demos in `demos.tsx`), the
- *  per-file component inventory in `componentsTab.tsx`, the theme editor in
- *  `ThemeLab.tsx`.
- *
- *  To remove entirely: delete this folder and the one `/showcase` <Route> in
- *  App.tsx. Nothing else imports it.
- * ─────────────────────────────────────────────────────────────────────────────
- */
-
 import {
   HardDrive,
   Layers,
   LayoutList,
   ListTree,
   type LucideIcon,
+  Mails,
   MessagesSquare,
   MousePointerClick,
   Shapes,
@@ -31,13 +17,14 @@ import { cn } from "@/lib/utils";
 import { ComponentsTab } from "./componentsTab";
 import { ContentTab, StorageTab, SystemsTab } from "./contentTabs";
 import { ButtonsTab, FeedbackTab, FormsTab, MarksTab, SurfacesTab } from "./controlTabs";
+import { MailDesignsTab } from "./mailDesigns";
 import { ThemeLab } from "./ThemeLab";
 
 interface Tab {
   id: string;
   label: string;
   icon: LucideIcon;
-  /** The theme tab has none — ThemeLab stays mounted across tab switches
+  /** The theme tab has none, ThemeLab stays mounted across tab switches
    *  (see below) rather than remounting. */
   render?: () => React.ReactNode;
 }
@@ -82,6 +69,12 @@ const TAB_GROUPS: { label: string; tabs: Tab[] }[] = [
     ],
   },
   {
+    label: "Explore",
+    tabs: [
+      { id: "mail", label: "E-Mail Varianten", icon: Mails, render: () => <MailDesignsTab /> },
+    ],
+  },
+  {
     label: "Reference",
     tabs: [
       {
@@ -109,14 +102,14 @@ export function ShowcasePanel() {
     setActive(id);
     window.history.replaceState(null, "", `#${id}`);
     // Each tab reads as its own page, so start it at the top. Without this a
-    // shorter tab clamps the previous tab's scroll offset — an accidental
-    // upward snap — and a same-height one keeps a mid-page position.
+    // shorter tab clamps the previous tab's scroll offset, an accidental
+    // upward snap, and a same-height one keeps a mid-page position.
     let node: HTMLElement | null = rootRef.current;
     while (node && node.scrollHeight <= node.clientHeight) node = node.parentElement;
     node?.scrollTo({ top: 0 });
   };
 
-  // An edited/pasted hash while the page is open switches tabs too — a
+  // An edited/pasted hash while the page is open switches tabs too, a
   // hash-only navigation never remounts the panel, so the initializer above
   // can't see it. `select` uses replaceState, which doesn't fire this.
   React.useEffect(() => {
@@ -129,7 +122,7 @@ export function ShowcasePanel() {
   }, []);
 
   // BriefingCard's row actions post into the real chat panel, which App keeps
-  // mounted beside every route — a curious click here would otherwise fire a
+  // mounted beside every route, a curious click here would otherwise fire a
   // live agent turn. Force prefill while the gallery is open so it only fills
   // the composer. `pagehide` covers a refresh, which skips the unmount path.
   React.useEffect(() => {
@@ -159,7 +152,7 @@ export function ShowcasePanel() {
         <nav
           aria-label="Showcase sections"
           // top-1 matches the nav's natural offset in the scrollport (the
-          // container's pt-1) — a larger sticky top pushes the nav down at
+          // container's pt-1), a larger sticky top pushes the nav down at
           // rest, and that push gets clamped by row height on short tabs,
           // so the nav would hop a few px between tabs.
           className="flex flex-row flex-wrap gap-1 md:sticky md:top-1 md:w-52 md:shrink-0 md:flex-col md:self-start"

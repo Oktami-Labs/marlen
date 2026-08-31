@@ -25,7 +25,7 @@ import { cn, rowTransition, stagger, withViewTransition } from "@/lib/utils";
 
 /**
  * The leads directory: every prospect the agent (or the user) recorded, as a
- * flat list of raised rows — status/priority filter chips on top, and per-row
+ * flat list of raised rows, status/priority filter chips on top, and per-row
  * edit-in-place (pencil; fields save on blur/change, no Save button). Rows
  * appear and update live: intake runs and the agent's lead tools emit the
  * "leads" server event.

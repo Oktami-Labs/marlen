@@ -4,6 +4,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
+import { DisclosureToggle } from "@/components/ui/disclosure-toggle";
 import { EmptyState } from "@/components/ui/empty-state";
 import { LoadingRow } from "@/components/ui/feedback";
 import { GroupLabel } from "@/components/ui/group-label";
@@ -46,8 +47,47 @@ function recencyGroup(createdAt: string, now: Date): RecencyGroup {
   return "earlier";
 }
 
-/** Past conversations, newest first; fetched fresh each time it opens. Search and
- * pagination are server-backed — this only ever holds one loaded "window". */
+/** Runs of one automation, newest first. The list arrives newest-first, so
+ *  insertion order carries that through per title. */
+function groupRuns(runs: Conversation[]): [string, Conversation[]][] {
+  const byTitle = new Map<string, Conversation[]>();
+  for (const run of runs) {
+    const key = run.title || "";
+    const group = byTitle.get(key);
+    if (group) group.push(run);
+    else byTitle.set(key, [run]);
+  }
+  return [...byTitle.entries()];
+}
+
+/** One automation's runs: the newest stands for the group, the rest unfold, so
+ *  a job that runs every hour cannot push the conversations out of the rail. */
+function RunGroup({
+  runs,
+  renderRow,
+}: {
+  runs: Conversation[];
+  renderRow: (c: Conversation) => React.ReactNode;
+}) {
+  const { t } = useTranslation();
+  const [open, setOpen] = React.useState(false);
+  const [newest, ...older] = runs;
+  if (!newest) return null;
+  return (
+    <div className="flex flex-col gap-1">
+      {renderRow(newest)}
+      {open && older.map(renderRow)}
+      {older.length > 0 && (
+        <DisclosureToggle open={open} onToggle={() => setOpen((v) => !v)} className="px-3">
+          {open ? t("chat.runsLess") : t("chat.runsMore", { count: older.length })}
+        </DisclosureToggle>
+      )}
+    </div>
+  );
+}
+
+/** Past conversations, newest first and fetched whenever the list opens. Search
+ * and pagination are server-backed, so this holds only one loaded window. */
 export function HistoryList({
   activeId,
   onPick,
@@ -128,7 +168,7 @@ export function HistoryList({
   const commitRename = async (id: string) => {
     setRenamingId(null);
     const title = renameDraft.trim();
-    if (!title) return; // empty edit — silently cancel rather than 400 the server
+    if (!title) return; // Cancel an empty edit instead of sending an invalid request.
     setItems((prev) => prev?.map((c) => (c.id === id ? { ...c, title } : c)) ?? prev);
     try {
       await api.renameConversation(id, title);
@@ -349,9 +389,11 @@ export function HistoryList({
           </div>
         )}
         {automations.length > 0 && (
-          <div className="flex flex-col gap-1">
+          <div className="flex flex-col gap-2">
             <GroupLabel className="px-2">{t("chat.automations")}</GroupLabel>
-            {automations.map(renderRow)}
+            {groupRuns(automations).map(([title, runs]) => (
+              <RunGroup key={title} runs={runs} renderRow={renderRow} />
+            ))}
           </div>
         )}
         {loadMoreButton}

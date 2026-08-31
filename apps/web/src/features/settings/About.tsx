@@ -38,7 +38,7 @@ type CheckState =
 /**
  * Settings → About: one card with the app identity (logo, tagline, version),
  * a key-value list of build facts, and the update/GitHub actions. A manual
- * check rides the shell's auto-download pipeline — a found update downloads
+ * check rides the shell's auto-download pipeline, a found update downloads
  * in the background and the action flips to "restart" (like the global toast)
  * when the shell reports it ready. In a plain browser tab there is no shell,
  * so the build row and update action are omitted.
@@ -80,7 +80,7 @@ export function AboutPanel() {
         <div className="flex min-w-0 items-center gap-3">
           <img src="/logo.svg" alt="" className="h-9 w-9 shrink-0 object-contain" />
           <div className="min-w-0">
-            <Label className="text-sm font-medium">Marlen</Label>
+            <Label className="text-sm font-medium">Marlene</Label>
             <p className="text-xs text-muted-foreground">{t("settings.about.tagline")}</p>
           </div>
         </div>
@@ -117,7 +117,7 @@ export function AboutPanel() {
           <LinkButton
             onClick={() =>
               openExternal(
-                newIssueUrl(info && `Marlen v${info.version} · ${platform} · ${info.arch}`),
+                newIssueUrl(info && `Marlene v${info.version} · ${platform} · ${info.arch}`),
               )
             }
           >
@@ -241,7 +241,7 @@ function CheckOutcome({
   }
 }
 
-/** The GitHub mark — lucide ships no brand icons, so the path is inlined. */
+/** The GitHub mark, lucide ships no brand icons, so the path is inlined. */
 function GithubMark(props: React.SVGProps<SVGSVGElement>) {
   return (
     <svg viewBox="0 0 24 24" fill="currentColor" aria-hidden="true" {...props}>

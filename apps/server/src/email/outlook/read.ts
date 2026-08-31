@@ -1,6 +1,7 @@
 import type { ConnectedAccount, EmailThreadMessage } from "@marlen/shared";
 import { upstreamStatusCode } from "../../core/errors.js";
 import { proxyRequest } from "../../integrations/pipedream/connect.js";
+import { sanitizeEmailHtml } from "../htmlBody.js";
 import type { MailReadProvider, SentMessage, ThreadDetail } from "../read/readProviders.js";
 import { stripHtml } from "../textUtils.js";
 import {
@@ -50,9 +51,22 @@ interface GraphThreadListResponse {
   "@odata.nextLink"?: string;
 }
 
+function isHtmlBody(message: { body?: { contentType?: string; content?: string } }): boolean {
+  return message.body?.contentType?.toLowerCase() === "html";
+}
+
 function bodyTextOf(message: { body?: { contentType?: string; content?: string } }): string {
   const rawBody = message.body?.content ?? "";
-  return message.body?.contentType?.toLowerCase() === "html" ? stripHtml(rawBody) : rawBody.trim();
+  return isHtmlBody(message) ? stripHtml(rawBody) : rawBody.trim();
+}
+
+/** Graph hands back a whole HTML document; sanitizing keeps the body's markup. */
+function bodyHtmlOf(message: {
+  body?: { contentType?: string; content?: string };
+}): string | undefined {
+  const rawBody = message.body?.content ?? "";
+  if (!isHtmlBody(message) || !rawBody) return undefined;
+  return sanitizeEmailHtml(rawBody) || undefined;
 }
 
 function toSentMessage(message: GraphSentMessage): SentMessage {
@@ -145,6 +159,7 @@ async function getMessageBody(
 }
 
 function toThreadMessage(message: GraphThreadMessage): EmailThreadMessage {
+  const html = bodyHtmlOf(message);
   return {
     id: message.id,
     from: formatRecipient(message.from) ?? "",
@@ -152,6 +167,7 @@ function toThreadMessage(message: GraphThreadMessage): EmailThreadMessage {
     ...(message.ccRecipients?.length ? { cc: formatRecipients(message.ccRecipients) } : {}),
     date: message.receivedDateTime ?? "",
     body: bodyTextOf(message),
+    ...(html ? { bodyHtml: html } : {}),
   };
 }
 

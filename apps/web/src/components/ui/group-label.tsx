@@ -9,7 +9,7 @@ const SIZE = {
 } as const;
 
 /**
- * Small uppercase muted label heading a group of rows — the one overline
+ * Small uppercase muted label heading a group of rows, the one overline
  * shape. Tag defaults to h3; pass `as` where the outline or markup demands
  * otherwise.
  */

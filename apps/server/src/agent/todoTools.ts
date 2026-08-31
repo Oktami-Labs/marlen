@@ -74,7 +74,7 @@ const updateTodoTool: AgentTool = tool({
 /**
  * create_todo closes over the session's conversation id so the todo links back
  * to the chat/run that filed it; list/update address todos by id alone. All
- * three stay available to unattended runs — a todo is inert data (like a lead),
+ * three stay available to unattended runs, a todo is inert data (like a lead),
  * and a run that hits a decision it can't make files one for the user.
  */
 export function buildTodoTools(conversationId: string | undefined): AgentTool[] {

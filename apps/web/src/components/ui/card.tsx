@@ -4,7 +4,7 @@ import { cn } from "@/lib/utils";
 
 // The shared elevated container. Wraps `.surface` (index.css) with a standard
 // padding scale so call sites stop picking their own. Floating panels paint
-// `.surface-pop` directly — they are anchored one-offs, not cards.
+// `.surface-pop` directly because they are anchored one-offs, not cards.
 const cardVariants = cva("surface", {
   variants: {
     padding: {

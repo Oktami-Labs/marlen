@@ -11,8 +11,8 @@ export const accountColor = (colors: AccountColor[] | undefined, accountId?: str
   colors?.find((c) => c.accountId === accountId)?.hex;
 
 /**
- * Connected accounts plus their color assignments — the pair every account
- * dot, chip, and scope picker resolves from. One shared query per list, so
+ * Connected accounts and their color assignments. Every account dot, chip,
+ * and scope picker resolves from this pair. One shared query per list means
  * every consumer sees the same data and an "accounts" event (connect,
  * removal, recolor, regrant) refreshes them all. Cosmetic data: failures
  * resolve to empty lists, never an error state.

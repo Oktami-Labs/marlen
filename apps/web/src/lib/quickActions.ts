@@ -32,7 +32,7 @@ export function useQuickActionMode() {
 }
 
 /**
- * Navigates to the Chat tab and opens a specific run's conversation —
+ * Navigates to the Chat tab and opens a specific run's conversation,
  * shared by every run card that offers a "go to chat" action (Home's
  * activity feed, its briefing hero, and the Automations run list). The
  * command lands on the persistent ChatPanel instance directly, so there is
@@ -42,7 +42,7 @@ export function openRunInChat(runId: string, goToChat: () => void): void {
   openConversationInChat(runId, goToChat);
 }
 
-/** Navigate to Chat and open a conversation by id (a run id is one) — used by todo provenance links. */
+/** Navigate to Chat and open a conversation by id (a run id is one), used by todo provenance links. */
 export function openConversationInChat(conversationId: string, goToChat: () => void): void {
   goToChat();
   sendChatCommand({ kind: "open", conversationId });

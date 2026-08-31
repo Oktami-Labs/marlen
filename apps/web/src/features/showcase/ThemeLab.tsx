@@ -1,12 +1,3 @@
-/*
- * The live theme editor half of the DEV showcase: pickers per headline token
- * plus whole-palette adjustment passes, previewed across the entire app by
- * pinning CSS variables on <html>. Keep this component mounted while the
- * gallery is open — unmounting releases every pinned variable, so a tab
- * switch inside the showcase must hide it, not remove it. Safe to delete
- * with the folder.
- */
-
 import { Copy, Moon, RotateCcw, Sun } from "lucide-react";
 import * as React from "react";
 import { Button } from "@/components/ui/button";
@@ -34,7 +25,6 @@ import {
 
 type ThemeName = "light" | "dark";
 
-/** Every colour token the lab drives. `pick` also gives it a base-colour picker. */
 const COLOR_TOKENS: { name: string; label: string; pick?: boolean }[] = [
   { name: "--background", label: "Background", pick: true },
   { name: "--surface", label: "Surface", pick: true },
@@ -59,7 +49,6 @@ const COLOR_TOKENS: { name: string; label: string; pick?: boolean }[] = [
 
 const PICKABLE = COLOR_TOKENS.filter((token) => token.pick);
 
-/** Bare numbers rather than colours, but they ride along with the adjustments. */
 const FILETYPE_L = "--filetype-l";
 const FILETYPE_C = "--filetype-c";
 const GRAIN = "--grain-opacity";
@@ -67,28 +56,21 @@ const SCALAR_TOKENS = [FILETYPE_L, FILETYPE_C, GRAIN];
 
 const DRIVEN_VARS = [...COLOR_TOKENS.map((token) => token.name), ...SCALAR_TOKENS];
 
-/** Shape and scale, shared by both themes rather than tuned per theme. */
 interface Shape {
-  /** rem */
   radius: number;
-  /** root font size; Tailwind is rem-based, so this scales the entire app */
   scale: number;
 }
 
 const DEFAULT_SHAPE: Shape = { radius: 0.7, scale: 1 };
 
-/** Base colours (hex, as the pickers speak) keyed by token, per theme. */
 type Overrides = Record<ThemeName, Record<string, string>>;
 type Tunings = Record<ThemeName, Tuning>;
 
 const NO_OVERRIDES: Overrides = { light: {}, dark: {} };
 const NO_TUNING: Tunings = { light: IDENTITY, dark: IDENTITY };
 
-/** Ready-made looks — brighter, warmer, more vivid, or greyscale takes on the palette. */
 const PRESETS: { name: string; overrides?: Overrides; tuning?: Tunings }[] = [
   {
-    // Light's canvas is already near white, so brightness has nowhere to go —
-    // what lifts it is chroma and a warm cast. Dark has the headroom.
     name: "Lift the gloom",
     tuning: {
       light: { ...IDENTITY, contrast: 0.06, saturation: 1.3, warmth: 0.5 },
@@ -142,7 +124,6 @@ const PRESETS: { name: string; overrides?: Overrides; tuning?: Tunings }[] = [
   },
 ];
 
-/** The adjustment sliders, in render order. */
 const KNOBS: {
   key: keyof Tuning;
   label: string;
@@ -209,7 +190,6 @@ const KNOBS: {
   },
 ];
 
-/** The theme-independent sliders, in render order. */
 const SHAPE_KNOBS: {
   key: keyof Shape;
   label: string;
@@ -244,20 +224,13 @@ function signedPercent(value: number) {
   return `${pct > 0 ? "+" : ""}${pct}%`;
 }
 
-/** The root font size, as CSS. `round` drops the trailing zero on whole values. */
 const scalePercent = (scale: number) => `${round(scale * 100, 1)}%`;
 
-/** One theme's authored values, read straight off the stylesheet. */
 interface ThemeBase {
   colors: Record<string, Oklch>;
   scalars: Record<string, number>;
 }
 
-/**
- * Resolve both themes' authored values by probing inside a throwaway themed
- * host. `.light` / `.dark` declare every token we touch, so the host's own class
- * rule beats whatever we've inlined on <html> for the live preview.
- */
 function resolveBase(): Record<ThemeName, ThemeBase> {
   const out: Record<ThemeName, ThemeBase> = {
     light: { colors: {}, scalars: {} },
@@ -265,7 +238,7 @@ function resolveBase(): Record<ThemeName, ThemeBase> {
   };
   for (const theme of ["light", "dark"] as ThemeName[]) {
     const host = document.createElement("div");
-    host.className = theme; // matches `:root, .light` / `.dark` in index.css
+    host.className = theme;
     host.style.cssText = "position:absolute;visibility:hidden;pointer-events:none";
     document.body.appendChild(host);
     const styles = getComputedStyle(host);
@@ -281,7 +254,6 @@ function resolveBase(): Record<ThemeName, ThemeBase> {
   return out;
 }
 
-/** Base colours, with any picker overrides, run through the adjustments. */
 function computePalette(
   base: ThemeBase,
   overrides: Record<string, string>,
@@ -292,7 +264,6 @@ function computePalette(
     return override ? hexToOklch(override) : base.colors[name];
   };
 
-  // Contrast spreads everything away from the canvas, so the canvas anchors it.
   const pivot = pivotOf(source("--background") ?? { l: 1, c: 0, h: 0 }, tuning);
 
   const css: Record<string, string> = {};
@@ -313,11 +284,8 @@ function computePalette(
   return { css, colors };
 }
 
-/** The Theme Lab card plus the palette swatch section it feeds. */
 export function ThemeLab() {
   const [theme, setTheme] = React.useState<ThemeName>(() => {
-    // App applies the `dark` class in an effect (after our first render), so read
-    // the persisted preference it also seeds from to avoid a light/dark desync.
     const saved = localStorage.getItem("marlen-theme");
     if (saved === "dark" || saved === "light") return saved;
     return document.documentElement.classList.contains("dark") ? "dark" : "light";
@@ -327,7 +295,6 @@ export function ThemeLab() {
   const [shape, setShape] = React.useState<Shape>(DEFAULT_SHAPE);
   const [base, setBase] = React.useState<Record<ThemeName, ThemeBase> | null>(null);
 
-  // Stay in lockstep with the real theme, whichever control flips it.
   React.useEffect(() => {
     const el = document.documentElement;
     const sync = () => setTheme(el.classList.contains("dark") ? "dark" : "light");
@@ -337,11 +304,8 @@ export function ThemeLab() {
     return () => observer.disconnect();
   }, []);
 
-  // Resolve each theme's authored values once, for seeding pickers and diffing.
   React.useEffect(() => setBase(resolveBase()), []);
 
-  // Both themes stay computed: the preview needs the active one, Copy CSS needs
-  // both, and each token's untouched twin says whether it drifted at all.
   const palettes = React.useMemo(() => {
     if (!base) return null;
     const build = (name: ThemeName) => ({
@@ -351,7 +315,6 @@ export function ThemeLab() {
     return { light: build("light"), dark: build("dark") };
   }, [base, overrides, tuning]);
 
-  /** Only the tokens that moved — what the preview pins and Copy CSS emits. */
   const changed = React.useMemo(() => {
     const diff = (name: ThemeName) =>
       palettes
@@ -364,8 +327,6 @@ export function ThemeLab() {
     return { light: diff("light"), dark: diff("dark") };
   }, [palettes]);
 
-  // Push the active theme onto <html> so the preview covers the whole app. A
-  // token that still matches the stylesheet is released rather than pinned.
   React.useEffect(() => {
     const root = document.documentElement.style;
     const active = changed[theme];
@@ -381,12 +342,9 @@ export function ThemeLab() {
     if (shape.radius === DEFAULT_SHAPE.radius) root.removeProperty("--radius");
     else root.setProperty("--radius", `${shape.radius}rem`);
 
-    // Not a custom property: Tailwind's spacing and type scales are rem, so the
-    // root font size is the one knob that resizes the whole app at once.
     root.fontSize = shape.scale === DEFAULT_SHAPE.scale ? "" : scalePercent(shape.scale);
   }, [shape]);
 
-  // Leave the rest of the app exactly as we found it.
   React.useEffect(
     () => () => {
       const root = document.documentElement.style;
@@ -456,7 +414,6 @@ export function ThemeLab() {
     const rootLines: string[] = [];
     if (shape.radius !== DEFAULT_SHAPE.radius) rootLines.push(`  --radius: ${shape.radius}rem;`);
     if (rootLines.length) parts.push(`:root {\n${rootLines.join("\n")}\n}`);
-    // UI scale isn't a token — it's the root font size Tailwind's rem scales read.
     if (shape.scale !== DEFAULT_SHAPE.scale) {
       parts.push(`html {\n  font-size: ${scalePercent(shape.scale)};\n}`);
     }
@@ -507,7 +464,6 @@ export function ThemeLab() {
           other tabs to inspect them) and revert when you leave this page.
         </p>
 
-        {/* ── Global adjustments ──────────────────────────────────── */}
         <div className="flex flex-col gap-2.5">
           <GroupLabel>Colour — applied to every token in the {theme} theme</GroupLabel>
           {KNOBS.map(({ key, ...knob }) => (
@@ -534,7 +490,6 @@ export function ThemeLab() {
           ))}
         </div>
 
-        {/* ── Base colours ────────────────────────────────────────── */}
         <div className="flex flex-col gap-3">
           <GroupLabel>Base colours — before adjustments</GroupLabel>
           {base ? (
@@ -558,7 +513,6 @@ export function ThemeLab() {
         </div>
       </Card>
 
-      {/* ── Palette swatches ──────────────────────────────────────── */}
       <Section title="Palette" description="Every token in the current theme, after adjustments.">
         <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 md:grid-cols-4">
           {palettes &&
@@ -586,7 +540,6 @@ export function ThemeLab() {
   );
 }
 
-/** Small uppercase eyebrow above a knob/colour group in the Theme Lab card. */
 function GroupLabel({ children }: { children: React.ReactNode }) {
   return (
     <p className="text-2xs font-semibold uppercase tracking-wider text-muted-foreground">
@@ -595,7 +548,6 @@ function GroupLabel({ children }: { children: React.ReactNode }) {
   );
 }
 
-/** A labelled slider with a live readout and a reset that arms once it drifts. */
 function Knob({
   label,
   hint,
@@ -613,7 +565,6 @@ function Knob({
   max: number;
   step: number;
   value: number;
-  /** The untouched value: what the readout de-emphasises and reset restores. */
   base: number;
   format: (value: number) => string;
   onChange: (value: number) => void;

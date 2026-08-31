@@ -1,16 +1,10 @@
 export type ChangelogEntry = {
   version: string;
-  /** ISO date the version was released. */
   date: string;
-  /** Release notes per UI language; keep both in step. */
   notes: { en: string[]; de: string[] };
 };
 
-/**
- * Hand-maintained release notes, shown in-app (the update card and Settings →
- * About → Changelog) and readable by the agent (app_help). Newest first; add
- * an entry when cutting a tagged release.
- */
+/** Hand-maintained release notes, newest first. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
     version: "0.4.8",

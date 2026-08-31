@@ -11,7 +11,7 @@ type LeadData = Extract<AgentCard, { kind: "lead" }>;
 /**
  * A leads-directory row the agent surfaced in chat: name + status/priority
  * badges up top, the interest and notes, then a mono meta line (email, phone,
- * persona, language, last contact). Read-only — the Leads panel owns editing.
+ * persona, language, last contact). Read-only, the Leads panel owns editing.
  */
 export function LeadCard({ card }: { card: LeadData }) {
   const { t, i18n } = useTranslation();

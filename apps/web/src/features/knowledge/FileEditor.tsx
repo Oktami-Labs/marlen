@@ -1,4 +1,4 @@
-import type { LibraryDocument, LibraryStatus, MemoryEntry, Skill } from "@marlen/shared";
+import type { LibraryDocument, LibraryStatus, WikiPage } from "@marlen/shared";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
@@ -16,37 +16,26 @@ import { toast } from "@/lib/toast";
 
 /**
  * The browser's md editor: tiptap over markdown (tiptap-markdown parses on
- * load and serializes on save), one dialog for all three file kinds. A memory
- * edits its fact plus its scope tag (general or one connected account; an
+ * load and serializes on save), one dialog for both file kinds. A wiki page
+ * edits its content (the first paragraph is the summary the agent carries in
+ * every prompt) plus its scope tag (general or one connected account; an
  * existing contact scope shows as its own tag and is kept unless another is
- * picked). A skill edits description and instructions. A knowledge document
- * round-trips its raw file text through the content endpoint.
+ * picked). A knowledge document round-trips its raw file text through the
+ * content endpoint.
  */
 
 export type EditorTarget =
-  | { kind: "memory"; entry: MemoryEntry }
-  | { kind: "skill"; skill: Skill }
+  | { kind: "page"; page: WikiPage }
   | { kind: "document"; doc: LibraryDocument }
   /** The "new file" flow: the dialog itself asks what kind to create. */
   | { kind: "create" };
 
-/** null = keep the entry's current contact scope untouched. */
-type MemoryScope = { accountId: string | null } | null;
+/** null = keep the page's current contact scope untouched. */
+type PageScope = { accountId: string | null } | null;
 
-/** Memories keep one fact per line (learned styles are one directive per line):
- *  tiptap's blank-line paragraph breaks collapse to single newlines, whitespace
- *  inside a line to one space. */
-function memoryContent(markdown: string): string {
-  return markdown
-    .split("\n")
-    .map((line) => line.replace(/\s+/g, " ").trim())
-    .filter(Boolean)
-    .join("\n");
-}
-
-/** What the create flow produces; notes and folders land in the browsed knowledge folder. */
-type CreateKind = "note" | "folder" | "memory" | "skill";
-const CREATE_KINDS: CreateKind[] = ["note", "folder", "memory", "skill"];
+/** What the create flow produces; folders land in the browsed knowledge folder. */
+type CreateKind = "page" | "skill" | "folder";
+const CREATE_KINDS: CreateKind[] = ["page", "skill", "folder"];
 
 function MarkdownArea({
   initial,
@@ -88,31 +77,20 @@ export function FileEditor({
   const { t } = useTranslation();
   const { accounts, colors } = useAccountColors();
   const [saving, setSaving] = React.useState(false);
-  const [createKind, setCreateKind] = React.useState<CreateKind>("note");
+  const [createKind, setCreateKind] = React.useState<CreateKind>("page");
   const [name, setName] = React.useState("");
-  const [description, setDescription] = React.useState(
-    target.kind === "skill" ? target.skill.description : "",
-  );
-  const [scope, setScope] = React.useState<MemoryScope>(
-    target.kind === "memory" && target.entry.contactId !== null
+  const [scope, setScope] = React.useState<PageScope>(
+    target.kind === "page" && target.page.contactId !== null
       ? null
-      : { accountId: target.kind === "memory" ? target.entry.accountId : null },
+      : { accountId: target.kind === "page" ? target.page.accountId : null },
   );
   // Document text arrives async; everything else is already loaded.
   const [initial, setInitial] = React.useState<string | null>(
-    target.kind === "memory"
-      ? target.entry.content
-      : target.kind === "skill"
-        ? target.skill.instructions
-        : target.kind === "create"
-          ? ""
-          : null,
+    target.kind === "page" ? target.page.content : target.kind === "create" ? "" : null,
   );
   const getMarkdownRef = React.useRef<(() => string) | null>(null);
 
-  const isMemory =
-    target.kind === "memory" || (target.kind === "create" && createKind === "memory");
-  const isSkill = target.kind === "skill" || (target.kind === "create" && createKind === "skill");
+  const isPage = target.kind === "page" || (target.kind === "create" && createKind === "page");
 
   React.useEffect(() => {
     if (target.kind !== "document") return;
@@ -138,33 +116,22 @@ export function FileEditor({
     if (markdown === undefined) return;
     setSaving(true);
     try {
-      if (target.kind === "memory") {
-        const content = memoryContent(markdown);
+      if (target.kind === "page") {
         await (scope === null
-          ? api.updateMemory(target.entry.id, content)
-          : api.updateMemory(target.entry.id, content, scope.accountId, null));
-      } else if (target.kind === "skill") {
-        await api.saveSkill(target.skill.name, description, markdown);
+          ? api.updatePage(target.page.id, markdown)
+          : api.updatePage(target.page.id, markdown, scope.accountId, null));
       } else if (target.kind === "document") {
         onStatus(await api.saveDocumentContent(target.doc.id, markdown));
-      } else if (createKind === "memory") {
-        await api.addMemory(memoryContent(markdown), scope?.accountId ?? null);
+      } else if (createKind === "page") {
+        await api.addPage(markdown, {
+          ...(name.trim() ? { name: name.trim() } : {}),
+          accountId: scope?.accountId ?? null,
+        });
       } else if (createKind === "skill") {
-        await api.saveSkill(name, description, markdown);
-      } else if (createKind === "folder") {
+        await api.addPage(markdown, { name: name.trim(), type: "skill" });
+      } else {
         const path = currentDir ? `${currentDir}/${name.trim()}` : name.trim();
         onStatus(await api.createLibraryFolder(path));
-      } else {
-        // A note is an ordinary md file, created via upload into the browsed folder.
-        const fileName = /\.(md|markdown|txt)$/i.test(name.trim())
-          ? name.trim()
-          : `${name.trim()}.md`;
-        onStatus(
-          await api.uploadLibraryFile(
-            new File([`${markdown}\n`], fileName, { type: "text/markdown" }),
-            currentDir || undefined,
-          ),
-        );
       }
       onClose();
     } catch (err) {
@@ -179,14 +146,14 @@ export function FileEditor({
   );
 
   const title =
-    target.kind === "memory"
-      ? `${target.entry.id}.md`
-      : target.kind === "skill"
-        ? `${target.skill.name}.md`
-        : target.kind === "document"
-          ? target.doc.path
-          : t("storage.editor.newTitle");
-  const needsName = target.kind === "create" && createKind !== "memory";
+    target.kind === "page"
+      ? `${target.page.id}.md`
+      : target.kind === "document"
+        ? target.doc.path
+        : t("storage.editor.newTitle");
+  // A page can derive its name from its content; skills and folders need one.
+  const nameShown = target.kind === "create";
+  const needsName = target.kind === "create" && createKind !== "page";
   const isFolder = target.kind === "create" && createKind === "folder";
 
   return (
@@ -222,7 +189,7 @@ export function FileEditor({
           </div>
         )}
 
-        {needsName && (
+        {nameShown && (
           <Input
             autoFocus
             value={name}
@@ -230,15 +197,6 @@ export function FileEditor({
             placeholder={t("storage.editor.namePlaceholder")}
             aria-label={t("storage.editor.namePlaceholder")}
             className="font-mono text-xs"
-          />
-        )}
-
-        {isSkill && (
-          <Input
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            placeholder={t("storage.editor.descriptionPlaceholder")}
-            aria-label={t("storage.editor.descriptionPlaceholder")}
           />
         )}
 
@@ -253,11 +211,9 @@ export function FileEditor({
           />
         )}
 
-        {isMemory && (
-          <p className="text-xs text-muted-foreground">{t("storage.editor.memoryHint")}</p>
-        )}
+        {isPage && <p className="text-xs text-muted-foreground">{t("storage.editor.pageHint")}</p>}
 
-        {isMemory && (
+        {isPage && (
           <div className="flex flex-wrap items-center gap-1.5">
             <span className="text-xs text-muted-foreground">{t("storage.editor.scope")}</span>
             <Chip
@@ -276,9 +232,9 @@ export function FileEditor({
                 {account.name}
               </Chip>
             ))}
-            {target.kind === "memory" && target.entry.contactId !== null && (
+            {target.kind === "page" && target.page.contactId !== null && (
               <Chip active={scope === null} onClick={() => setScope(null)}>
-                @{target.entry.contactId}
+                @{target.page.contactId}
               </Chip>
             )}
           </div>

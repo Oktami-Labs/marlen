@@ -10,8 +10,8 @@ import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";
 
 /**
- * The assistant's filesystem grants: three armed switches — read, write,
- * run commands — each whole-filesystem, mirroring the per-account permission
+ * The assistant's filesystem grants: three armed switches, read, write,
+ * run commands, each whole-filesystem, mirroring the per-account permission
  * editor's confirm-to-arm / instant-disarm flow. Grants auto-save on change.
  */
 

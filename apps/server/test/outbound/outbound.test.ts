@@ -4,13 +4,6 @@ import { join } from "node:path";
 import type { OutboundDraft, ServerEvent } from "@marlen/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-/**
- * Outbound drafts through the real API + store: the agent files them (store
- * seam), Home lists and approves them (routes). Locks the approval loop the
- * web relies on — open list, human send through the channel registry, and the
- * "outbound" events that drive query invalidation.
- */
-
 let store: typeof import("../../src/db/outboundStore.js");
 let events: typeof import("../../src/core/events.js");
 let app: Awaited<ReturnType<typeof import("../../src/app.js").buildApp>>;

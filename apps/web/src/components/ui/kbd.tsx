@@ -1,7 +1,7 @@
 import type * as React from "react";
 import { cn } from "@/lib/utils";
 
-/** Tiny keyboard-hint chip — palette footer, header search trigger, shortcut lists. */
+/** Tiny keyboard-hint chip, palette footer, header search trigger, shortcut lists. */
 export function Kbd({ children, className }: { children: React.ReactNode; className?: string }) {
   return (
     <kbd

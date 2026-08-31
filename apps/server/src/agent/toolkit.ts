@@ -31,7 +31,7 @@ export function textResult(value: string, card?: AgentCard) {
  * Ceiling for one tool result's text, about 10k tokens. A result stays in the
  * transcript for the rest of the conversation and compaction keeps the recent
  * tail verbatim, so one unbounded result pushes every later turn of that
- * conversation past the model's context window — and there is nothing left for
+ * conversation past the model's context window, and there is nothing left for
  * compaction to trim, because the tail it keeps is the oversized result itself.
  * Every tool that returns an upstream payload verbatim goes through this.
  */

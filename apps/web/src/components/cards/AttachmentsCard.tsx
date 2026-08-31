@@ -10,7 +10,7 @@ import { CardShell } from "./CardShell";
 
 type AttachmentsData = Extract<AgentCard, { kind: "attachments" }>;
 
-/** Row glyph by kind — images, PDFs/text, anything else. */
+/** Row glyph by kind, images, PDFs/text, anything else. */
 function iconFor(item: AttachmentItem): LucideIcon {
   const mime = item.mimeType ?? "";
   if (mime.startsWith("image/") || /\.(png|jpe?g|gif|webp|avif|bmp)$/i.test(item.filename)) {

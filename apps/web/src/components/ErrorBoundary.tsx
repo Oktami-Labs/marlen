@@ -3,7 +3,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { errorMessage } from "@/lib/utils";
 
-/** Function component so the fallback can use useTranslation — the boundary below it can't. */
+/** Function component because the class boundary below cannot use useTranslation. */
 function ErrorFallback({ error, onReset }: { error: unknown; onReset: () => void }) {
   const { t } = useTranslation();
   return (
@@ -51,7 +51,7 @@ export class ErrorBoundary extends React.Component<
   }
 
   componentDidCatch(error: unknown, errorInfo: React.ErrorInfo) {
-    // Client-side only — this is the browser, the server's pino logger doesn't reach here.
+    // This runs in the browser, outside the server's pino logger.
     console.error(error, errorInfo.componentStack);
   }
 

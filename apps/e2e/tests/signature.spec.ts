@@ -7,16 +7,6 @@ import type { Locator, Page } from "@playwright/test";
 import { expect, openApp, test } from "../src/fixtures.js";
 import { t } from "../src/i18n.js";
 
-/**
- * The account signature, which is pasted out of a mail client far more often
- * than it is written: the markup has to survive, and the images the clipboard
- * only *points* at have to become bytes the signature owns.
- *
- * Linking an email account is a Pipedream round trip, so the accounts list is
- * the one thing stubbed here; the editor, the image proxy and the save below it
- * are the real app against the real server.
- */
-
 const ACCOUNT: ConnectedAccount = {
   id: "e2e-signature-account",
   app: "gmail",
@@ -25,7 +15,6 @@ const ACCOUNT: ConnectedAccount = {
   createdAt: "2026-01-01T00:00:00.000Z",
 };
 
-/** A 1x1 PNG: the bytes a clipboard temp file holds, small enough to inline in a test. */
 const PNG_BYTES = Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==",
   "base64",
@@ -47,8 +36,6 @@ test("a pasted signature keeps its layout, owns its logo, and can be resized", a
   const editor = await openSignatureEditor(page);
   await editor.click();
 
-  // A mail-client paste: markup, a logo the clipboard hands over as bytes, and
-  // a second image that exists only inside the copied message.
   await page.evaluate(() => {
     const canvas = document.createElement("canvas");
     canvas.width = 400;
@@ -74,15 +61,10 @@ test("a pasted signature keeps its layout, owns its logo, and can be resized", a
   const logo = editor.locator("img");
   await expect(logo, "the image nobody can reach is dropped, not left broken").toHaveCount(1);
   await expect(logo).toHaveAttribute("src", /^data:image\/png;base64,/);
-  // 400px of intrinsic width and no geometry of its own: sized down to fit a body.
   await expect(logo).toHaveAttribute("width", "240");
 
-  // Sized by its corner, the way an image is sized anywhere else: select it,
-  // then drag a grip inward.
   await logo.click();
   const grip = page.getByRole("button", { name: t("connections.signature.resize") });
-  // Hovering first waits for the grip to stop moving, so the box the mouse is
-  // pointed at is the box it will still be at.
   await grip.hover();
   const before = await logo.boundingBox();
   const corner = await grip.boundingBox();
@@ -98,7 +80,6 @@ test("a pasted signature keeps its layout, owns its logo, and can be resized", a
   const dragged = await logo.boundingBox();
   if (!dragged) throw new Error("no geometry");
   expect(dragged.width, "the drag narrows the logo").toBeLessThan(before.width);
-  // Height follows the width instead of fighting it: the logo is 400x120.
   expect(Math.abs(dragged.height / dragged.width - 120 / 400)).toBeLessThan(0.02);
   const width = await logo.getAttribute("width");
 
@@ -116,8 +97,6 @@ test("a pasted signature keeps its layout, owns its logo, and can be resized", a
     expect(stored?.html, "an unreachable reference never reaches storage").not.toContain("cid:");
     expect(stored?.html, "the selection ring never reaches storage").not.toContain("is-selected");
 
-    // What was saved is what comes back: the logo survives the round trip at
-    // the width it was dragged to.
     await page.reload();
     const reopened = await openSignatureEditor(page);
     await expect(reopened.locator("img")).toHaveAttribute("width", width ?? "");
@@ -126,13 +105,6 @@ test("a pasted signature keeps its layout, owns its logo, and can be resized", a
   }
 });
 
-/**
- * What Outlook and Word actually put on the clipboard: the layout lives in a
- * <style> block the app cannot keep, and the elements only reference it by
- * class. Resolving that sheet onto the elements before it goes is what makes a
- * pasted signature keep the shape it had in the mail client, and losing it is
- * visible as a paragraph gap between every line.
- */
 test("an Outlook signature keeps the line spacing its own stylesheet gives it", async ({
   page,
   request,
@@ -173,9 +145,6 @@ div.WordSection1 {page:WordSection1;}
   const lines = editor.locator("p");
   await expect(lines).toHaveCount(4);
 
-  // The lines sit directly on each other, as they do in Outlook. Falling back
-  // to a mail client's default paragraph margin puts a blank line between every
-  // one of them and doubles the height of the whole signature.
   const boxes = await lines.evaluateAll((paragraphs) =>
     paragraphs.map((p) => {
       const { top, bottom } = p.getBoundingClientRect();
@@ -196,7 +165,6 @@ div.WordSection1 {page:WordSection1;}
         signatures: AccountSignature[];
       }
     ).signatures.find((signature) => signature.accountId === ACCOUNT.id);
-    // The sheet is gone, but what it said is on the elements it said it about.
     expect(stored?.html, "the stylesheet does not survive").not.toContain("<style");
     expect(stored?.html, "nor the classes that referenced it").not.toContain("class=");
     expect(stored?.html, "its spacing does").toContain("margin: 0cm");
@@ -227,8 +195,6 @@ test("only a clipboard image is fetched for a signature, never the machine itsel
       /^data:image\/png;base64,/,
     );
 
-    // Whoever wrote the copied email chose these URLs, so none of them may turn
-    // the fetch into a way to read this machine.
     const loopback = await fetchImage(`${server.baseURL}/logo.png`);
     expect(loopback.status(), "a private address is not somewhere on the web").toBe(400);
 

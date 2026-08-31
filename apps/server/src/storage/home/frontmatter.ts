@@ -1,7 +1,7 @@
 /**
  * Flat frontmatter for the agent-home markdown files (memories, skills): a
  * leading `---` block of single-line `key: value` scalars, then the body.
- * Deliberately not YAML — no nesting, no quoting, no multi-line values — so
+ * Deliberately not YAML, no nesting, no quoting, no multi-line values, so
  * a file hand-edited in any editor parses predictably. A file without a
  * leading `---` is all body: a bare sentence dropped into the folder is
  * valid content, not a parse error.

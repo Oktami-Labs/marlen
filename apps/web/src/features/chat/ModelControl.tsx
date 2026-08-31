@@ -1,4 +1,4 @@
-import type { ModelSettings, ThinkingLevel } from "@marlen/shared";
+import type { LlmContextUsage, ModelSettings, ThinkingLevel } from "@marlen/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import type { ParseKeys } from "i18next";
 import * as React from "react";
@@ -7,7 +7,7 @@ import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
 import { GroupLabel } from "@/components/ui/group-label";
-import { OptionRow } from "@/components/ui/option-row";
+import { ModelPicker } from "@/features/chat/ModelPicker";
 import { api } from "@/lib/api";
 import { relativeTime } from "@/lib/dates";
 import { toast } from "@/lib/toast";
@@ -155,12 +155,6 @@ export function ModelControl({
     (a, b) => Number(b.provider === settings.provider) - Number(a.provider === settings.provider),
   );
 
-  // Connected providers only, but never drop the active one from under its value.
-  const connected = new Set((providers ?? []).filter((p) => p.auth !== null).map((p) => p.id));
-  const usable = settings.catalog.filter(
-    (c) => c.models.length > 0 && (connected.has(c.id) || c.id === settings.provider),
-  );
-
   const activeModelName =
     settings.catalog
       .find((c) => c.id === settings.provider)
@@ -212,9 +206,8 @@ export function ModelControl({
 
       {open &&
         createPortal(
-          // Portaled content still bubbles React synthetic events up the
-          // component tree (not the DOM tree) — this wrapper only guards that
-          // propagation, so it isn't itself an interactive element.
+          // Portaled content bubbles React synthetic events through the component
+          // tree. This noninteractive wrapper stops that propagation.
           // biome-ignore lint/a11y/noStaticElementInteractions: propagation guard only, not a control itself
           <div
             ref={popoverRef}
@@ -259,33 +252,7 @@ export function ModelControl({
               </section>
             ))}
 
-            {context && (
-              <section
-                className="flex flex-col gap-1.5"
-                title={t("chat.model.contextTokens", {
-                  used: Math.round(context.tokens / 1000),
-                  total: Math.round(context.contextWindow / 1000),
-                })}
-              >
-                <div className="flex items-baseline justify-between gap-2">
-                  <GroupLabel size="sm">{t("chat.model.contextTitle")}</GroupLabel>
-                  <span
-                    className={cn(
-                      "text-xs font-medium tabular-nums",
-                      severityText(context.usedPct),
-                    )}
-                  >
-                    {t("chat.model.used", { pct: context.usedPct })}
-                  </span>
-                </div>
-                <div className="h-1 overflow-hidden rounded-full bg-surface-2">
-                  <div
-                    className={cn("h-full rounded-full", severityFill(context.usedPct))}
-                    style={{ width: `${context.usedPct}%` }}
-                  />
-                </div>
-              </section>
-            )}
+            {context && <ContextSection context={context} />}
 
             {settings.reasoning && (
               <section className="flex flex-col gap-1.5">
@@ -309,38 +276,108 @@ export function ModelControl({
               <GroupLabel size="sm" className="pb-0.5">
                 {t("chat.model.title")}
               </GroupLabel>
-              {usable.length === 0 ? (
-                <p className="px-1 py-1 text-xs text-muted-foreground">
-                  {t("chat.model.noProviders")}
-                </p>
-              ) : (
-                <div className="flex max-h-48 flex-col overflow-y-auto">
-                  {usable.map((catalog) => (
-                    <React.Fragment key={catalog.id}>
-                      {usable.length > 1 && (
-                        <p className="px-1 pt-1 pb-0.5 text-2xs text-muted-foreground">
-                          {catalog.name}
-                        </p>
-                      )}
-                      {catalog.models.map((model) => (
-                        <OptionRow
-                          key={model.id}
-                          selected={catalog.id === settings.provider && model.id === settings.model}
-                          label={model.name}
-                          title={model.id}
-                          onClick={() => pickModel(catalog.id, model.id)}
-                          className="shrink-0 py-1.5"
-                        />
-                      ))}
-                    </React.Fragment>
-                  ))}
-                </div>
-              )}
+              <ModelPicker settings={settings} onPick={pickModel} />
             </section>
           </div>,
           document.body,
         )}
     </span>
+  );
+}
+
+/** Thousands of tokens, the unit the whole context section is read in. */
+function kTokens(tokens: number): string {
+  return tokens >= 1000 ? `${Math.round(tokens / 1000)}k` : String(tokens);
+}
+
+/**
+ * Where the conversation's context window actually went: one stacked bar and
+ * a line per part, largest first, ending in what is still free. The parts sum
+ * to the same total the percentage is taken from, so the section always adds
+ * up to what the bar shows.
+ */
+function ContextSection({ context }: { context: LlmContextUsage }) {
+  const { t } = useTranslation();
+  const { breakdown, contextWindow, tokens, usedPct } = context;
+  const parts = [
+    {
+      key: "conversation",
+      labelKey: "chat.model.contextConversation",
+      tokens: breakdown.conversation,
+      fill: "bg-accent",
+    },
+    {
+      key: "instructions",
+      labelKey: "chat.model.contextInstructions",
+      tokens: breakdown.instructions,
+      fill: "bg-foreground/45",
+    },
+    {
+      key: "tools",
+      labelKey: "chat.model.contextTools",
+      tokens: breakdown.tools,
+      fill: "bg-foreground/30",
+    },
+    {
+      key: "memory",
+      labelKey: "chat.model.contextKnowledge",
+      tokens: breakdown.knowledge,
+      fill: "bg-foreground/20",
+    },
+    {
+      key: "skills",
+      labelKey: "chat.model.contextSkills",
+      tokens: breakdown.skills,
+      fill: "bg-foreground/12",
+    },
+  ] as const;
+  const shown = parts.filter((part) => part.tokens > 0).sort((a, b) => b.tokens - a.tokens);
+  const free = Math.max(0, contextWindow - tokens);
+
+  return (
+    <section
+      className="flex flex-col gap-1.5"
+      title={t("chat.model.contextTokens", {
+        used: Math.round(tokens / 1000),
+        total: Math.round(contextWindow / 1000),
+      })}
+    >
+      <div className="flex items-baseline justify-between gap-2">
+        <GroupLabel size="sm">{t("chat.model.contextTitle")}</GroupLabel>
+        <span className={cn("text-xs font-medium tabular-nums", severityText(usedPct))}>
+          {t("chat.model.used", { pct: usedPct })}
+        </span>
+      </div>
+      <div className="flex h-1 overflow-hidden rounded-full bg-surface-2">
+        {shown.map((part) => (
+          <div
+            key={part.key}
+            className={part.fill}
+            style={{ width: `${(part.tokens / contextWindow) * 100}%` }}
+          />
+        ))}
+      </div>
+      <div className="flex flex-col gap-0.5">
+        {shown.map((part) => (
+          <div key={part.key} className="flex items-center gap-2 text-2xs">
+            <span className={cn("h-1.5 w-1.5 shrink-0 rounded-full", part.fill)} />
+            <span className="min-w-0 flex-1 truncate text-muted-foreground">
+              {t(part.labelKey)}
+            </span>
+            <span className="shrink-0 tabular-nums text-muted-foreground">
+              {kTokens(part.tokens)}
+            </span>
+          </div>
+        ))}
+        <div className="flex items-center gap-2 text-2xs">
+          <span className="h-1.5 w-1.5 shrink-0 rounded-full bg-surface-2" />
+          <span className="min-w-0 flex-1 truncate text-muted-foreground">
+            {t("chat.model.contextFree")}
+          </span>
+          <span className="shrink-0 tabular-nums text-muted-foreground">{kTokens(free)}</span>
+        </div>
+      </div>
+    </section>
   );
 }
 

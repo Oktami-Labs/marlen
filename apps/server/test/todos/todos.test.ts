@@ -5,13 +5,6 @@ import type { Todo } from "@marlen/shared";
 import Database from "better-sqlite3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-/**
- * Todos through the real API + store: the agent files/maintains them (the store
- * seam), the web lists and toggles them (the routes). Locks the behaviors that
- * would hurt — key idempotency, completion firing a linked automation, and the
- * sub-todo retirement migration folding content forward instead of dropping it.
- */
-
 let store: typeof import("../../src/db/todos.js");
 let manage: typeof import("../../src/services/automations/manage.js");
 let app: Awaited<ReturnType<typeof import("../../src/app.js").buildApp>>;

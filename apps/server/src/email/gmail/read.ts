@@ -2,12 +2,14 @@ import type { ConnectedAccount, EmailThreadMessage } from "@marlen/shared";
 import { upstreamStatusCode } from "../../core/errors.js";
 import { mapWithConcurrency } from "../../core/utils/jobs.js";
 import { proxyRequest } from "../../integrations/pipedream/connect.js";
+import { sanitizeEmailHtml } from "../htmlBody.js";
 import type { MailReadProvider, SentMessage, ThreadDetail } from "../read/readProviders.js";
 import { splitAddressList } from "../textUtils.js";
 import {
   decodeHeaderText,
   GMAIL_API,
   headerLookup,
+  htmlBody,
   type MessagePart,
   plainTextBody,
   type ThreadGetMessage,
@@ -118,6 +120,8 @@ async function getMessageBody(
 function toThreadMessage(msg: ThreadGetMessage): EmailThreadMessage {
   const header = headerLookup(msg.payload);
   const cc = splitAddressList(header("Cc")).map(decodeHeaderText);
+  const html = htmlBody(msg.payload);
+  const sanitized = html ? sanitizeEmailHtml(html) : "";
   return {
     ...(msg.id ? { id: msg.id } : {}),
     from: decodeHeaderText(header("From")),
@@ -125,6 +129,7 @@ function toThreadMessage(msg: ThreadGetMessage): EmailThreadMessage {
     ...(cc.length > 0 ? { cc } : {}),
     date: msg.internalDate ? new Date(Number(msg.internalDate)).toISOString() : "",
     body: plainTextBody(msg.payload),
+    ...(sanitized ? { bodyHtml: sanitized } : {}),
   };
 }
 

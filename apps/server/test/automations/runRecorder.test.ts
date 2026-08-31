@@ -3,14 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
-/**
- * The run prompt is the contract between the scheduler and the agent: it must
- * carry the last-successful-run anchor and the run's trigger — the missed slot
- * of a catch-up, or the todo whose completion fired a chained automation.
- * Without it, "check the past 24 hours" automations silently lose the gap the
- * machine slept through, and chained runs can't tell what they fired for.
- */
-
 let dbModule: typeof import("../../src/db/index.js");
 let runRecorder: typeof import("../../src/services/automations/runRecorder.js");
 const prompts: string[] = [];

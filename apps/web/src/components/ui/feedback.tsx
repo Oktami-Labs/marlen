@@ -9,7 +9,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Indeterminate accent sweep along the canvas's top edge while a query is in
- * flight — the results already on screen stay put underneath instead of
+ * flight, the results already on screen stay put underneath instead of
  * blinking out to a spinner. Held back by a short delay because most queries
  * here answer from the local server in single-digit milliseconds; only work
  * that actually makes the user wait (a mail provider round-trip) ever shows
@@ -43,7 +43,7 @@ export function ErrorBanner({ children }: { children: React.ReactNode }) {
   return <p className="tint-danger rounded-lg px-3 py-2 text-xs">{children}</p>;
 }
 
-/** ErrorBanner plus a quiet retry — the one shape for a failed panel fetch. */
+/** ErrorBanner plus a quiet retry, the one shape for a failed panel fetch. */
 export function RetryableError({
   children,
   onRetry,
@@ -83,7 +83,7 @@ const NOTICE_TONE_CLASSES = {
 export type NoticeTone = keyof typeof NOTICE_TONE_CLASSES;
 
 /**
- * Tonal notice box — the pale status fill used for banners, flow results, and
+ * Tonal notice box, the pale status fill used for banners, flow results, and
  * setup-step call-outs. `className` carries per-site layout (flex direction,
  * gap, padding); Notice only owns the shell (radius, base padding, tone fill)
  * and the optional dismiss affordance.

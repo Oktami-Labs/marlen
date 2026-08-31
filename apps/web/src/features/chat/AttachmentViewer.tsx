@@ -21,7 +21,7 @@ function renderKind(filename: string): "pdf" | "image" | "text" {
  * app shell; it opens on the openAttachment command any attachments card
  * sends, streams the bytes from GET /api/mail/attachments/open, and renders
  * them inline (PDF, image, or plain text) without ever saving. Its actions:
- * open the same bytes in a browser tab, and — for library formats — the
+ * open the same bytes in a browser tab, and, for library formats, the
  * explicit "Save to library" write.
  *
  * A modal dialog per DESIGN.md: the `.scrim` backdrop separates it, the panel

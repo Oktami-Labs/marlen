@@ -79,7 +79,7 @@ export function invalidateDraftsCache(accountId: string): void {
 
 /**
  * Every draft mutation's epilogue: invalidate, THEN emit "drafts". The order
- * stops the SSE-driven refetch from racing the cache and being served the old list.
+ * stops the SSE-driven refetch from racing the cache and receiving stale data.
  */
 export function draftsMutated(accountId: string): void {
   invalidateDraftsCache(accountId);

@@ -5,7 +5,7 @@ import { dateTimeLabel } from "@/lib/dates";
 
 /**
  * Why a run fired, when it was anything other than its plain schedule. A
- * catch-up run carries the slot it covered — the only place the app admits
+ * catch-up run carries the slot it covered, the only place the app admits
  * that scheduled runs were missed while it was closed.
  */
 export function RunTriggerBadge({ trigger }: { trigger: RunTrigger | null }) {

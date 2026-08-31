@@ -3,7 +3,7 @@ import { type ReportToolSpec, runReportPrompt } from "../../agent/oneShot.js";
 import { appLanguageName } from "../../agent/prompt.js";
 import { prompts } from "../../agent/prompts.js";
 
-/** Cap per directive: several must fit the account's combined style memory (MEMORY_MAX_LENGTH). */
+/** Cap per directive: several must fit the account's style page summary (WIKI_SUMMARY_MAX_LENGTH). */
 const DIRECTIVE_MAX_LENGTH = 280;
 
 export interface ExtractionPair {
@@ -48,10 +48,13 @@ function renderPairs(pairs: ExtractionPair[], accountName: string): string {
   return [`Account: ${accountName}`, "", blocks.join("\n\n---\n\n")].join("\n");
 }
 
-/** Hard cap on one extraction call, so a stuck provider can't wedge the nightly sweep. */
+/** Prevents a stalled provider from blocking the nightly sweep. */
 const EXTRACT_TIMEOUT_MS = 60_000;
 
-/** Throws when the model produced no usable report (incl. timeout); the caller leaves the pairs unstamped to retry next night. */
+/**
+ * Throws when the model returns no usable report or times out. The caller
+ * leaves the pairs unstamped so the next nightly sweep retries them.
+ */
 export async function extractLessons(
   pairs: ExtractionPair[],
   accountName: string,

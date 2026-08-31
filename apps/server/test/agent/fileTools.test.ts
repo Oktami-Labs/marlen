@@ -3,13 +3,6 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
 
-/**
- * The confinement boundary of the default file tools — a security seam: a
- * path escaping the agent home must come back as steering text, never as a
- * successful read, and the whole-filesystem variants exist only when their
- * grant is armed in an interactive session.
- */
-
 let fileToolsFor: typeof import("../../src/agent/fileTools.js").fileToolsFor;
 let home: string;
 
@@ -38,7 +31,7 @@ describe("confined file tools", () => {
 
     for (const path of ["../outside.md", "/etc/passwd", "~/anything"]) {
       const result = await read.execute("t2", { path });
-      expect(resultText(result)).toContain("outside your Marlen home folder");
+      expect(resultText(result)).toContain("outside your Marlene home folder");
     }
   });
 
@@ -50,7 +43,7 @@ describe("confined file tools", () => {
     const read = tools.find((t) => t.name === "file_read");
     if (!read) throw new Error("file_read not mounted");
     const result = await read.execute("t3", { path: "/etc/passwd" });
-    expect(resultText(result)).toContain("outside your Marlen home folder");
+    expect(resultText(result)).toContain("outside your Marlene home folder");
   });
 
   it("swaps in unconfined variants when grants are armed interactively", async () => {

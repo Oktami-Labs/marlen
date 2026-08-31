@@ -24,12 +24,13 @@ apps/e2e/blob-report/
 *.db-journal
 CONTEXT.md
 
-# Local refactor planning doc — deliberately unpublished
-REFACTOR.md
-
-# Per-customer install bundles (agent-home layout + setup skill) — private, not for the public repo
+# Private per-customer install bundles with an agent home and setup skill.
 setup-template/
 
-# Local demo-inbox seeding tool (IMAP-appends fixture mail into a test Gmail) — not for the public repo
+# Private tool that seeds fixture mail into a test Gmail account.
 demo-seed/
 *.tsbuildinfo
+
+# Rust output from the parallel Tauri desktop shell.
+apps/desktop-tauri/src-tauri/target/
+apps/desktop-tauri/src-tauri/gen/

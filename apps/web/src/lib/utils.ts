@@ -25,7 +25,7 @@ export function openExternal(url: string): void {
 
 /**
  * Spread-props that make a non-button row behave as an expand/collapse toggle
- * (role, Enter/Space activation, aria-expanded) — for header rows that contain
+ * (role, Enter/Space activation, aria-expanded), for header rows that contain
  * real buttons and therefore can't be a native <button> themselves.
  */
 export function toggleRowProps(expanded: boolean, onToggle: () => void) {
@@ -57,14 +57,14 @@ export const stagger = (i: number) => ({ animationDelay: `${Math.min(i, 8) * 45}
 /**
  * Marks a row as its own view-transition subject, so it slides to its new
  * position when the list around it changes instead of being cross-faded as
- * part of the page. The id must be unique on screen and start with a letter —
+ * part of the page. The id must be unique on screen and start with a letter,
  * a bare uuid is not a valid CSS ident.
  */
 export const rowTransition = (id: string) => ({ viewTransitionName: `row-${CSS.escape(id)}` });
 
 /**
  * Applies a list mutation inside a view transition. `mutate` must change the
- * DOM synchronously — a direct state write or `setQueryData` — because the
+ * DOM synchronously through a direct state write or `setQueryData`. The
  * transition captures the "after" frame as soon as it returns; an async
  * refetch would land too late and animate nothing. Falls back to a plain call
  * where the API is missing or the user asked for reduced motion.

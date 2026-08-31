@@ -167,7 +167,7 @@ function scaleToDataUri(image: HTMLImageElement, width: number, mimeType: string
   return canvas.toDataURL(mimeType === "image/png" ? "image/png" : "image/jpeg", 0.85);
 }
 
-/** One image's bytes, small enough to live in a signature, with its intrinsic width — or null when even the smallest step doesn't fit. */
+/** One image's bytes, small enough to live in a signature, with its intrinsic width, or null when even the smallest step doesn't fit. */
 async function normalizeImage(
   dataUri: string,
 ): Promise<{ src: string; naturalWidth: number } | null> {
@@ -224,7 +224,7 @@ async function resolveImageSource(src: string): Promise<string | null> {
 
 /**
  * Sizing for an image that just arrived. Geometry the copied signature carries
- * is left exactly as it is — keeping the layout is what pasting a signature
+ * is left exactly as it is, keeping the layout is what pasting a signature
  * means, and a 1px spacer or a divider rule only survives untouched. Two
  * exceptions: a declared width wider than an email body is capped, and an image
  * that brings no geometry at all (a logo inserted from a file) gets a display
@@ -248,7 +248,7 @@ function applyArrivalWidth(image: HTMLImageElement, naturalWidth: number): void 
 /**
  * Pasted signature markup, sanitized, with every image it references turned
  * into bytes it owns. `dropped` counts the images whose bytes could not be
- * reached — the paste still lands, and the caller says how many to re-add by
+ * reached, the paste still lands, and the caller says how many to re-add by
  * hand.
  */
 export async function inlineSignatureHtml(

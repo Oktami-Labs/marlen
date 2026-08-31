@@ -251,7 +251,7 @@ async function updateOutlookDraft(
   await proxyRequest(account.id, "patch", `${GRAPH_API}/messages/${draftId}`, { body });
 
   // A replaced body carries fresh cid references, so the inline set syncs with
-  // it — and an absent set clears them, since an inline part no cid points at
+  // it, and an absent set clears them, since an inline part no cid points at
   // reaches the recipient as a stray file attachment.
   if (patch.body !== undefined) {
     await syncOutlookInlineImages(account, draftId, patch.inlineImages ?? []);

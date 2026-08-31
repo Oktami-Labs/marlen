@@ -18,6 +18,8 @@ export function Switch({ className, tone = "accent", ...props }: SwitchProps) {
   return (
     <SwitchPrimitive.Root
       className={cn(
+        // The track stays 20px; ::before extends the hit area past it.
+        "relative before:absolute before:-inset-y-1.5 before:inset-x-0 before:content-['']",
         "peer inline-flex h-5 w-9 shrink-0 cursor-pointer items-center rounded-full p-0.5 transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background disabled:cursor-not-allowed disabled:opacity-50 data-[state=unchecked]:bg-muted-foreground/30",
         CHECKED_TONE[tone],
         className,

@@ -141,7 +141,7 @@ function assertSafeHeaderValue(header: string, value: string): void {
 /**
  * Header lines whose values come from mail we received (a thread's Message-ID
  * and References), so they carry the same CR/LF smuggling risk as a recipient.
- * Unlike a recipient, a threading header is optional — dropping a malformed one
+ * Unlike a recipient, a threading header is optional, dropping a malformed one
  * costs threading in non-Gmail clients, while rejecting would make the draft
  * unbuildable and, on update, uneditable.
  */
@@ -416,7 +416,7 @@ async function fetchGmailDraftFull(
   cc: string;
   bcc: string;
   subject: string;
-  /** The stored body verbatim — html when the draft has an html part, so an update can carry it over unflattened. */
+  /** The stored body verbatim, html when the draft has an html part, so an update can carry it over unflattened. */
   body: string;
   bodyFormat: "text" | "html";
   threadId: string;
@@ -462,7 +462,7 @@ async function fetchGmailDraftFull(
  * own format and cid images; without one the stored body is carried over
  * verbatim with both, so changing only the subject can't flatten an html draft
  * to plain text or drop the signature's inline images. A body edit is a
- * plain-text replacement of html markup by design — the editor is plain text.
+ * plain-text replacement of html markup by design, the editor is plain text.
  */
 async function updateGmailDraft(
   account: ConnectedAccount,

@@ -6,7 +6,6 @@ export const conversations = sqliteTable("conversations", {
   type: text("type", { enum: ["chat", "automation"] })
     .notNull()
     .default("chat"),
-  /** Account/thread this chat works in; last writer wins. Null = no focus ("all accounts"). */
   focusAccountId: text("focus_account_id"),
   focusThreadId: text("focus_thread_id"),
   focusThreadSubject: text("focus_thread_subject"),
@@ -50,7 +49,6 @@ export const agentDrafts = sqliteTable(
       .notNull()
       .default("open"),
     sentMessageId: text("sent_message_id"),
-    /** Set once the learning loop consumed this row; prevents double-learning. */
     learnedAt: text("learned_at"),
     createdAt: text("created_at").notNull(),
     updatedAt: text("updated_at").notNull(),
@@ -78,7 +76,6 @@ export const draftProposals = sqliteTable("draft_proposals", {
   status: text("status", { enum: ["proposed", "kept", "sent", "discarded"] })
     .notNull()
     .default("proposed"),
-  /** The mailbox draft this proposal became; set when kept. */
   providerDraftId: text("provider_draft_id"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
@@ -106,16 +103,13 @@ export const automations = sqliteTable("automations", {
   id: text("id").primaryKey(),
   name: text("name").notNull(),
   instruction: text("instruction").notNull(),
-  /** Five-field cron, or "" for manual-only (on-demand). */
   schedule: text("schedule").notNull(),
   enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
   showInActivity: integer("show_in_activity", { mode: "boolean" }).notNull().default(true),
   pinned: integer("pinned", { mode: "boolean" }).notNull().default(false),
-  /** leads.id this belongs to, deleted with the lead; null for standalone. */
   leadId: text("lead_id"),
   runOnNewMail: integer("run_on_new_mail", { mode: "boolean" }).notNull().default(false),
   notifyOnCompletion: integer("notify_on_completion", { mode: "boolean" }).notNull().default(false),
-  /** Manual sort key, ascending; new automations get -now so they land on top. */
   position: real("position").notNull().default(0),
   createdAt: text("created_at").notNull(),
 });
@@ -124,10 +118,6 @@ export const settings = sqliteTable("settings", {
   key: text("key").primaryKey(),
   value: text("value").notNull(),
 });
-
-// Long-term memories are NOT here: they live as markdown files in the agent
-// home (memories/store.ts). The shipped base schema still creates a
-// `memories` table on a fresh db; home/migrate.ts drops it at boot.
 
 /** Searchable text lives in the library_chunks FTS5 table, not here (drizzle can't model virtual tables). */
 export const libraryDocuments = sqliteTable("library_documents", {
@@ -168,7 +158,6 @@ export const automationRuns = sqliteTable("automation_runs", {
   status: text("status", { enum: ["running", "success", "error"] }).notNull(),
   result: text("result").notNull().default(""),
   cards: text("cards"),
-  /** JSON RunTrigger; null = plain scheduled/manual run. */
   trigger: text("trigger"),
   startedAt: text("started_at").notNull(),
   finishedAt: text("finished_at"),
@@ -190,7 +179,6 @@ export const voiceLearnRuns = sqliteTable("voice_learn_runs", {
   finishedAt: text("finished_at"),
 });
 
-/** One row per prospect, keyed by normalized email address. */
 export const leads = sqliteTable("leads", {
   id: text("id").primaryKey(),
   name: text("name").notNull().default(""),
@@ -221,7 +209,6 @@ export const leads = sqliteTable("leads", {
 export const outboundDrafts = sqliteTable("outbound_drafts", {
   id: text("id").primaryKey(),
   channel: text("channel").notNull(),
-  /** Channel-native recipient (a WhatsApp jid). */
   target: text("target").notNull(),
   targetLabel: text("target_label").notNull().default(""),
   body: text("body").notNull(),
@@ -229,15 +216,14 @@ export const outboundDrafts = sqliteTable("outbound_drafts", {
     .notNull()
     .default("open"),
   sentRef: text("sent_ref"),
-  /** The conversation that drafted it; null for drafts predating the link. */
   conversationId: text("conversation_id"),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),
 });
 
 /**
- * A human-attention item the agent surfaces and maintains — you must do or
- * decide this. dedupe_key ("" for ad-hoc) makes a repeating run's create
+ * An item the agent surfaces because the user must act or decide. dedupe_key
+ * ("" for ad-hoc) makes a repeating run's create
  * idempotent so it upserts one todo, not many.
  */
 export const todos = sqliteTable("todos", {
@@ -247,12 +233,9 @@ export const todos = sqliteTable("todos", {
   status: text("status", { enum: ["open", "done", "dismissed"] })
     .notNull()
     .default("open"),
-  /** When the user should act; null = undated. The home agenda's sort/group key. */
   dueAt: text("due_at"),
-  /** Manual sort key within an agenda group (drag-and-drop); seeded from creation time. */
   position: real("position").notNull().default(0),
   conversationId: text("conversation_id"),
-  /** Automation run when this todo completes (open→done); null = none. */
   linkedAutomationId: text("linked_automation_id"),
   dedupeKey: text("dedupe_key").notNull().default(""),
   createdAt: text("created_at").notNull(),
@@ -281,16 +264,13 @@ export const learnRuns = sqliteTable("learn_runs", {
 export const waContacts = sqliteTable("wa_contacts", {
   jid: text("jid").primaryKey(),
   name: text("name").notNull().default(""),
-  /** The contact's own push name. */
   notify: text("notify").notNull().default(""),
-  /** Digits only; "" for a LID-only contact (jid carries no phone number). */
   phoneNumber: text("phone_number").notNull().default(""),
   updatedAt: text("updated_at").notNull(),
 });
 
 export const waChats = sqliteTable("wa_chats", {
   jid: text("jid").primaryKey(),
-  /** Subject for groups; "" for direct chats (named by the contact row). */
   name: text("name").notNull().default(""),
   lastMessageAt: text("last_message_at"),
   updatedAt: text("updated_at").notNull(),
@@ -300,9 +280,7 @@ export const waMessages = sqliteTable(
   "wa_messages",
   {
     chatJid: text("chat_jid").notNull(),
-    /** Unique per chat, not globally (hence the composite primary key). */
     id: text("id").notNull(),
-    /** Author's jid in group chats; "" in direct chats and for own messages. */
     senderJid: text("sender_jid").notNull().default(""),
     senderName: text("sender_name").notNull().default(""),
     fromMe: integer("from_me").notNull().default(0),

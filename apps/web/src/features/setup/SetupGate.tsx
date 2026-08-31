@@ -20,7 +20,7 @@ import { toast } from "@/lib/toast";
 
 /**
  * If the freshly signed-in provider isn't the active one, silently make it
- * active (first model of its catalog) — otherwise the gate never completes
+ * active (first model of its catalog), otherwise the gate never completes
  * for users who pick a provider other than the default. Settings → AI stays
  * the place to change it.
  */
@@ -51,7 +51,7 @@ export function SetupGate({
   onStatusChanged,
   onFinish,
 }: {
-  // null while the server can't be reached — the gate stays up and shows an
+  // null while the server can't be reached, the gate stays up and shows an
   // offline notice instead of falling through to the main app.
   status: AppStatus | null;
   onStatusChanged: () => void;
@@ -63,7 +63,7 @@ export function SetupGate({
   const complete = status !== null && isSetupComplete(status);
 
   // A build without a usable email bridge gets the Pipedream credentials
-  // wizard inline in step 2 — the guided flow must not dead-end in Settings.
+  // wizard inline in step 2, the guided flow must not dead-end in Settings.
   const [pdStatus, setPdStatus] = React.useState<PipedreamStatus | null>(null);
   const needsWizard = status !== null && !status.pipedreamConfigured;
   React.useEffect(() => {

@@ -1,4 +1,4 @@
-/** The public releases repo: builds, the download site, and issues. Not the source. */
+/** Public repository for releases, downloads, and issues. Source stays private. */
 
 export const REPO_SLUG = "Oktami-Labs/marlen";
 export const REPO_URL = `https://github.com/${REPO_SLUG}`;

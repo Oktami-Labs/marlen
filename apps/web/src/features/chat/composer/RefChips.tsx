@@ -5,7 +5,7 @@ import { AccountDot } from "@/components/ui/account-dot";
 import { IconButton } from "@/components/ui/icon-button";
 import { accountColor } from "@/lib/accounts";
 
-/** Best available label for a pinned email: subject, then sender, then the bare thread id — always something. */
+/** Best available label for a pinned email: subject, then sender, then the bare thread id, always something. */
 function refLabel(ref: EmailRef): string {
   return ref.subject || ref.from || ref.threadId;
 }

@@ -54,7 +54,7 @@ export const llmRoutes: FastifyPluginAsyncTypebox = async (app) => {
 
   app.put("/api/llm/thinking", { schema: { body: thinkingBody } }, async (req) => {
     await setThinkingLevel(req.body.level);
-    // Existing in-memory agents carry the old level in their state; drop them.
+    // Cached agents capture the thinking level at creation.
     resetSessions();
     return getModelSettings();
   });

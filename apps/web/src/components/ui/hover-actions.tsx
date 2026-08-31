@@ -3,7 +3,7 @@ import { cn } from "@/lib/utils";
 
 /**
  * Trailing row actions revealed when the row is hovered or holds keyboard
- * focus — the surrounding row/tile must be a `group`. Always visible below
+ * focus, the surrounding row/tile must be a `group`. Always visible below
  * `sm`, where there is no hover to reveal them. Position and gap tweaks via
  * className.
  */

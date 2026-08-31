@@ -8,7 +8,7 @@ import { listDraftsCached } from "../../email/draftsCache.js";
 import { getDraftProvider } from "../../email/providers.js";
 import { listAccounts } from "../../integrations/pipedream/connect.js";
 import { listDocuments, searchChunks } from "../../storage/library/store.js";
-import { listMemories } from "../../storage/memories/store.js";
+import { listPages } from "../../storage/wiki/store.js";
 import { buildSnippet, plainText } from "./snippets.js";
 
 const log = moduleLogger("search");
@@ -206,18 +206,18 @@ export async function searchDocuments(query: string): Promise<SearchResult[]> {
   return results;
 }
 
-export async function searchMemories(query: string): Promise<SearchResult[]> {
+export async function searchWiki(query: string): Promise<SearchResult[]> {
   const q = query.toLowerCase();
-  const hits = (await listMemories())
-    .filter((entry) => entry.content.toLowerCase().includes(q))
+  const hits = (await listPages())
+    .filter((page) => page.id.toLowerCase().includes(q) || page.content.toLowerCase().includes(q))
     .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
     .slice(0, PER_TYPE_LIMIT);
-  return hits.map((entry) => ({
-    type: "memory",
-    id: entry.id,
-    title: entry.content.length > 60 ? `${entry.content.slice(0, 60)}…` : entry.content,
-    snippet: buildSnippet(entry.content, query),
-    date: entry.updatedAt,
+  return hits.map((page) => ({
+    type: "wiki",
+    id: page.id,
+    title: page.content.length > 60 ? `${page.content.slice(0, 60)}…` : page.content,
+    snippet: buildSnippet(page.content, query),
+    date: page.updatedAt,
   }));
 }
 

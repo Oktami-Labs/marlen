@@ -15,7 +15,7 @@ interface UseAnchoredPopoverOptions {
  * Open state plus a viewport-clamped position for a trigger-anchored popover
  * portaled to <body>: below the trigger, flipped above when it doesn't fit,
  * clamped horizontally so it never overhangs the viewport. Also wires the
- * dismiss behavior every such popover needs — outside mousedown, Escape, and
+ * dismiss behavior every such popover needs, outside mousedown, Escape, and
  * re-anchoring on scroll (capture phase, so any ancestor scroller counts)
  * and resize.
  */

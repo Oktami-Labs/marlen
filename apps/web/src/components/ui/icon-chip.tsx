@@ -2,7 +2,7 @@ import type * as React from "react";
 import { cn } from "@/lib/utils";
 
 /**
- * Tinted square icon tile fronting section titles and palette rows — the one
+ * Tinted square icon tile fronting section titles and palette rows, the one
  * shape for a small icon-on-pastel mark. Icons are sized here; callers pass a
  * bare icon element.
  */

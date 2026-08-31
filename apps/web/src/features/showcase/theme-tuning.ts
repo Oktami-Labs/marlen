@@ -1,12 +1,6 @@
-/*
- * ─────────────────────────────────────────────────────────────────────────────
- *  DEV SHOWCASE / THEME LAB — colour maths. Safe to delete with ShowcasePanel.
- *
- *  Everything happens in OKLCH, the space `src/index.css` authors its tokens in.
- *  Lightness, chroma and hue move independently there, so one global "brighter"
- *  or "less saturated" pass stays perceptually even across the whole palette
- *  instead of blowing out mid-tones the way an sRGB multiply would.
- * ─────────────────────────────────────────────────────────────────────────────
+/**
+ * Theme adjustments use OKLCH so lightness, chroma, and hue can change
+ * independently without distorting mid-tones.
  */
 
 export interface Oklch {
@@ -20,17 +14,17 @@ export interface Oklch {
 
 /** The global knobs, held per theme and applied on top of every token. */
 export interface Tuning {
-  /** −0.5 … 0.5 — eases every colour toward white or black. */
+  /** −0.5 … 0.5, eases every colour toward white or black. */
   brightness: number;
-  /** −0.5 … 0.75 — spreads lightness away from the canvas. */
+  /** −0.5 … 0.75, spreads lightness away from the canvas. */
   contrast: number;
-  /** 0 … 2 — chroma multiplier. 0 is a greyscale UI. */
+  /** 0 … 2, chroma multiplier. 0 is a greyscale UI. */
   saturation: number;
-  /** −1 … 1 — tints the near-neutral tokens amber or steel. */
+  /** −1 … 1, tints the near-neutral tokens amber or steel. */
   warmth: number;
-  /** −180 … 180 — rotates every chromatic token. */
+  /** −180 … 180, rotates every chromatic token. */
   hue: number;
-  /** 0 … 3 — multiplies the paper-grain opacity. */
+  /** 0 … 3, multiplies the paper-grain opacity. */
   grain: number;
 }
 
@@ -98,7 +92,7 @@ const inGamut = (rgb: number[]) => rgb.every((v) => v >= -EPSILON && v <= 1 + EP
 
 /**
  * Readout/swatch companion to {@link formatOklch}: an `oklch()` we hand to the
- * browser gets gamut-mapped there, so bring the hex down the same road — bisect
+ * browser gets gamut-mapped there, so bring the hex down the same road, bisect
  * the chroma until it fits sRGB rather than clipping each channel, which would
  * swing the hue. Only the extremes of the sliders ever leave the gamut.
  */
@@ -150,7 +144,7 @@ function rasteriseToHex(cssColor: string): string {
 
 /**
  * Read a token's authored colour. A custom property computes to its own token
- * text, so `--background` comes back as the literal `oklch(…)` from index.css —
+ * text, so `--background` comes back as the literal `oklch(…)` from index.css,
  * parse that directly and we keep full precision, including chroma too subtle to
  * survive a trip through 8-bit sRGB. Anything else falls back to the canvas.
  */

@@ -5,13 +5,6 @@ import type { ConnectedAccount } from "@marlen/shared";
 import { beforeAll, describe, expect, it } from "vitest";
 import type { CreateDraftInput, DraftProvider } from "../../src/email/providers.js";
 
-/**
- * The proposal → keep pipeline is what stands between a chat-composed draft
- * and the user's real mailbox: nothing may reach the provider before keep, and
- * keeping must produce the full bookkeeping (snapshot, conversation link,
- * settled proposal) that Home's approval list and the learning loop rely on.
- */
-
 let proposalStore: typeof import("../../src/db/draftProposalStore.js");
 let draftStore: typeof import("../../src/db/draftStore.js");
 let conversationStore: typeof import("../../src/db/conversationStore.js");

@@ -16,7 +16,7 @@ import { toast } from "@/lib/toast";
 import { openExternal } from "@/lib/utils";
 
 /**
- * onOffice CRM connection — a native (non-Pipedream) integration authenticated
+ * onOffice CRM connection, a native (non-Pipedream) integration authenticated
  * with an API user's token + secret. It lives alongside the Pipedream accounts
  * in Settings → Accounts: an entry in the "add account" picker opens the token
  * form, and once configured it shows as a connected row in the accounts list.
@@ -41,7 +41,7 @@ export function useOnOfficeStatus(): {
   return { status, refresh };
 }
 
-/** The onOffice row in the "add account" picker — a PickerRow branded with a CRM glyph. */
+/** The onOffice row in the "add account" picker, a PickerRow branded with a CRM glyph. */
 export function OnOfficePickerButton({ onClick }: { onClick: () => void }) {
   return (
     <OptionRow
@@ -131,7 +131,7 @@ const onOfficeRowIcon = <Building2 className="h-4 w-4 shrink-0 text-muted-foregr
  * The onOffice permission editor, expanded under the onOffice account row.
  * Two independent armable grants, both with the arm-with-confirm,
  * disarm-immediately pattern:
- * - write access: arms the CRM modify/delete/send tools for chat sessions —
+ * - write access: arms the CRM modify/delete/send tools for chat sessions,
  *   the CRM counterpart of the per-account grants;
  * - automation creates: lets unattended automation runs create additive
  *   records (address, appointment, task, relation).

@@ -2,6 +2,7 @@ import {
   closestCenter,
   DndContext,
   type DragEndEvent,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   useSensor,
@@ -54,13 +55,11 @@ import {
 import { api } from "@/lib/api";
 import { desktopBridge } from "@/lib/desktop";
 import { toast } from "@/lib/toast";
-import { cn, midpoint, rowTransition, stagger, withViewTransition } from "@/lib/utils";
+import { cn, midpoint, rowTransition, stagger } from "@/lib/utils";
 
 const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
 
-// Soft format hint for the common numeric 5-field cron form. The server
-// (node-cron) is the authority and accepts more — names, 6 fields — so this
-// only drives the inline hint, never blocks submission.
+// This only drives the hint; the server validates the schedule.
 const CRON_FIELD = /^(\*|\d+)(-\d+)?(\/\d+)?(,(\*|\d+)(-\d+)?(\/\d+)?)*$/;
 function looksLikeCron(expr: string): boolean {
   const parts = expr.trim().split(/\s+/);
@@ -72,9 +71,6 @@ export function AutomationsPanel() {
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
-  // Captured once on mount: Home navigates here with router state — the
-  // "suggestions waiting" row sets focusSuggestions, an upcoming-run row sets
-  // focusAutomation (an id). The targeted cards play a one-shot arrival flash.
   const [{ flashSuggestions, focusAutomation }] = React.useState(() => {
     const state = location.state as {
       focusSuggestions?: boolean;
@@ -86,12 +82,8 @@ export function AutomationsPanel() {
     };
   });
   React.useEffect(() => {
-    // Consume the state so a refresh or back-navigation doesn't replay the flash.
     if (flashSuggestions || focusAutomation) navigate(location.pathname, { replace: true });
   }, [flashSuggestions, focusAutomation, navigate, location.pathname]);
-  // Server-side changes (agent tools, scheduled runs, the suggestion sweep)
-  // land via "automations" topic invalidation; refetches keep previous data,
-  // so the cards never unmount and drop their state.
   const automationsQuery = useQuery({
     queryKey: ["automations", "list"],
     queryFn: () => api.automations(),
@@ -122,7 +114,6 @@ export function AutomationsPanel() {
   const [advanced, setAdvanced] = React.useState(false);
   const [editingId, setEditingId] = React.useState<string | null>(null);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
-  // Shown once when leaving Advanced discards a cron the picker can't express.
   const [lossNote, setLossNote] = React.useState(false);
 
   const schedule = advanced ? cron : buildCron(preset);
@@ -155,14 +146,11 @@ export function AutomationsPanel() {
 
   const toggleAdvanced = () => {
     if (!advanced) {
-      // Carry the picker's schedule into the cron field.
       setCron(buildCron(preset));
       setAdvanced(true);
       setLossNote(false);
       return;
     }
-    // Back to the picker: adopt the cron when it's expressible, else keep the
-    // previous preset and say that the custom cron is being replaced.
     const parsed = parseCron(cron);
     if (parsed) {
       setPreset(parsed);
@@ -205,7 +193,6 @@ export function AutomationsPanel() {
     }
   };
 
-  // Scroll the focused card into view once the list carrying it has rendered.
   const focusRef = React.useRef<HTMLDivElement | null>(null);
   const focusPresent = automations.some((a) => a.id === focusAutomation);
   React.useEffect(() => {
@@ -217,9 +204,13 @@ export function AutomationsPanel() {
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
 
-  // Persist a drop as a fractional position between the new neighbors,
-  // optimistically reordering the cache; the "automations" event reconciles.
+  // The card under the pointer renders in a DragOverlay; the in-list original
+  // stays as a dimmed placeholder and the overlay animates into it on drop.
+  const [dragId, setDragId] = React.useState<string | null>(null);
+  const dragged = automations.find((a) => a.id === dragId) ?? null;
+
   const onDragEnd = (e: DragEndEvent) => {
+    setDragId(null);
     const { active, over } = e;
     if (!over || active.id === over.id) return;
     const from = automations.findIndex((a) => a.id === active.id);
@@ -227,11 +218,9 @@ export function AutomationsPanel() {
     if (from < 0 || to < 0) return;
     const next = arrayMove(automations, from, to);
     const position = midpoint(next[to - 1]?.position, next[to + 1]?.position);
-    withViewTransition(() =>
-      queryClient.setQueryData<Automation[]>(
-        ["automations", "list"],
-        next.map((a) => (a.id === active.id ? { ...a, position } : a)),
-      ),
+    queryClient.setQueryData<Automation[]>(
+      ["automations", "list"],
+      next.map((a) => (a.id === active.id ? { ...a, position } : a)),
     );
     api.updateAutomation(String(active.id), { position }).catch((err: unknown) => {
       toast.error(err);
@@ -474,9 +463,7 @@ export function AutomationsPanel() {
             checked={form.notifyOnCompletion}
             onCheckedChange={(v) => {
               setForm({ ...form, notifyOnCompletion: v });
-              // Browser tabs need a Notification grant, and requesting one is
-              // only allowed on a user gesture — this toggle is that gesture.
-              // The desktop shell notifies from its main process, no grant.
+              // Browsers allow this permission request only from a user gesture.
               if (
                 v &&
                 !desktopBridge() &&
@@ -537,7 +524,13 @@ export function AutomationsPanel() {
           description={t("automations.emptyBody")}
         />
       ) : (
-        <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={(e) => setDragId(String(e.active.id))}
+          onDragCancel={() => setDragId(null)}
+          onDragEnd={onDragEnd}
+        >
           <SortableContext
             items={automations.map((a) => a.id)}
             strategy={verticalListSortingStrategy}
@@ -562,6 +555,15 @@ export function AutomationsPanel() {
               ))}
             </div>
           </SortableContext>
+          <DragOverlay>
+            {dragged && (
+              <AutomationCard
+                automation={dragged}
+                onChanged={refreshAutomations}
+                onEdit={() => openForEdit(dragged)}
+              />
+            )}
+          </DragOverlay>
         </DndContext>
       )}
 
@@ -578,7 +580,6 @@ export function AutomationsPanel() {
   );
 }
 
-/** Sortable wrapper: gutter drag handle left of the card, as on Home's todos. */
 function SortableAutomationRow({ id, children }: { id: string; children: React.ReactNode }) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
@@ -593,8 +594,9 @@ function SortableAutomationRow({ id, children }: { id: string; children: React.R
       <button
         type="button"
         className={cn(
-          "absolute -left-6 top-6 cursor-grab touch-none text-muted-foreground/50 hover:text-muted-foreground",
-          "opacity-0 transition-opacity focus-visible:opacity-100 group-hover/auto:opacity-100 max-sm:opacity-100",
+          "absolute -left-7 top-5 cursor-grab touch-none p-1 text-muted-foreground/50 hover:text-muted-foreground",
+          // The gutter it sits in only exists once the column has margins.
+          "max-sm:hidden opacity-0 transition-opacity focus-visible:opacity-100 group-hover/auto:opacity-100",
         )}
         aria-label={t("automations.reorder")}
         {...attributes}
@@ -607,7 +609,6 @@ function SortableAutomationRow({ id, children }: { id: string; children: React.R
   );
 }
 
-/** Multi-select day-of-week chips, Mon→Sun, used by the "custom" schedule. */
 function WeekdayToggle({
   value,
   onChange,
@@ -642,14 +643,12 @@ function WeekdayToggle({
   );
 }
 
-/** One pending proposal from the suggestion sweep: rationale up front, instruction behind a disclosure, accept/dismiss to decide. */
 function SuggestionCard({
   suggestion,
   flash,
   onDecided,
 }: {
   suggestion: AutomationSuggestion;
-  /** Play the arrival flash — set when Home's suggestions row navigated here. */
   flash: boolean;
   onDecided: () => Promise<void>;
 }) {
@@ -667,7 +666,6 @@ function SuggestionCard({
       await onDecided();
     } catch (err) {
       toast.error(err);
-      // Only on failure — on success the refetch removes this card entirely.
       setBusy(false);
     }
   };

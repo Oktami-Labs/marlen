@@ -10,7 +10,6 @@ import { getTurnRunner } from "./turnRunner.js";
 
 const log = moduleLogger("runRecorder");
 
-/** A bad AUTOMATION_RUN_TIMEOUT_MS falls back to the default instead of aborting every run instantly. */
 const DEFAULT_TIMEOUT_MS =
   Number.isFinite(env.automationRunTimeoutMs) && env.automationRunTimeoutMs > 0
     ? env.automationRunTimeoutMs
@@ -23,10 +22,8 @@ function notificationSummary(result: string): string {
   return firstLine.slice(0, NOTIFICATION_SUMMARY_CHARS);
 }
 
-/** Card kinds an unattended run leaves on Home for the user to send or discard. */
 const APPROVAL_CARD_KINDS = new Set(["email_draft", "message_draft"]);
 
-/** Whether this run's own cards left something waiting for the user. */
 function leftApprovals(cardsJson: string | null): boolean {
   if (!cardsJson) return false;
   const cards = JSON.parse(cardsJson) as MessageCard[];
@@ -36,7 +33,6 @@ function leftApprovals(cardsJson: string | null): boolean {
 export interface AutomationRunResult {
   started: boolean;
   succeeded: boolean;
-  /** Echoed so scheduler.ts can retire a one-off run without re-querying. Set when started is true. */
   schedule?: string;
 }
 
@@ -48,10 +44,7 @@ export async function executeAutomationRun(
     .select()
     .from(schema.automations)
     .where(eq(schema.automations.id, automationId));
-  // A ghost task (leaked by a schedule/unschedule race, or fired between
-  // disabling and unschedule()) does not run: re-checking the row rather than
-  // trusting the state when the task was registered. Manual "Run now" bypasses
-  // the enabled gate; pausing stops the schedule, not the user.
+  // Recheck scheduled work; manual runs may execute while paused.
   if (!automation || (!automation.enabled && !opts.manual)) {
     log.warn(
       { automationId, found: Boolean(automation) },
@@ -77,17 +70,10 @@ export async function executeAutomationRun(
 
   const timeoutMs =
     opts.timeoutMs !== undefined && opts.timeoutMs > 0 ? opts.timeoutMs : DEFAULT_TIMEOUT_MS;
-  // Bound the whole turn: a stuck model or MCP call would otherwise keep the
-  // run alive forever, and on a repeating schedule scheduler.ts's overlap guard
-  // would then wedge the automation permanently.
   const signal = AbortSignal.timeout(timeoutMs);
 
-  // Gates scheduler.ts's one-off retirement: a one-time schedule whose only run
-  // errored is not silently disabled with zero successful executions.
   let succeeded = false;
   try {
-    // Anchors "since the last run" instructions; on a coalesced catch-up it
-    // lets the agent widen a literal time window instead of losing the gap.
     const [lastSuccess] = await db
       .select({ finishedAt: schema.automationRuns.finishedAt })
       .from(schema.automationRuns)
@@ -118,18 +104,12 @@ export async function executeAutomationRun(
         `This run was triggered by new inbound mail in: ${trigger.accountNames.join(", ")}. Start from that mailbox's newest messages instead of sweeping every account.`,
       );
     }
-    // The todo's body holds the specifics its title deliberately omits, so it
-    // trails the instruction as its own labelled block rather than being
-    // inlined into a sentence: bodies are multi-line.
     const todoNotes =
       trigger?.kind === "todo" && trigger.body
         ? `\n\nNotes from the completed todo "${trigger.title}":\n${trigger.body}`
         : "";
     const instructionMessage = `Scheduled automation "${automation.name}". ${context.join(" ")} Execute this instruction now and report the outcome:\n\n${automation.instruction}${todoNotes}`;
 
-    // The run id is the conversation id, so drafts created by this run link back
-    // to its transcript. The turn runner writes the conversation and message
-    // rows; this run row tracks only status, timing, and result.
     const { text, cardsJson } = await getTurnRunner()({
       runId,
       prompt: instructionMessage,
@@ -148,9 +128,7 @@ export async function executeAutomationRun(
       })
       .where(eq(schema.automationRuns.id, runId));
     emitServerEvent("runs");
-    // A run that left a draft waiting notifies whatever the automation's own
-    // setting says: the switch governs "here is the result", not "this needs
-    // you". Without it, work queues up on Home with nothing to point at it.
+    // Approval work always notifies, independent of completion preferences.
     if (automation.notifyOnCompletion || leftApprovals(cardsJson)) {
       emitRunNotification({
         runId,
@@ -163,7 +141,6 @@ export async function executeAutomationRun(
     runLog.info({ durationMs: Date.now() - startedAt }, "automation run finished");
     succeeded = true;
   } catch (error) {
-    // The log keeps the stack, the only place it survives for an unattended run.
     const timedOut = signal.aborted;
     const message = timedOut
       ? `Run stopped after exceeding the ${Math.round(timeoutMs / 1000)}s time limit.`
@@ -181,8 +158,6 @@ export async function executeAutomationRun(
       })
       .where(eq(schema.automationRuns.id, runId));
     emitServerEvent("runs");
-    // Failures always notify: an unattended run that silently stopped working
-    // is only discovered by going looking for it.
     emitRunNotification({
       runId,
       automationId,
@@ -195,10 +170,6 @@ export async function executeAutomationRun(
   return { started: true, succeeded, schedule: automation.schedule };
 }
 
-/**
- * Called once on boot: a run still "running" belongs to a process that died
- * mid-run (runs live only in this process) and would spin in the UI forever.
- */
 export async function sweepOrphanedRuns(): Promise<void> {
   const orphaned = await db
     .update(schema.automationRuns)

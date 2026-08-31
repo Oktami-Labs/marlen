@@ -8,7 +8,7 @@ import { requestRun } from "./automations/scheduler.js";
 
 const log = moduleLogger("todos");
 
-/** Whether an automation with this id exists — a valid link target. */
+/** Whether an automation with this id exists, a valid link target. */
 export async function automationExists(id: string): Promise<boolean> {
   const [row] = await db
     .select({ id: schema.automations.id })

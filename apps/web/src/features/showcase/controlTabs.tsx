@@ -1,9 +1,3 @@
-/*
- * Control-primitive tabs of the DEV showcase gallery: buttons, marks, forms,
- * surfaces, and feedback. Each export is one tab's worth of sections. Safe to
- * delete with the folder.
- */
-
 import { CHANGELOG } from "@marlen/shared";
 import { Bell, Check, Inbox, Mail, Sparkles, Trash2, TriangleAlert, X } from "lucide-react";
 import * as React from "react";
@@ -228,7 +222,7 @@ export function MarksTab() {
   );
 }
 
-/** Filled fields — inputs, selects, textareas, and their hint/error states. */
+/** Filled fields, inputs, selects, textareas, and their hint/error states. */
 export function FormsTab() {
   return (
     <Section
@@ -465,7 +459,7 @@ function DialogDemo() {
 }
 
 /** Stands the real pill up in the real sidebar, with the newest release as the
- *  waiting update — outside the desktop shell nothing ever mounts it. Collapse
+ *  waiting update, outside the desktop shell nothing ever mounts it. Collapse
  *  the sidebar while it is up to see its icon-only width. */
 function UpdatePillDemo() {
   const [shown, setShown] = React.useState(false);

@@ -2,6 +2,7 @@ import {
   closestCenter,
   DndContext,
   type DragEndEvent,
+  DragOverlay,
   KeyboardSensor,
   PointerSensor,
   useDroppable,
@@ -11,8 +12,10 @@ import {
 import {
   SortableContext,
   sortableKeyboardCoordinates,
+  useSortable,
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
+import { CSS } from "@dnd-kit/utilities";
 import type { AccountColor, AccountDrafts, Automation, EmailDraft, Todo } from "@marlen/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
@@ -20,6 +23,7 @@ import {
   CircleCheck,
   Clock,
   ListTodo,
+  Menu,
   Plus,
   Sparkles,
   TriangleAlert,
@@ -53,7 +57,7 @@ import { api } from "@/lib/api";
 import { dateTimeLabel, dayLabel, timeLabel } from "@/lib/dates";
 import type { View } from "@/lib/nav";
 import { openConversationInChat } from "@/lib/quickActions";
-import { cn, errorMessage, midpoint, stagger } from "@/lib/utils";
+import { cn, errorMessage, midpoint, rowTransition, stagger } from "@/lib/utils";
 
 const AUTOMATION_HORIZON_DAYS = 14;
 const OVERDUE = "overdue";
@@ -78,10 +82,10 @@ type RenderItem =
   | { kind: "auto"; at: number; automation: Automation };
 
 /**
- * "Zu erledigen" — the one agenda of everything on your plate: overdue todos,
+ * "Zu erledigen", the one agenda of everything on your plate: overdue todos,
  * every draft awaiting approval (email and outbound channels), then the days
- * ahead — dated todos with the next scheduled automation runs interleaved
- * read-only — and undated todos last. Drag a todo onto another day to
+ * ahead, dated todos with the next scheduled automation runs interleaved
+ * read-only, and undated todos last. Drag a todo onto another day to
  * reschedule, or onto "Anytime" to undate it; mutations are optimistic and
  * the "todos" server event reconciles the cache.
  */
@@ -98,7 +102,7 @@ export function AttentionSection({
   /** Email provider drafts; null while the (slow, live-mailbox) fetch is in flight. */
   drafts: AccountDrafts[] | null;
   colors: AccountColor[];
-  /** A draft opened via the search palette — expand and unfold so it's visible. */
+  /** A draft opened via the search palette, expand and unfold so it's visible. */
   focusDraft?: { accountId: string; draftId: string } | null;
   /** A draft row was sent/discarded/saved: refresh the drafts list without waiting on the event debounce. */
   onDraftsChanged: () => void;
@@ -112,7 +116,7 @@ export function AttentionSection({
   const [expanded, setExpanded] = React.useState(true);
   const [adding, setAdding] = React.useState(false);
   const [showDone, setShowDone] = React.useState(false);
-  /** Account id, or "all" — narrows the approvals block only. */
+  /** Account id, or "all", narrows the approvals block only. */
   const [accountFilter, setAccountFilter] = React.useState("all");
   const [rowError, setRowError] = React.useState<string | null>(null);
 
@@ -143,7 +147,9 @@ export function AttentionSection({
   // Most-recently completed first; reopening returns a todo to the open agenda.
   const done = [...(doneQuery.data ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const restoreTodo = (id: string) =>
-    patch(id, { status: "open" }, (list) => list.filter((td) => td.id !== id), ["todos", "done"]);
+    patch(id, { status: "open" }, (list) => list.filter((td) => td.id !== id), {
+      key: ["todos", "done"],
+    });
   const todayStart = startOfDayMs(new Date());
 
   // Partition todos into overdue / dated-by-day / anytime.
@@ -239,7 +245,18 @@ export function AttentionSection({
   for (const g of groups) for (const td of g.todos) groupOfTodo.set(td.id, g);
   const groupById = new Map(groups.map((g) => [g.id, g]));
 
+  // The row under the pointer renders in a DragOverlay; the in-list original
+  // stays as a dimmed placeholder. On a same-group drop the overlay glides
+  // into the placeholder (so those patches skip the view transition dnd-kit
+  // would fight). A cross-group drop remounts the row in another list, where
+  // the overlay's drop animation has no valid target: there the overlay is
+  // dropped instantly and the view transition morphs the row over instead.
+  const [dragId, setDragId] = React.useState<string | null>(null);
+  const [dropCross, setDropCross] = React.useState(false);
+  const draggedTodo = todos.find((td) => td.id === dragId) ?? null;
+
   const onDragEnd = (e: DragEndEvent) => {
+    setDragId(null);
     const { active, over } = e;
     if (!over) return;
     const activeId = String(active.id);
@@ -248,6 +265,8 @@ export function AttentionSection({
     const overId = String(over.id);
     const dst = groupById.get(overId) ?? groupOfTodo.get(overId);
     if (!dst?.droppable) return;
+    const cross = src.id !== dst.id;
+    setDropCross(cross);
 
     const overTodo = groupOfTodo.get(overId) ? overId : null;
     const dropIndex = overTodo ? dst.todos.findIndex((td) => td.id === overTodo) : dst.todos.length;
@@ -256,16 +275,23 @@ export function AttentionSection({
       // Reorder within / move into Anytime: clear any date, land at the drop slot.
       const others = dst.todos.filter((td) => td.id !== activeId);
       const pos = midpoint(others[dropIndex - 1]?.position, others[dropIndex]?.position);
-      patch(activeId, { dueAt: null, position: pos }, (list) =>
-        list.map((td) => (td.id === activeId ? { ...td, dueAt: null, position: pos } : td)),
+      patch(
+        activeId,
+        { dueAt: null, position: pos },
+        (list) =>
+          list.map((td) => (td.id === activeId ? { ...td, dueAt: null, position: pos } : td)),
+        { transition: cross },
       );
       return;
     }
     if (src.id === dst.id) return; // within a dated day: time-ordered, nothing to persist.
     // Reschedule onto another day.
     const iso = dayIso(Number(dst.id.slice(4)));
-    patch(activeId, { dueAt: iso }, (list) =>
-      list.map((td) => (td.id === activeId ? { ...td, dueAt: iso } : td)),
+    patch(
+      activeId,
+      { dueAt: iso },
+      (list) => list.map((td) => (td.id === activeId ? { ...td, dueAt: iso } : td)),
+      { transition: true },
     );
   };
 
@@ -284,23 +310,25 @@ export function AttentionSection({
               createdAt={item.todo.createdAt}
             >
               {(isNew) => (
-                <TodoRow
-                  todo={item.todo}
-                  overdue={group.overdue}
-                  lang={lang}
-                  todayStart={todayStart}
-                  onPatch={patch}
-                  automations={automations}
-                  isNew={isNew}
-                  onOpenChat={
-                    item.todo.conversationId
-                      ? () =>
-                          openConversationInChat(item.todo.conversationId as string, () =>
-                            onNavigate("chat"),
-                          )
-                      : undefined
-                  }
-                />
+                <SortableTodoRow id={item.todo.id}>
+                  <TodoRow
+                    todo={item.todo}
+                    overdue={group.overdue}
+                    lang={lang}
+                    todayStart={todayStart}
+                    onPatch={patch}
+                    automations={automations}
+                    isNew={isNew}
+                    onOpenChat={
+                      item.todo.conversationId
+                        ? () =>
+                            openConversationInChat(item.todo.conversationId as string, () =>
+                              onNavigate("chat"),
+                            )
+                        : undefined
+                    }
+                  />
+                </SortableTodoRow>
               )}
             </SeenOnInteract>
           ) : (
@@ -317,7 +345,7 @@ export function AttentionSection({
   );
 
   // One flat list of approvals: every row already names its own channel and
-  // recipient, so the zone needs no per-channel or per-account heading — the
+  // recipient, so the zone needs no per-channel or per-account heading, the
   // account chips carry the colors, and each row wears the matching dot.
   const approvalsZone = hasApprovals && (
     <div className="flex flex-col gap-3">
@@ -414,7 +442,16 @@ export function AttentionSection({
         <>
           {rowError && <ErrorBanner>{rowError}</ErrorBanner>}
           {!todosQuery.data && <LoadingRow />}
-          <DndContext sensors={sensors} collisionDetection={closestCenter} onDragEnd={onDragEnd}>
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragStart={(e) => {
+              setDragId(String(e.active.id));
+              setDropCross(false);
+            }}
+            onDragCancel={() => setDragId(null)}
+            onDragEnd={onDragEnd}
+          >
             <div className="flex flex-col gap-6">
               {groups.filter((g) => g.overdue).map(renderGroup)}
               {suggestions.length > 0 && (
@@ -442,6 +479,18 @@ export function AttentionSection({
                 <EmptyState icon={CircleCheck} description={t("home.attentionEmpty")} />
               )}
             </div>
+            <DragOverlay dropAnimation={dropCross ? null : undefined}>
+              {draggedTodo && (
+                <TodoRow
+                  todo={draggedTodo}
+                  overdue={groupOfTodo.get(draggedTodo.id)?.overdue ?? false}
+                  lang={lang}
+                  todayStart={todayStart}
+                  onPatch={patch}
+                  automations={automations}
+                />
+              )}
+            </DragOverlay>
           </DndContext>
           {done.length > 0 && (
             <div className="flex flex-col gap-2">
@@ -541,10 +590,10 @@ function AccountDraftGroup({
 }: {
   account: AccountDrafts;
   color?: string;
-  /** Marks each row with this account's dot — set only when the list holds more than one inbox. */
+  /** Marks each row with this account's dot, set only when the list holds more than one inbox. */
   markAccount: boolean;
   dateLabel: (iso: string) => string;
-  /** Set when the palette targeted a draft in THIS account — unfold and expand it. */
+  /** Set when the palette targeted a draft in THIS account, unfold and expand it. */
   focusDraft: { accountId: string; draftId: string } | null;
   onChanged: () => void;
   onError: (message: string | null) => void;
@@ -578,7 +627,8 @@ function AccountDraftGroup({
               {(isNew) => (
                 <DraftRow
                   accountId={account.accountId}
-                  account={markAccount ? { name: account.account, color } : undefined}
+                  account={{ name: account.account, color }}
+                  markAccount={markAccount}
                   draft={draft}
                   dateLabel={dateLabel}
                   onDeleted={onChanged}
@@ -597,6 +647,37 @@ function AccountDraftGroup({
           )}
         </div>
       )}
+    </div>
+  );
+}
+
+/** Sortable wrapper: gutter drag handle left of the row, dimmed as the in-list
+ *  placeholder while its DragOverlay copy follows the pointer. */
+function SortableTodoRow({ id, children }: { id: string; children: React.ReactNode }) {
+  const { t } = useTranslation();
+  const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
+    id,
+  });
+  return (
+    <div
+      ref={setNodeRef}
+      style={{ transform: CSS.Transform.toString(transform), transition, ...rowTransition(id) }}
+      className={cn("group/todo relative", isDragging && "opacity-50")}
+    >
+      <button
+        type="button"
+        className={cn(
+          "absolute -left-7 top-2 cursor-grab touch-none p-1 text-muted-foreground/50 hover:text-muted-foreground",
+          // The gutter it sits in only exists once the column has margins.
+          "max-sm:hidden opacity-0 transition-opacity focus-visible:opacity-100 group-hover/todo:opacity-100",
+        )}
+        aria-label={t("home.todosReorder")}
+        {...attributes}
+        {...listeners}
+      >
+        <Menu className="h-4 w-4" />
+      </button>
+      {children}
     </div>
   );
 }

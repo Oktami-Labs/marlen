@@ -100,7 +100,7 @@ export interface ArmedToggleTexts {
  * One self-persisting armable grant: ArmedSwitchRow plus the arm-with-confirm,
  * disarm-immediately flow, saving through the caller's endpoint. Used by the
  * integration rows (onOffice, WhatsApp) whose grants each persist on their
- * own — the per-account editor below saves a whole record instead.
+ * own, the per-account editor below saves a whole record instead.
  */
 export function ArmedToggleRow({
   switchId,

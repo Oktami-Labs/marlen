@@ -100,7 +100,7 @@ const automationCreate: AgentTool = tool({
     `Friday…", "on the 15th…") rather than doing it once and letting it drop. Without a ` +
     `schedule it becomes a one-click button instead: the user triggers it on demand from the ` +
     `Automations page — when they ask for "a button" for a recurring task, save the procedure ` +
-    `as a skill (skill_write) and create a manual-only automation whose instruction is ` +
+    `as a skill (page_write, type "skill") and create a manual-only automation whose instruction is ` +
     `"Follow the skill '<name>'". Write the instruction fully self-contained — the run sees ` +
     `nothing of this conversation, so spell out what to do, over which accounts, and what to ` +
     `report. Unattended runs read mail and create drafts but can never send, reply, forward, ` +

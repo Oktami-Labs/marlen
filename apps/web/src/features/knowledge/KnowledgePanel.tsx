@@ -3,8 +3,8 @@ import { useSearchParams } from "react-router-dom";
 import { LibrarySection } from "./LibrarySection";
 
 /**
- * Knowledge: the agent home browsed as files (memory, skills, documents).
- * A full-height workspace — the browser fills the canvas and scrolls its own
+ * Knowledge: the agent home browsed as files (wiki pages, documents).
+ * A full-height workspace, the browser fills the canvas and scrolls its own
  * listing; the page itself never scrolls (App.tsx sizes it with a flex chain
  * instead of the reading-column max-width).
  */
@@ -13,12 +13,12 @@ import { LibrarySection } from "./LibrarySection";
 const HIGHLIGHT_MS = 2400;
 
 export function KnowledgePanel() {
-  // Set by the search palette (see SearchPalette.tsx) when a document/memory
+  // Set by the search palette (see SearchPalette.tsx) when a document/wiki
   // hit is opened. Both land in the browser: node ids are the entry ids.
   const [focusId, setFocusId] = React.useState<string | null>(null);
 
-  // The palette lands here with ?focus=<type>:<id>. Consumed once — the param
-  // is cleared — so back/forward doesn't replay the highlight.
+  // The palette lands here with ?focus=<type>:<id>. Consumed once, the param
+  // is cleared, so back/forward doesn't replay the highlight.
   const [searchParams, setSearchParams] = useSearchParams();
   const focusParam = searchParams.get("focus");
   React.useEffect(() => {
@@ -26,7 +26,7 @@ export function KnowledgePanel() {
     const separator = focusParam.indexOf(":");
     if (separator > 0) {
       const type = focusParam.slice(0, separator);
-      if (type === "memory" || type === "document") setFocusId(focusParam.slice(separator + 1));
+      if (type === "wiki" || type === "document") setFocusId(focusParam.slice(separator + 1));
     }
     setSearchParams({}, { replace: true });
   }, [focusParam, setSearchParams]);

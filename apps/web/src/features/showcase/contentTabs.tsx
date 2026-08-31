@@ -1,9 +1,3 @@
-/*
- * Composed-feature tabs of the DEV showcase gallery: list/interaction systems,
- * the agent chat transcript, markdown, and the home widgets — plus the static
- * fixtures that feed them. Safe to delete with the folder.
- */
-
 import type { AccountColor } from "@marlen/shared";
 import { Wrench } from "lucide-react";
 import * as React from "react";
@@ -20,6 +14,7 @@ import { StorageBrowser, type StorageNode } from "@/features/storage/StorageBrow
 import { cn } from "@/lib/utils";
 import {
   DisclosureDemo,
+  EmailBodyDemo,
   FocusRingDemo,
   MicroInteractionsDemo,
   MotionDemo,
@@ -41,7 +36,7 @@ const DEMO_COLORS: AccountColor[] = [
 
 const MARKDOWN_DEMO = `### What the assistant's replies render as
 
-**Acme GmbH** replied to the payment reminder — Thomas Brandt
+**Acme GmbH** replied to the payment reminder, Thomas Brandt
 ([t.brandt@acme-gmbh.de](mailto:t.brandt@acme-gmbh.de)) wants the invoice as a PDF.
 
 - A reply draft is waiting in your mailbox
@@ -140,10 +135,11 @@ export function SystemsTab() {
 
       <Section
         title="Runs & threads"
-        description="The shared pieces the activity feeds compose: the continue-in-chat action and the live conversation history."
+        description="The shared pieces the activity feeds compose: the continue-in-chat action, the live conversation history, and the sandboxed view of a received message."
       >
         <OpenRunInChatDemo />
         <ThreadHistoryDemo />
+        <EmailBodyDemo />
       </Section>
 
       <Section
@@ -210,7 +206,7 @@ export function StorageTab() {
 }
 
 /**
- * A static replay of a chat turn — same markup ChatPanel uses, so the user
+ * A static replay of a chat turn, same markup ChatPanel uses, so the user
  * bubble, tool chips and cards all re-theme with the Theme Lab sliders. The briefing
  * card's row actions still post into the real chat panel; the panel forces
  * prefill mode while this page is mounted so nothing fires a live agent turn.
@@ -224,7 +220,7 @@ function ChatTranscript() {
         </div>
       </div>
       {SHOWCASE_TURNS.map((turn, index) => (
-        // SHOWCASE_TURNS is a fixed module-level fixture — same length and
+        // SHOWCASE_TURNS is a fixed module-level fixture, same length and
         // order on every render, so the index is a stable identity here.
         // biome-ignore lint/suspicious/noArrayIndexKey: static fixture array, never reordered/filtered
         <AssistantTurn key={index} turn={turn} />
@@ -243,7 +239,7 @@ function AssistantTurn({ turn }: { turn: ShowcaseTurn }) {
       {turn.cards?.length ? (
         <div className="flex w-full max-w-[95%] flex-col gap-2">
           {turn.cards.map((card, index) => (
-            // turn.cards comes from the same static fixture — fixed set of
+            // turn.cards comes from the same static fixture, fixed set of
             // cards, never reordered/filtered.
             // biome-ignore lint/suspicious/noArrayIndexKey: static fixture array, never reordered/filtered
             <AgentCardView key={index} card={card} colors={DEMO_COLORS} />

@@ -13,7 +13,7 @@ const log = moduleLogger("backup");
  * better-sqlite3's online `.backup()` is WAL-safe; copying the `.db` file while
  * the server runs is not, since recent writes may live only in the `-wal` side
  * file. Excludes `data/auth.json` (LLM credentials), `data/pipedream-secret.json`,
- * and the agent home folder (memories, skills, knowledge documents) — those
+ * and the agent home folder (memories, skills, knowledge documents), those
  * live outside the DB and are backed up like any files.
  */
 export const backupRoutes: FastifyPluginAsyncTypebox = async (app) => {

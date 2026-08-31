@@ -1,12 +1,6 @@
 import http from "node:http";
 import { BrowserWindow, Notification } from "electron";
 
-/**
- * Native notifications for finished automation runs, over a reconnecting
- * subscription to the server's SSE feed. In the main process so runs finishing
- * with every window closed (macOS) still notify.
- */
-
 const RECONNECT_MS = 3_000;
 
 interface NotificationEvent {
@@ -26,11 +20,10 @@ function showNotification(data: string, onOpenRequest: () => void): void {
     return;
   }
   if (event.topic !== "notification" || !event.notification) return;
-  // A focused window already shows the run in its live activity feed.
   if (BrowserWindow.getAllWindows().some((window) => window.isFocused())) return;
   if (!Notification.isSupported()) return;
   const notification = new Notification({
-    title: event.notification.automationName ?? "Marlen",
+    title: event.notification.automationName ?? "Marlene",
     body: event.notification.summary ?? "",
   });
   notification.on("click", onOpenRequest);
@@ -72,7 +65,6 @@ function connect(port: number, onOpenRequest: () => void): void {
           }
         }
       });
-      // "close" fires after both a clean stream end and a mid-flight error.
       response.on("close", () => scheduleReconnect(port, onOpenRequest));
     },
   );

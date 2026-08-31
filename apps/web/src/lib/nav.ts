@@ -15,7 +15,7 @@ interface NavItem {
   id: View;
   path: string;
   icon: LucideIcon;
-  /** Shown only while onOffice is connected — the lead workflow exists only alongside the CRM. */
+  /** Shown only while onOffice is connected because leads depend on the CRM. */
   requiresOnOffice?: boolean;
 }
 
@@ -44,12 +44,7 @@ export function visibleNavItems(onofficeConfigured: boolean): NavItem[] {
   return NAV_ITEMS.filter((item) => !item.requiresOnOffice || onofficeConfigured);
 }
 
-/**
- * DEV showcase — deliberately not a NAV_ITEM: it never appears in the sidebar
- * or the palette's shortcut list, only as a match for a typed palette query
- * (or by visiting /showcase directly). Dev-only, so the copy stays
- * untranslated. Delete with the /showcase route.
- */
+/** Dev-only route metadata for typed palette matches. */
 export const SHOWCASE_NAV = {
   id: "showcase",
   path: "/showcase",

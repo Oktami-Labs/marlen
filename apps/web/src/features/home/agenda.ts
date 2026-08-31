@@ -16,7 +16,7 @@ export function parseDue(iso: string): { at: Date; dateOnly: boolean } {
   return { at: new Date(dateOnly ? `${trimmed}T00:00:00` : trimmed), dateOnly };
 }
 
-/** Local date-only ISO for a day-start ms — what a drag-to-reschedule writes. */
+/** Local date-only ISO for a day-start ms, what a drag-to-reschedule writes. */
 export function dayIso(ms: number): string {
   const d = new Date(ms);
   const p = (n: number) => String(n).padStart(2, "0");

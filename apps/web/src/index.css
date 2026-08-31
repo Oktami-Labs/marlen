@@ -2,13 +2,7 @@
 
 @custom-variant dark (&:is(.dark *));
 
-/*
-  Self-hosted from public/fonts (SIL OFL, license beside the files). A desktop
-  app that reads mail on-device must not fetch its typeface from a CDN on every
-  launch: it blocks first paint on the network, stalls behind a captive portal,
-  and tells a third party when the app opens. One variable file per family
-  covers every weight the UI uses.
-*/
+/* Self-hosting removes a network dependency and keeps app launches private. */
 @font-face {
   font-family: "Geist";
   src: url("/fonts/Geist-Variable.woff2") format("woff2");
@@ -25,27 +19,9 @@
   font-display: swap;
 }
 
-/*
-  Marlen — borderless neutral minimalism. See DESIGN.md.
-
-  Depth comes from three surface tones, never from lines:
-    background  — the canvas
-    surface     — one step up (elevated panels)
-    surface-2   — one step down (inputs, chips, hover)
-
-  Ink is the brand (near-black CTAs). Indigo is the single spot accent.
-  No borders at rest anywhere; the only strokes are the a11y focus ring and
-  the --border hairline — dividers inside dense content (thread rails,
-  markdown tables, meta rows) plus the two outlined shapes DESIGN.md
-  sanctions: the agent card shell and .surface-pop panels.
-*/
 :root,
 .light {
   color-scheme: light;
-  /* Neutral greys — surface tones carry no hue (chroma 0); temperature lives
-     only in the text inks and the accent. The canvas is a real grey so raised
-     white surfaces (cards, rows) lift off it and recessed controls sink below
-     it — the same tone ladder dark mode already has. */
   --background: oklch(0.96 0 0);
   --surface: oklch(1 0 0);
   --surface-2: oklch(0.945 0 0);
@@ -56,11 +32,9 @@
   --secondary: oklch(0.936 0 0);
   --secondary-foreground: oklch(0.373 0.015 270);
 
-  /* Ink primary — near-black charcoal, near-white text. */
   --primary: oklch(0.2978 0.0297 277.11);
   --primary-foreground: oklch(0.9905 0.0025 265);
 
-  /* Indigo — the single accent. Used sparingly; -soft is its tint fill. */
   --accent: oklch(0.535 0.2876 286.97);
   --accent-foreground: oklch(0.9905 0.0025 265);
   --accent-soft: oklch(0.575 0.2876 286.97);
@@ -71,36 +45,23 @@
   --destructive: oklch(0.5725 0.2125 37);
   --destructive-foreground: oklch(0.9905 0.005 265);
 
-  /* File-type ink. Only the hue varies (per format, set on the element as
-     --filetype-h); lightness and chroma are fixed so the family stays even. */
   --filetype-l: 0.5725;
   --filetype-c: 0.1375;
 
   --ring: oklch(0.535 0.2876 286.97);
-  /* The ONE hairline tone — every divider/rail/table rule uses it as-is,
-     never with an opacity modifier, so all lines match. */
+  /* All dividers use this token without opacity modifiers. */
   --border: color-mix(in oklch, var(--foreground) 12%, transparent);
-  /* Clean white nav rail — sits a touch brighter than the canvas, no border needed. */
   --sidebar: oklch(1 0 0);
 
   --radius: 0.7rem;
   --grain-opacity: 0.018;
 
-  /* Painted fills — what neutral controls (fields, chips, secondary buttons,
-     hover fills) actually use. Their tone is relative to the surface behind
-     them: on the grey canvas they RISE to white so they lift off it (a grey
-     control on the grey canvas is near-invisible here — only ~0.015 L apart);
-     any white surface re-scopes them one step DOWN to grey (see .surface /
-     .surface-fills below). That alternation is the whole depth model. */
   --surface-2-fill: var(--surface);
   --secondary-fill: var(--surface);
 }
 
 .dark {
   color-scheme: dark;
-  /* True neutral near-black canvas — reads black, not tinted grey. Same
-     three-step spacing as light: each surface sits ~0.04 L above the one
-     behind it. */
   --background: oklch(0.16 0 0);
   --surface: oklch(0.205 0 0);
   --surface-2: oklch(0.25 0 0);
@@ -111,7 +72,6 @@
   --secondary: oklch(0.2 0 0);
   --secondary-foreground: oklch(0.924 0.005 255);
 
-  /* Ink flips to light-on-dark for CTAs. */
   --primary: oklch(0.9335 0.004 255);
   --primary-foreground: oklch(0.259 0.008 260);
 
@@ -133,10 +93,6 @@
 
   --grain-opacity: 0.028;
 
-  /* Dark keeps neutral controls at the brighter surface-2 on the canvas: here
-     depth reads forward-brighter (surface-2 sits ~0.09 L above the near-black
-     canvas and separates cleanly), so there is no muddy grey-on-grey to lift
-     out of the way. White surfaces still re-scope one step further below. */
   --surface-2-fill: var(--surface-2);
   --secondary-fill: var(--secondary);
 }
@@ -147,9 +103,7 @@
   --font-mono: "Geist Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo, Consolas,
     monospace;
 
-  /* Micro type steps below text-xs: 2xs = meta/overline text, 3xs = tiny marks
-     (Kbd, count dots). No --line-height companions on purpose — they inherit
-     the local leading like the arbitrary values they replaced. */
+  /* These small type tokens inherit local line height. */
   --text-2xs: 0.6875rem;
   --text-3xs: 0.625rem;
 
@@ -178,8 +132,7 @@
   --radius-lg: var(--radius);
   --radius-xl: calc(var(--radius) + 4px);
 
-  /* No drop shadows anywhere — depth is tone-only. Null the Tailwind scale so
-     a stray shadow-* utility renders nothing instead of the framework default. */
+  /* Disable Tailwind shadows globally. */
   --shadow-2xs: 0 0 #0000;
   --shadow-xs: 0 0 #0000;
   --shadow-sm: 0 0 #0000;
@@ -212,16 +165,13 @@
   ::selection {
     background: color-mix(in oklch, var(--accent) 22%, transparent);
   }
-  /* On solid accent fills (the user's .bubble-accent chat bubble, .bg-accent
-     CTAs) the accent-tint selection is invisible — highlight with the
-     foreground ink instead. */
+  /* Accent fills need a contrasting selection color. */
   .bg-accent ::selection,
   .bg-accent::selection,
   .bubble-accent ::selection,
   .bubble-accent::selection {
     background: color-mix(in oklch, var(--accent-foreground) 30%, transparent);
   }
-  /* Quiet, thin scrollbars — no track line. */
   * {
     scrollbar-width: thin;
     scrollbar-color: color-mix(in oklch, var(--foreground) 16%, transparent) transparent;
@@ -239,17 +189,8 @@
   }
 }
 
-/*
-  Reusable surface primitives so markup stays clean and depth stays consistent.
-  A `.surface` is the ONE allowed elevated block — never nest one inside another.
-*/
 @layer components {
-  /* The signature editor's page. Everything inside it renders on the browser's
-     own defaults instead of this app's reset, because a mail client has no
-     reset either: with `p { margin: 0 }` applied here and 1em applied there, a
-     preview that claims to show what recipients get would be showing the one
-     layout they never see. The paste resolves a signature's stylesheet into
-     inline styles, which outrank this and survive. */
+  /* Match mail-client defaults instead of applying the app's CSS reset. */
   .email-paper :where(*) {
     all: revert;
   }
@@ -258,10 +199,27 @@
     background: var(--surface);
     border-radius: var(--radius);
   }
-  /* A raised row that answers hover with a barely-there step toward the recessed
-     grey — darker in light, brighter in dark — no border. Kept well above the
-     canvas tone so the row lifts rather than sinks. Pair with `.surface`. */
-  /* Elevation is tone-only, so the lift is a 1px rise rather than a shadow. */
+  /* The chat's reading column. Transcript, queue, composer and version line all
+     carry it, so they line up at any panel width; the width itself is set once,
+     on the chat root, and is unset (full bleed) in the side panel. */
+  .thread-column {
+    margin-inline: auto;
+    width: 100%;
+    max-width: var(--thread-max-width, none);
+  }
+  .thread-page {
+    --thread-max-width: 56rem;
+  }
+  @container (min-width: 80rem) {
+    .thread-page {
+      --thread-max-width: 64rem;
+    }
+  }
+  /* The message a conversation search is sitting on. */
+  .thread-hit {
+    background: color-mix(in oklch, var(--accent) 10%, transparent);
+    border-radius: var(--radius);
+  }
   .surface-hover {
     transition:
       background-color 0.15s ease,
@@ -271,26 +229,18 @@
     background: color-mix(in oklch, var(--surface-2) 35%, var(--surface));
     transform: translateY(-1px);
   }
-  /*
-    Anchored floating panel: select menus, the color picker — floats over
-    content with no scrim. In dark mode the panel steps one tone brighter
-    than a card; the hairline carries the edge in light, where the panel is
-    the same white as the surfaces it floats over.
-  */
   .surface-pop {
     background: var(--surface);
     border-radius: var(--radius);
     border: 1px solid var(--border);
   }
-  /*
-    Fills recess against what they SIT ON, not against the page. A neutral
-    control on a white surface steps one tone DOWN to grey; the same control on
-    the grey canvas rises to white (the root default above). `.surface-fills`
-    carries this recessing to white chrome that paints its own background rather
-    than using `.surface` — the nav rail and the chat column — so a field there
-    lands on grey, not white-on-white. Derived from the raw tokens so Theme Lab
-    palette overrides flow through.
-  */
+  /* The cursor tooltip carries no border and no scrim, so its fill steps far
+     enough from both a white panel and the grey canvas to read over either. */
+  .tooltip-chip {
+    background: color-mix(in oklch, var(--foreground) 14%, var(--surface));
+    color: var(--foreground);
+  }
+  /* Controls remap their fill relative to the surface that contains them. */
   .surface,
   .surface-pop,
   .surface-fills {
@@ -302,13 +252,11 @@
     --surface-2-fill: color-mix(in oklch, var(--surface-2) 92%, var(--foreground));
     --secondary-fill: color-mix(in oklch, var(--secondary) 92%, var(--foreground));
   }
-  /* The dark popover is itself brighter, so its fills push harder still. */
   .dark .surface-pop {
     background: color-mix(in oklch, var(--surface) 90%, var(--foreground));
     --surface-2-fill: color-mix(in oklch, var(--surface-2) 84%, var(--foreground));
     --secondary-fill: color-mix(in oklch, var(--secondary) 84%, var(--foreground));
   }
-  /* Borderless filled control: inputs, textareas, selects. */
   .field {
     background: var(--surface-2-fill);
     border-radius: calc(var(--radius) - 2px);
@@ -332,10 +280,6 @@
     cursor: not-allowed;
   }
 
-  /*
-    Pastel status tints — a pale tinted fill + a readable text tone, no border.
-    The one place semantic color is allowed to fill a shape.
-  */
   .tint-neutral {
     background: var(--surface-2-fill);
     color: var(--muted-foreground);
@@ -356,26 +300,13 @@
     background: color-mix(in oklch, var(--destructive) 14%, transparent);
     color: var(--destructive);
   }
-  /*
-    Categorical file-type tint. The hue arrives per-element as `--filetype-h`
-    (a bare number), so one class covers every format — known or not — while
-    lightness and chroma stay on the theme's leash. Translucent like the other
-    tints, so it survives whatever fill sits behind it.
-  */
+  /* Each file supplies only --filetype-h; the theme controls contrast. */
   .tint-file {
     --filetype: oklch(var(--filetype-l) var(--filetype-c) var(--filetype-h, 256));
     background: color-mix(in oklch, var(--filetype) 14%, transparent);
     color: var(--filetype);
   }
-  /*
-    Solid tint fills for floating chrome (toasts): the same pastel tones
-    composited onto the surface, because a translucent tint over scrolling
-    page content would let it bleed through. Mixed in srgb — alpha
-    compositing's space — so these match the translucent tints exactly;
-    an oklch mix would inherit white's hue 0 and skew every tone pink.
-    Dark mixes harder — like the other dark fills — tone is the only
-    separation there is.
-  */
+  /* sRGB mixing matches alpha compositing without showing content through toasts. */
   .tint-pop-accent {
     background: color-mix(in srgb, var(--accent) 13%, var(--surface));
     color: var(--accent);
@@ -398,12 +329,6 @@
     background: color-mix(in srgb, var(--destructive) 22%, var(--surface));
   }
 
-  /*
-    The one backdrop behind anything modal — dialogs, drawers, the palette.
-    Deliberately gentle: a light dim plus a 2px blur, so the page underneath
-    stays readable rather than frosting over. Dark mode dims harder because
-    dark surfaces need more separation from a dark canvas.
-  */
   .scrim {
     background: oklch(0 0 0 / 0.25);
     -webkit-backdrop-filter: blur(2px);
@@ -415,16 +340,11 @@
 }
 
 @layer utilities {
-  /* Reserve the scrollbar's width up front so its appearance/disappearance
-     never shifts the content next to it. */
   .scroll-stable {
     scrollbar-gutter: stable;
   }
 
-  /* Desktop shell, macOS: the window controls float over the top-left corner
-     (set by useDesktopChrome via data-titlebar-inset + --titlebar-h). Inert in
-     a browser tab. .titlebar-pad clears the controls; .titlebar-drag makes an
-     otherwise-empty region move the window, minus its real controls. */
+  /* Keep content and drag regions clear of macOS window controls. */
   [data-titlebar-inset] .titlebar-pad {
     padding-top: calc(var(--titlebar-h, 0px) + 0.25rem);
   }
@@ -436,19 +356,7 @@
   }
 }
 
-/*
-  View transitions carry list mutations and route changes alike. A row that
-  leaves fades out in place while the rows below slide up to close the gap,
-  instead of the list snapping to its new shape. Rows opt in by taking a unique
-  `view-transition-name` (see `rowTransition` in lib/utils.ts), which lifts them
-  out of the root snapshot so each one animates on its own path; everything else
-  cross-fades as a single group. Switching panels (react-router's
-  `viewTransition`) rides the same rules, so the canvas cross-fades while the
-  sidebar and chat rail, unchanged between routes, sit still. Durations sit just
-  under the 0.36s entrance so a rearrangement reads as quicker than an arrival,
-  and one clock for every group keeps a leaving row from outliving the canvas
-  it left.
-*/
+/* Named rows transition independently; the rest of the page cross-fades. */
 ::view-transition-group(*) {
   animation-duration: 0.3s;
   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
@@ -458,8 +366,6 @@
   animation-duration: 0.22s;
 }
 
-/* One-shot arrival flash: a surface briefly tinted toward the accent, settling
-   back to plain surface — for cards a cross-panel link just navigated to. */
 @keyframes flash-accent {
   0%,
   30% {
@@ -473,7 +379,6 @@
   animation: flash-accent 1.8s ease-out 0.2s backwards;
 }
 
-/* Staggered entry: content rises a few px and fades in, GPU-only. */
 @keyframes enter-up {
   from {
     opacity: 0;
@@ -488,8 +393,6 @@
   animation: enter-up 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* Mirror of enter-up for popovers flipped above their anchor — the motion
-   still originates at the field. */
 @keyframes enter-down {
   from {
     opacity: 0;
@@ -504,7 +407,19 @@
   animation: enter-down 0.36s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* A todo being ticked done: a line wipes across the title before the row leaves. */
+@keyframes tooltip-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+/* Positioned by a transform, so the entrance fades only. */
+.tooltip-in {
+  animation: tooltip-in 0.16s cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
 @keyframes strike {
   from {
     transform: scaleX(0);
@@ -528,9 +443,6 @@
   animation: strike 0.4s cubic-bezier(0.22, 1, 0.36, 1) forwards;
 }
 
-/* Row action icons answer the pointer in the verb's own direction: the send
-   glyph lifts along its diagonal, the discard bin tips, the refine sparkle
-   swells. Transform only, so a hover never reflows the row. */
 .icon-send svg,
 .icon-discard svg,
 .icon-refine svg {
@@ -546,7 +458,6 @@
   transform: scale(1.15) rotate(8deg);
 }
 
-/* The unseen-item dot breathes so it draws the eye without blinking at it. */
 @keyframes dot-breathe {
   0%,
   100% {
@@ -560,7 +471,6 @@
   animation: dot-breathe 3s ease-in-out infinite;
 }
 
-/* The tick lands with the fill rather than appearing already drawn. */
 @keyframes check-pop {
   from {
     transform: scale(0.4);
@@ -573,8 +483,6 @@
   animation: check-pop 0.28s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* A count that changed drops into place, so a section's badge reads as live
-   rather than redrawn. Replayed by keying the span on the value. */
 @keyframes count-tick {
   from {
     opacity: 0;
@@ -589,27 +497,21 @@
   animation: count-tick 0.24s cubic-bezier(0.22, 1, 0.36, 1);
 }
 
-/* Streamed words fade in as they arrive. Spans exist only while the message
-   streams and keep positional identity across deltas, so a word animates once,
-   when it first appears. Opacity only — transforms don't apply to inline
-   boxes, and a long answer must stay cheap. */
+/* Newly generated words land in the accent and settle into ink, so the eye
+   finds the live edge of a long reply without hunting for it. */
 @keyframes stream-word {
   from {
     opacity: 0;
+    color: var(--accent);
   }
   to {
     opacity: 1;
   }
 }
 .stream-word {
-  animation: stream-word 0.45s cubic-bezier(0.22, 1, 0.36, 1) both;
+  animation: stream-word 0.6s cubic-bezier(0.22, 1, 0.36, 1) both;
 }
 
-/* In-flight labels (the thinking line, a running tool's name): a soft
-   foreground highlight sweeps the text while the model works. The gradient is
-   clipped to the glyphs and built from the theme's own text tones, so it reads
-   in both themes; the travel overshoots the box so each sweep rests briefly
-   between passes instead of ping-ponging. Never a blink. */
 .text-shimmer {
   background-image: linear-gradient(
     90deg,
@@ -633,12 +535,6 @@
   }
 }
 
-/* The assistant's avatar: the brand mark in white on a solid accent circle
-   (the fill comes from the component's `bg-accent`). While its turn is live
-   (`.agent-avatar-active`) an accent bloom breathes behind the chip —
-   gradient falloff as the blur, transform/opacity only, the aurora's recipe
-   at chip scale. The chip isolates its stacking so the bloom stays behind
-   the solid face. */
 .agent-avatar {
   position: relative;
   isolation: isolate;
@@ -648,10 +544,7 @@
   flex-shrink: 0;
   border-radius: 50%;
 }
-/* The shipped brand asset as a mask over currentColor: the mark tracks
-   /logo.svg while rendering in the chip's foreground color. Bump ?v= when
-   logo.svg changes: Chromium can keep serving a cached mask image across
-   hard reloads, pinning the old mark. */
+/* Bump the query version when logo.svg changes to invalidate Chromium's mask cache. */
 .agent-avatar-mark {
   background-color: currentColor;
   -webkit-mask: url("/logo.svg?v=2") no-repeat center / contain;
@@ -685,8 +578,6 @@
   }
 }
 
-/* The user's bubble face: the update pill's lit accent gradient rather than a
-   flat fill, so the accent reads as light. */
 .bubble-accent {
   background-image: linear-gradient(
     135deg,
@@ -695,9 +586,6 @@
   );
 }
 
-/* Chart marks arrive as a draw, not a paste. Bars grow from the label edge;
-   the line plot hides behind a surface-toned cover that slides aside left to
-   right. Transform only, so a card full of marks never reflows. */
 @keyframes chart-bar-in {
   from {
     transform: scaleX(0);
@@ -719,13 +607,7 @@
   animation: chart-reveal 0.8s cubic-bezier(0.22, 1, 0.36, 1) 0.1s forwards;
 }
 
-/*
-  Command palette (Cmd+K). Radix flips `data-state` on the overlay and the
-  panel, and its Presence keeps the node mounted while the exit animation
-  plays. The panel's centring translate(-50%, -50%) lives inside the
-  keyframes, so it must NOT also carry Tailwind -translate-x/y utilities —
-  the animation would win and the panel would jump off-centre.
-*/
+/* Palette keyframes own centering; translate utilities would override it. */
 @keyframes palette-overlay-in {
   from {
     opacity: 0;
@@ -742,8 +624,6 @@
     opacity: 0;
   }
 }
-/* No scale — the palette fades and rises like everything else (.animate-in-up),
-   it never zooms. */
 @keyframes palette-panel-in {
   from {
     opacity: 0;
@@ -785,13 +665,9 @@
 .palette-panel[data-state="closed"] {
   animation: palette-panel-out 120ms cubic-bezier(0.4, 0, 1, 1) both;
 }
-/* Indeterminate sweep on the hairline while a query is in flight — the previous
-   results stay on screen underneath rather than blinking out to a spinner. */
 .palette-scan {
   animation: palette-scan 1.05s cubic-bezier(0.65, 0, 0.35, 1) infinite;
 }
-/* The matched substring inside searched text (palette hits, history titles,
-   the system-prompt inspector) — the same pale accent tint as ::selection. */
 .match-mark {
   background: color-mix(in oklch, var(--accent) 22%, transparent);
   color: var(--foreground);
@@ -800,7 +676,6 @@
   font-weight: 500;
 }
 
-/* Skeleton shimmer over a recessed placeholder. */
 .skeleton {
   position: relative;
   overflow: hidden;
@@ -825,31 +700,18 @@
   }
 }
 
-/* Ambient aurora behind the center pane. Deliberately cheap: two soft
-   radial-gradient blobs (no blur filter — the gradient falloff IS the blur),
-   each promoted to its own layer and moved only with transform, so after the
-   first paint the browser composites cached textures and never repaints.
-   Hidden tabs pause compositor animations, so idle cost is zero. */
+/* Transform-only movement keeps the aurora on the compositor. */
 .aurora {
   position: absolute;
   inset: 0;
   z-index: -1;
   overflow: hidden;
   pointer-events: none;
-  /* Clear the reading column: the glow lives at the pane's edges and fades
-     to nothing where the centered content sits, so text never loses contrast. */
   -webkit-mask-image: radial-gradient(110% 110% at 50% 42%, transparent 34%, black 80%);
   mask-image: radial-gradient(110% 110% at 50% 42%, transparent 34%, black 80%);
-  /* The blob tints below are authored for full strength; this base opacity is
-     the resting state, leaving headroom for the busy breathe to rise into.
-     Container-level, so changing it never restarts the pseudo-elements' drift. */
   opacity: 0.65;
   transition: opacity 1.2s ease-in-out;
 }
-/* While the agent works (`<html data-agent-busy>`, set by the chat panel) the
-   aurora breathes toward full strength — the canvas itself reads as alive.
-   The cycle starts at the resting opacity, so arming it never jumps, and
-   removal eases back down through the transition above. */
 [data-agent-busy] .aurora {
   animation: aurora-breathe 3.6s ease-in-out infinite;
 }
@@ -891,7 +753,6 @@
   );
   animation: aurora-b 90s ease-in-out infinite alternate;
 }
-/* The dark canvas swallows low-chroma tints; the bloom needs a touch more ink. */
 .dark .aurora::before {
   background: radial-gradient(
     closest-side,
@@ -906,8 +767,6 @@
     transparent 72%
   );
 }
-/* Short travel: the blobs breathe along their own edge instead of drifting
-   under the content column. */
 @keyframes aurora-a {
   0% {
     transform: translate3d(0, 0, 0) scale(1);
@@ -931,17 +790,6 @@
   }
 }
 
-/* The update pill is the app's one standing "come back to me" control, sitting
-   in the sidebar footer until the restart. Three layers make it read as the
-   app's most-wanted button without blinking: a gradient accent face, an accent
-   glow that lifts it off the sidebar, and a sheen that crosses on a long dwell,
-   which is what separates a highlight from a loading bar. The sparkle pops on
-   the same 4.5s clock as the sheen, so the two land as one moment rather than
-   two loops. Both run a fixed three passes, never infinite: the pill stands in
-   the footer until the user chooses to restart, which can be hours, and a sweep
-   that never stops turns into noise nagging for something they may not be able
-   to do right now. After the announcement it rests as a plain gradient face.
-   Only transform/opacity animate, so the pill composites. */
 .update-pill {
   position: relative;
   overflow: hidden;
@@ -957,16 +805,12 @@
     box-shadow 200ms ease-out,
     filter 200ms ease-out;
 }
-/* The face is a gradient, so the base button's hover background-color never
-   shows; brightness is what reads as hover here. */
 .update-pill:hover {
   filter: brightness(1.07);
   box-shadow:
     0 1px 2px color-mix(in oklch, var(--accent) 45%, transparent),
     0 10px 24px -8px color-mix(in oklch, var(--accent) 70%, transparent);
 }
-/* The lighter dark-mode accent glows harder; pull it back so the footer keeps
-   its depth ladder. */
 .dark .update-pill {
   box-shadow:
     0 1px 2px color-mix(in oklch, var(--accent) 30%, transparent),
@@ -1016,28 +860,23 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  /* Static tint stays; only the drift stops. */
   .aurora::before,
   .aurora::after {
     animation: none;
   }
-  /* Busy still reads, as a steady lift instead of a breathe. */
   [data-agent-busy] .aurora {
     animation: none;
     opacity: 0.85;
   }
-  /* In-flight labels fall back to plain muted text. */
   .text-shimmer {
     animation: none;
     background: none;
     color: var(--muted-foreground);
   }
-  /* The avatar bloom holds a steady lit state instead of breathing. */
   .agent-avatar-active::before {
     animation: none;
     opacity: 0.7;
   }
-  /* The sheen parks off-frame; the pill keeps its gradient face and glow. */
   .update-pill::after,
   .update-pill svg {
     animation: none;
@@ -1052,8 +891,7 @@
   .surface-hover:hover {
     transform: none;
   }
-  /* withViewTransition already skips the transition; this covers any started
-     elsewhere, resolving them on the first frame. */
+  /* Finish transitions started before reduced motion was detected. */
   ::view-transition-group(*),
   ::view-transition-old(*),
   ::view-transition-new(*) {
@@ -1071,7 +909,6 @@
   .chart-bar-in {
     animation: none;
   }
-  /* The cover parks off to the side; the plot renders complete. */
   .chart-reveal {
     animation: none;
     transform: translateX(100%);
@@ -1087,8 +924,10 @@
   .palette-scan {
     animation: none;
   }
-  /* Collapsed rather than removed: Radix Presence waits for the exit animation
-     to finish, and the panel's final keyframe is what centres it. */
+  .tooltip-in {
+    animation: none;
+  }
+  /* Radix Presence needs a final animation frame before it unmounts. */
   .palette-overlay,
   .palette-overlay[data-state="closed"],
   .palette-panel,
@@ -1097,7 +936,6 @@
   }
 }
 
-/* Fine, fixed grain so surfaces read as warm paper, not flat vector. */
 body::before {
   content: "";
   position: fixed;

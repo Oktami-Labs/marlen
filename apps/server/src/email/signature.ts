@@ -22,7 +22,7 @@ export function outgoingBody(body: string, signatureHtml: string | undefined) {
 /**
  * The prose above the account signature and the signature's text, or null when
  * the draft body does not carry the signature (hand-written, or written before
- * the signature was configured) — the caller then treats the whole text as
+ * the signature was configured), the caller then treats the whole text as
  * body and must not re-append the signature on save.
  *
  * A signature made only of images (a logo banner) leaves no text to match, so

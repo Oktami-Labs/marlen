@@ -22,8 +22,8 @@ let cache: { entries: Map<string, string>; generation: number } | null = null;
 /**
  * The load in progress, tagged with the generation it started under.
  * Concurrent first reads must share one: two loads would each install their own
- * Map, and whichever caller holds the loser's Map would write its update into an
- * object nothing reads again (the DB row stays correct, the cache goes stale).
+ * Map. The caller holding the discarded Map would then write into an object
+ * nothing reads, leaving the DB correct but the cache stale.
  */
 let loading: { entries: Promise<Map<string, string>>; generation: number } | null = null;
 
@@ -39,8 +39,8 @@ async function loadCache(): Promise<Map<string, string>> {
     })();
     loading = { entries, generation };
     // Clear the slot either way, so a failed load is retried rather than
-    // returned forever. The catch is the observer's, not the caller's — every
-    // caller still sees the rejection through the promise returned below.
+    // returned forever. The catch observes without consuming the rejection;
+    // each caller still receives it through the promise below.
     entries
       .catch(() => {})
       .finally(() => {
@@ -165,8 +165,7 @@ export async function patchAccountVoice(
   return run;
 }
 
-/** A memory content edit renames its file; follow the rename in any voice
- *  pointing at the old id so the learned style stays linked. */
+/** Keep voice references linked when a style page is renamed. */
 export async function repointVoiceStyleMemory(oldId: string, newId: string): Promise<void> {
   const voices = await getAccountVoices();
   let changed = false;

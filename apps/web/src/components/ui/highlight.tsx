@@ -24,7 +24,7 @@ export function Highlight({
       {parts.map((part, i) =>
         i % 2 === 1 ? (
           // Fragments hold no state and their order is fixed by position in the
-          // split string — a fresh `text`/`query` always replaces the whole list.
+          // split string, a fresh `text`/`query` always replaces the whole list.
           // biome-ignore lint/suspicious/noArrayIndexKey: stateless text fragments, order is inherent to the split
           <mark key={i} className="match-mark">
             {part}

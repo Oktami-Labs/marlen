@@ -7,8 +7,8 @@ import { desktopBridge, insetTitleBar } from "@/lib/desktop";
 /**
  * Wires the desktop shell's title bar into the DOM. On macOS the shell hides the
  * bar and floats the traffic lights over the web chrome, so this marks the root
- * (`data-titlebar-inset` + `--titlebar-h`) to reserve their strip — the
- * `.titlebar-pad`/`.titlebar-drag` rules in index.css activate off it. It also
+ * (`data-titlebar-inset` + `--titlebar-h`) to reserve their strip. The
+ * `.titlebar-pad`/`.titlebar-drag` rules in index.css activate from it. It also
  * reports the resolved theme so the native window background tracks it, and the
  * tray menu's strings, which the shell has no other way to translate.
  */

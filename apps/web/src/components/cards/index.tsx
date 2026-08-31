@@ -6,13 +6,16 @@ import { ChartCard } from "./ChartCard";
 import { ChoicesCard } from "./ChoicesCard";
 import { DelegationCard } from "./DelegationCard";
 import { EmailDraftCard } from "./EmailDraftCard";
+import { FormCard } from "./FormCard";
 import { LeadCard } from "./LeadCard";
 import { MessageDraftCard } from "./MessageDraftCard";
+import { SourcesCard } from "./SourcesCard";
+import { WikiNoteCard } from "./WikiNoteCard";
 
 /**
  * Registry mapping an `AgentCard.kind` to its presentation component,
  * resolving the account's hex from `colors` by `accountId` before handing it
- * down. Falls through to `null` for a `kind` this switch doesn't recognize —
+ * down. Falls through to `null` for a `kind` this switch doesn't recognize,
  * the server can ship a new card kind before this client has shipped the
  * component for it, and that must degrade silently rather than crash chat.
  */
@@ -36,6 +39,12 @@ export function AgentCardView({ card, colors }: { card: AgentCard; colors?: Acco
       return <BriefingCard card={card} colors={colors} />;
     case "choices":
       return <ChoicesCard card={card} colors={colors} />;
+    case "sources":
+      return <SourcesCard card={card} />;
+    case "form":
+      return <FormCard card={card} />;
+    case "wiki_note":
+      return <WikiNoteCard card={card} />;
     default:
       return null;
   }

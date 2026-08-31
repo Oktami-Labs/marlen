@@ -3,7 +3,7 @@ import { AccountDot } from "@/components/ui/account-dot";
 import { AppIcon } from "@/components/ui/app-icon";
 
 /**
- * App icon + account address + a color dot — the one visual anchor that
+ * App icon + account address + a color dot, the one visual anchor that
  * says which connected inbox a card's data came from, so a chat that mixes
  * multiple accounts stays legible. No pill background: cards already sit on
  * the `bg-surface-2` shell, so a same-tone chip behind this would have zero

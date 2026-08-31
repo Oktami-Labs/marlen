@@ -6,8 +6,8 @@ import { Markdown } from "@/components/ui/markdown";
 // inside click handlers this test never fires; cut the chain at the seam.
 vi.mock("@/lib/toast", () => ({ toast: { error: vi.fn(), success: vi.fn() } }));
 
-// Streaming replies re-render through this path on every delta; a crash or a
-// dropped word here breaks live chat, not just the fade-in.
+// Streaming replies render through this path on every delta. A crash or dropped
+// word breaks the reply itself as well as the fade-in.
 describe("Markdown stream mode", () => {
   it("wraps streamed words in fade-in spans, leaving code untouched", () => {
     const html = renderToStaticMarkup(

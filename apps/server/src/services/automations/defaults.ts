@@ -25,8 +25,8 @@ interface DefaultAutomation {
 // Default instruction texts live as prose in instructions/*.md, loaded eagerly
 // so a missing file fails at startup. The path resolves against import.meta.url,
 // which the desktop build copies instructions/ next to (build.mjs). The text
-// must round-trip byte-identical (trimmed) — the seed/refresh logic below
-// compares stored instructions against it and hashes it.
+// must round-trip byte-identical after trimming because the seed and refresh
+// logic compares stored instructions against it and hashes it.
 function readInstruction(name: string): string {
   return readFileSync(new URL(`./instructions/${name}.md`, import.meta.url), "utf8").trim();
 }
@@ -128,8 +128,7 @@ export async function seedDefaultAutomations(): Promise<void> {
 
   const now = Date.now();
   for (const [i, preset] of DEFAULT_AUTOMATIONS.entries()) {
-    // A previous name's flag still counts as seeded, so a rename can't resurrect
-    // a default the user deleted under its old name.
+    // A rename must not resurrect a default the user deleted.
     const key = `${DEFAULT_SEEDED_KEY_PREFIX}${preset.name}`;
     const seedKeys = [key, ...preset.previousNames.map((n) => `${DEFAULT_SEEDED_KEY_PREFIX}${n}`)];
     const flags = await Promise.all(seedKeys.map((k) => getSetting(k)));

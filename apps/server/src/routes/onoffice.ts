@@ -25,7 +25,7 @@ export const onOfficeRoutes: FastifyPluginAsyncTypebox = async (app) => {
     } catch (error) {
       throw badRequest(errorMessage(error));
     }
-    // Live agents hold an onOffice client built from the old credentials.
+    // Cached sessions capture credentials at creation.
     resetSessions();
     return getOnOfficeStatus();
   });
@@ -47,8 +47,7 @@ export const onOfficeRoutes: FastifyPluginAsyncTypebox = async (app) => {
     },
   );
 
-  // Live agents hold the tool list built under the old setting, so flipping it
-  // resets sessions (unlike the per-run automation toggle above).
+  // Cached sessions capture tool availability at creation.
   app.put(
     "/api/onoffice/write-access",
     { schema: { body: Type.Object({ enabled: Type.Boolean() }) } },

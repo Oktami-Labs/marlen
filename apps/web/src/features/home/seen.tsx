@@ -19,7 +19,7 @@ export interface Seen {
   seeAll: () => void;
 }
 
-/** Mark keys — one namespace per kind of Home item. */
+/** Mark keys, one namespace per kind of Home item. */
 export const todoSeenKey = (id: string) => `todo:${id}`;
 export const outboundSeenKey = (id: string) => `outbound:${id}`;
 export const runSeenKey = (id: string) => `run:${id}`;
@@ -58,7 +58,7 @@ export function useSeen(): Seen {
 /**
  * Wraps one Home row: resolves whether it is new, hands that to the row for
  * its dot, and clears the mark as soon as the user clicks or keyboard-focuses
- * anything inside — no per-handler wiring in the rows themselves.
+ * anything inside, no per-handler wiring in the rows themselves.
  */
 export function SeenOnInteract({
   seen,

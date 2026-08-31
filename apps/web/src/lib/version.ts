@@ -4,7 +4,7 @@ import { desktopBridge } from "@/lib/desktop";
 
 /**
  * The version actually running. In the desktop app the shell's own build number
- * is the only truth — the bundle can be any age, and an install that never took
+ * is authoritative. The bundle can be any age, and an install that never took
  * an update is exactly the case this is here to expose. A browser tab has no
  * shell, so it falls back to the newest changelog entry compiled into the
  * bundle it was served.

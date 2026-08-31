@@ -77,7 +77,7 @@ export async function runExtractionSweep(deps: ExtractSweepDeps = {}): Promise<E
   const accountById = new Map(accounts.map((account) => [account.id, account]));
 
   // The account signature is appended outside the agent's snapshot, so it is
-  // dropped from the sent side before diffing — otherwise every signed send
+  // dropped from the sent side before diffing, otherwise every signed send
   // would read as "the user added this block" and pollute the style lessons.
   const signatureTextById = new Map(
     (await getAccountSignatures()).map((s) => [s.accountId, collapseWhitespace(stripHtml(s.html))]),
@@ -88,9 +88,9 @@ export async function runExtractionSweep(deps: ExtractSweepDeps = {}): Promise<E
 
   for (const draft of sentDrafts) {
     const account = accountById.get(draft.accountId);
-    if (!account) continue; // disconnected — stays pending, recovers on reconnect
+    if (!account) continue; // Keep disconnected accounts pending until reconnect.
     const provider = readerFor(account.app);
-    if (!provider) continue; // no read driver for this app — stays pending
+    if (!provider) continue; // Keep apps without a read driver pending.
 
     let sentBody: string | null;
     try {
@@ -102,7 +102,7 @@ export async function runExtractionSweep(deps: ExtractSweepDeps = {}): Promise<E
       );
       continue;
     }
-    if (sentBody === null) continue; // message gone at the provider — wait for a later night
+    if (sentBody === null) continue; // Retry provider-missing messages on a later night.
 
     const draftBody = await getLatestAgentDraftBody(draft.accountId, draft.providerDraftId);
     if (draftBody === null) continue; // snapshot vanished or has no agent-authored version

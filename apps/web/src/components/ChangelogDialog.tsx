@@ -10,7 +10,7 @@ import { openExternal } from "@/lib/utils";
 /**
  * The version history as a plain list: version + date heading, then bullet
  * notes. When an update is waiting (`pending`), its entry wears the accent
- * "ready" badge and the footer offers the way to take it — a restart normally,
+ * "ready" badge and the footer offers the way to take it, a restart normally,
  * or a download when the shell cannot install it itself. The running version
  * (`currentVersion`) carries a quiet "installed" badge for orientation.
  */
@@ -43,10 +43,6 @@ export function ChangelogDialog({
       footer={
         pendingVersion ? (
           pending?.manual ? (
-            // The shell cannot swap the bundle, so the honest action is the one
-            // that works: send them to the release. A restart button here would
-            // relaunch the same old version and look like the update failed for
-            // no reason.
             <div className="flex items-center gap-3">
               <span className="text-xs text-muted-foreground">{t("app.updateManualHint")}</span>
               <Button size="sm" onClick={() => openExternal(RELEASES_URL)}>

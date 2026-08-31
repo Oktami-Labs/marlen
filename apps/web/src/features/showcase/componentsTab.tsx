@@ -1,10 +1,3 @@
-/*
- * Component-inventory tab of the DEV showcase gallery: every file in
- * `components/ui/` rendered under its file name, one after another. Minimal
- * instances only — the interactive walkthroughs live in the other tabs. Safe
- * to delete with the folder.
- */
-
 import { Bell, Check, Inbox, Search, Trash2 } from "lucide-react";
 import * as React from "react";
 import { AccountDot } from "@/components/ui/account-dot";

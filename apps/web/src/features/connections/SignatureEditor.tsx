@@ -19,16 +19,9 @@ import { toast } from "@/lib/toast";
 
 const SIGNATURES_QUERY_KEY = ["settings", "accountSignatures"] as const;
 
-/** Keyboard step for the resize handles, and the size of a handle itself. */
 const WIDTH_STEP = 8;
 const HANDLE_SIZE = 10;
 
-/**
- * The four corners a selected image is resized by, as the direction each one
- * grows the image in. The last is the one that carries the label and the
- * keyboard step: four identical tab stops for one action is noise, and the
- * bottom-right corner is where every editor puts the primary grip.
- */
 const HANDLES = [
   { dirX: -1, dirY: -1, cursor: "nwse-resize" },
   { dirX: 1, dirY: -1, cursor: "nesw-resize" },
@@ -36,40 +29,19 @@ const HANDLES = [
   { dirX: 1, dirY: 1, cursor: "nwse-resize" },
 ] as const;
 
-/**
- * Rich signature editor, expanded under an email account's row. Deliberately a
- * raw contenteditable, NOT a schema-based editor (TipTap was tried and
- * reverted): a signature pasted from Gmail or Outlook must keep its layout
- * tables, fonts and colors verbatim, which schema normalization flattens.
- * Paste-first — the paste resolves the images the clipboard only points at
- * (see signatureHtml.ts) — with a small toolbar for writing one in place and a
- * corner grip for sizing a logo. The editing area is a white "paper" page in
- * both themes, in the same font the server wraps outgoing bodies in, so what's
- * shown is what recipients get. Persists the stored set wholesale with this
- * account's entry swapped (the server keeps the last entry per account and
- * drops empty ones).
- */
+/** Preserve pasted email layout without schema normalization. */
 export function SignatureEditor({ accountId }: { accountId: string }) {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  // The grip is named by a hidden label, not aria-label: the cursor tooltip
-  // shows for any labelled button under the pointer, which through a drag means
-  // one trailing the whole way.
   const resizeLabelId = React.useId();
   const editor = React.useRef<HTMLDivElement>(null);
-  /** The positioned frame the resize grips are placed in. */
   const paper = React.useRef<HTMLDivElement>(null);
   const fileInput = React.useRef<HTMLInputElement>(null);
-  // The toolbar's link/image flows move focus away from the editor; the last
-  // in-editor selection is saved on toolbar use and restored before inserting.
   const savedRange = React.useRef<Range | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [pasting, setPasting] = React.useState(false);
   const [linkOpen, setLinkOpen] = React.useState(false);
   const [linkUrl, setLinkUrl] = React.useState("");
-  // The image the handles act on, and the box they sit on. The element is
-  // marked with a class rather than an attribute, so the selection ring cannot
-  // survive into the saved html (sanitize drops every class).
   const [selectedImage, setSelectedImage] = React.useState<HTMLImageElement | null>(null);
   const [frame, setFrame] = React.useState<{
     left: number;
@@ -78,8 +50,7 @@ export function SignatureEditor({ accountId }: { accountId: string }) {
     height: number;
   } | null>(null);
 
-  // The loaded array is the merge baseline for the save; saving is disabled
-  // until it arrives, so a write can never wipe other accounts' signatures.
+  // Saving requires the complete set so another account is never overwritten.
   const query = useQuery({
     queryKey: SIGNATURES_QUERY_KEY,
     queryFn: api.accountSignatures,
@@ -87,8 +58,7 @@ export function SignatureEditor({ accountId }: { accountId: string }) {
   });
   const signatures = query.data?.signatures;
 
-  // Seed the editor once when the stored set first arrives; later signature
-  // state updates (a save) must not clobber what the user is editing.
+  // Do not replace an in-progress edit when the query cache changes.
   const seededRef = React.useRef(false);
   React.useEffect(() => {
     if (seededRef.current || !signatures || !editor.current) return;
@@ -98,7 +68,6 @@ export function SignatureEditor({ accountId }: { accountId: string }) {
     );
   }, [signatures, accountId]);
 
-  /** The image the caret sits on, so arrowing onto a logo selects it like clicking it does. */
   const imageAtCaret = (): HTMLImageElement | null => {
     const selection = window.getSelection();
     if (!selection || selection.rangeCount === 0) return null;
@@ -115,12 +84,7 @@ export function SignatureEditor({ accountId }: { accountId: string }) {
     setSelectedImage(image);
   };
 
-  // The handles ride the image's own box, measured against the frame they are
-  // positioned in. Rectangles, not offsetLeft/offsetTop: a signature's images
-  // usually sit in a layout table, and a td is an offsetParent of its own, so
-  // offsets would place the grips relative to the cell instead of the frame.
-  // Measured on demand rather than in an effect: a resize writes the width
-  // synchronously, so the corners are already where they will render.
+  // Layout tables make offsetParent unreliable; measure both viewport rectangles.
   const measureFrame = React.useCallback(() => {
     const page = paper.current?.getBoundingClientRect();
     const image = selectedImage?.isConnected ? selectedImage.getBoundingClientRect() : null;
@@ -136,7 +100,6 @@ export function SignatureEditor({ accountId }: { accountId: string }) {
     );
   }, [selectedImage]);
 
-  // A narrower panel reflows the signature, so the corners move without anything here touching them.
   React.useEffect(() => {
     measureFrame();
     window.addEventListener("resize", measureFrame);
@@ -149,18 +112,9 @@ export function SignatureEditor({ accountId }: { accountId: string }) {
     measureFrame();
   };
 
-  /**
-   * Drag from any corner, the way every editor does it: the grabbed corner
-   * follows the pointer along the image's own diagonal, so a drag that is
-   * mostly sideways and one that is mostly downward both resize it, and the
-   * aspect ratio decides the height.
-   */
   const startResize = (event: React.PointerEvent, dirX: number, dirY: number) => {
     if (!selectedImage) return;
-    // Deliberately not preventDefault: the grip takes focus, so the keyboard
-    // step works straight after a drag, and the cursor tooltip hides itself on
-    // the mousedown that would otherwise never fire. Pointer capture keeps the
-    // rest of the drag on the grip.
+    // Keep focus on the grip so keyboard resizing works after dragging.
     event.currentTarget.setPointerCapture(event.pointerId);
     const startX = event.clientX;
     const startY = event.clientY;
@@ -219,7 +173,6 @@ export function SignatureEditor({ accountId }: { accountId: string }) {
     if (inEditor && !selection.isCollapsed) {
       exec("createLink", href);
     } else {
-      // Nothing selected: insert the URL itself as the link text.
       const anchor = document.createElement("a");
       anchor.href = href;
       anchor.textContent = href;
@@ -238,12 +191,6 @@ export function SignatureEditor({ accountId }: { accountId: string }) {
     exec("insertHTML", html);
   };
 
-  /**
-   * A pasted signature keeps its markup, and its images become bytes it owns.
-   * An image on the clipboard with no markup (a logo copied from a file
-   * manager) is inserted as one; anything else falls through to the browser's
-   * own plain-text paste.
-   */
   const onPaste = (event: React.ClipboardEvent) => {
     const html = event.clipboardData.getData("text/html");
     const file = [...event.clipboardData.files].find((f) => f.type.startsWith("image/"));
@@ -292,7 +239,6 @@ export function SignatureEditor({ accountId }: { accountId: string }) {
     }
   };
 
-  // Toolbar buttons prevent mousedown default so the editor selection survives the click.
   const keepSelection = (event: React.MouseEvent) => event.preventDefault();
 
   return (
@@ -392,7 +338,6 @@ export function SignatureEditor({ accountId }: { accountId: string }) {
           <span id={resizeLabelId} className="sr-only">
             {t("connections.signature.resize")}
           </span>
-          {/* Recessed frame holding the white "paper" page: the outgoing-email preview stays light in both themes. */}
           <div ref={paper} className="relative rounded-lg bg-surface-2 p-2">
             {/* biome-ignore lint/a11y/useFocusableInteractive: contenteditable makes the div focusable */}
             {/* biome-ignore lint/a11y/useSemanticElements: no native element holds rich HTML; textbox is the standard role for a contenteditable editor */}
@@ -404,8 +349,6 @@ export function SignatureEditor({ accountId }: { accountId: string }) {
               aria-multiline="true"
               aria-label={t("connections.signature.title")}
               className="email-paper min-h-24 break-words rounded-md bg-white px-3 py-2 text-neutral-900 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring [&_img.is-selected]:ring-2 [&_img.is-selected]:ring-ring [&_img]:max-w-full"
-              // The typography an outgoing signature is sent in, so the page is
-              // the email rather than a rendering of it.
               style={EMAIL_SIGNATURE_STYLE}
               onPaste={onPaste}
               onClick={(event) => {
@@ -424,8 +367,6 @@ export function SignatureEditor({ accountId }: { accountId: string }) {
                   <button
                     key={cursor + dirX}
                     type="button"
-                    // One grip answers to the keyboard and carries the name; the
-                    // other three are the same action under the mouse.
                     {...(primary
                       ? { "aria-labelledby": resizeLabelId }
                       : { "aria-hidden": true, tabIndex: -1 })}

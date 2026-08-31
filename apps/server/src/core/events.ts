@@ -13,7 +13,7 @@ export function emitServerEvent(topic: ServerEventTopic): void {
   bus.emit("event", { topic } satisfies ServerEvent);
 }
 
-/** Emit a "notification" event, the one topic that carries a payload. */
+/** Emit the only server event topic that carries a payload. */
 export function emitRunNotification(notification: RunNotification): void {
   bus.emit("event", { topic: "notification", notification } satisfies ServerEvent);
 }
