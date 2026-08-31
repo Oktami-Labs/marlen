@@ -12,6 +12,11 @@ stays on your computer.
 
 Grab the macOS or Windows installer from the
 [latest release](https://github.com/Oktami-Labs/marlen/releases/latest).
+That public repo carries only the releases, the download site
+([marlen.email](https://marlen.email), its `gh-pages` branch) and the issue
+tracker; the source lives here, privately. Installed apps update from its
+releases, and `release.yml` publishes there with a token
+([apps/desktop/README.md → Cutting a release](apps/desktop/README.md#cutting-a-release)).
 
 Builds are not code-signed yet, which shapes both installing and updating:
 
@@ -67,6 +72,5 @@ pnpm check    # lint + conventions + typecheck + tests
 
 ## License
 
-Source-available, all rights reserved — see [LICENSE](LICENSE). The code is
-public for transparency and so official builds can auto-update from this
-repo's releases.
+Proprietary, all rights reserved — see [LICENSE](LICENSE). It grants the
+right to install and run the official builds, nothing about the source.

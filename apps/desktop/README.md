@@ -2,7 +2,8 @@
 
 Electron shell around the Marlen server + web app. It runs the bundled
 `@marlen/server` as a utility child process on `127.0.0.1` (ports 43117+),
-opens a window on it, and auto-updates from this repo's GitHub releases.
+opens a window on it, and auto-updates from the releases of the public
+`Oktami-Labs/marlen` repo (this source repo is private).
 All state (SQLite DB, library, logs) lives in Electron's per-user data
 directory (`~/Library/Application Support/Marlen` on macOS).
 
@@ -37,17 +38,26 @@ runtime deps — the app then dies on `Cannot find package 'fastify'`.
 1. Bump `version` in `apps/desktop/package.json`.
 2. Tag and push: `git tag v0.2.0 && git push origin v0.2.0`.
 3. The `release.yml` workflow builds macOS and Windows installers and
-   uploads them to a **draft** GitHub release.
-4. Publish the release. Running apps with an update token poll every 4 hours
-   (and on launch), download in the background, and show a "restart to
-   update" toast.
+   uploads them to a **draft** release in the public `Oktami-Labs/marlen`
+   repo. It authenticates with the `RELEASE_TOKEN` repo secret: a
+   fine-grained PAT with Contents read/write on that one repo (the
+   workflow's own `GITHUB_TOKEN` cannot write elsewhere). It expires; a
+   failing draft step means it needs replacing. The draft first commits a
+   `VERSION` bump to that repo's `main` and targets it, because GitHub's
+   "latest" release (what the updater and marlen.email resolve) is the one
+   with the newest tagged commit, not the one published last.
+4. Publish the release. Running apps poll every 4 hours (and on launch),
+   download in the background, and show a "restart to update" toast.
 
 ## Downloads & updates
 
-The repo is public: installers download from the Releases page (and from the
-GitHub Pages download site on the `gh-pages` branch, which reads the latest
-release via the GitHub API — it needs no rebuild per release). Auto-update
-works anonymously out of the box.
+Everything a user or an installed app touches lives in the public
+`Oktami-Labs/marlen` repo, which holds no source: the releases (the
+electron-updater feed baked into the app via `publish` in
+`electron-builder.yml`), the GitHub Pages download site on its `gh-pages`
+branch (reads the latest release via the GitHub API, needs no rebuild per
+release), and the issue tracker the About panel links to. Auto-update works
+anonymously out of the box.
 
 macOS quirk until builds are signed: a CI-built dmg downloaded from GitHub
 carries the quarantine flag — allow it once via System Settings → Privacy &

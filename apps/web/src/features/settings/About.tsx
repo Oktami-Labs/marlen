@@ -101,7 +101,7 @@ export function AboutPanel() {
           {BUNDLE_ID}
         </MetaRow>
         <MetaRow label={t("settings.about.license")}>{t("settings.about.licenseValue")}</MetaRow>
-        <MetaRow label={t("settings.about.source")}>
+        <MetaRow label={t("settings.about.github")}>
           <LinkButton
             onClick={() => openExternal(REPO_URL)}
             className="flex items-center gap-1.5 font-mono text-foreground"

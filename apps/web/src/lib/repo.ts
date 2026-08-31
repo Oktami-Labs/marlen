@@ -1,4 +1,4 @@
-/** Where the app lives and where its builds come from. */
+/** The public releases repo: builds, the download site, and issues. Not the source. */
 
 export const REPO_SLUG = "Oktami-Labs/marlen";
 export const REPO_URL = `https://github.com/${REPO_SLUG}`;

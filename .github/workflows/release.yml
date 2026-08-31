@@ -1,9 +1,15 @@
-# The update feed: pushing a v* tag builds the desktop app for all three
-# platforms and uploads the installers to a draft GitHub release. Publishing
-# that release is what makes running apps see the update (electron-updater
-# polls the repo's releases). Bump apps/desktop/package.json's version to
+# The update feed: pushing a v* tag builds the desktop app for macOS and
+# Windows and uploads the installers to a draft release in the public
+# releases repo (RELEASE_REPO), not this one: this repo is private, and the
+# feed baked into installed apps (publish in apps/desktop/electron-builder.yml)
+# must stay anonymously readable. Publishing that release is what makes
+# running apps see the update. Bump apps/desktop/package.json's version to
 # match the tag before tagging — that version is what installed apps compare
 # against.
+#
+# RELEASE_TOKEN: a fine-grained PAT with Contents read/write on RELEASE_REPO
+# only. GITHUB_TOKEN cannot write to another repo. When it expires, releases
+# fail at the draft step until a new one is stored.
 name: Release
 
 on:
@@ -11,21 +17,41 @@ on:
     tags: ["v*"]
 
 permissions:
-  contents: write
+  contents: read
+
+env:
+  # Must match owner/repo under `publish` in apps/desktop/electron-builder.yml.
+  RELEASE_REPO: Oktami-Labs/marlen
 
 jobs:
   # Both platform builders publish into one draft release. Created up front
   # because two electron-builder jobs racing to create it end up with two
   # drafts for the same tag, each holding half the assets.
+  #
+  # GitHub's "latest" release is the one whose tagged commit is newest, not
+  # the one published last, and both electron-updater and the download site
+  # resolve /releases/latest. The releases repo has no commits of its own, so
+  # each release first gets one (VERSION bumped on main) and the draft
+  # targets it; publishing the draft creates the tag there.
   draft:
     runs-on: ubuntu-latest
     steps:
-      - run: >
-          gh release view "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" >/dev/null 2>&1 ||
-          gh release create "$GITHUB_REF_NAME" -R "$GITHUB_REPOSITORY" --draft
-          --title "$GITHUB_REF_NAME" --notes ""
+      - uses: actions/checkout@v4
+        with:
+          repository: ${{ env.RELEASE_REPO }}
+          token: ${{ secrets.RELEASE_TOKEN }}
+
+      - run: |
+          if gh release view "$GITHUB_REF_NAME" -R "$RELEASE_REPO" >/dev/null 2>&1; then exit 0; fi
+          echo "$GITHUB_REF_NAME" > VERSION
+          git add VERSION
+          git -c user.name=github-actions -c user.email=github-actions[bot]@users.noreply.github.com \
+            commit -m "release: $GITHUB_REF_NAME"
+          git push
+          gh release create "$GITHUB_REF_NAME" -R "$RELEASE_REPO" --draft --target main \
+            --title "$GITHUB_REF_NAME" --notes ""
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
 
   build:
     needs: draft
@@ -52,7 +78,7 @@ jobs:
       - name: Package & upload to draft release
         run: pnpm --filter @marlen/desktop dist -- --publish always
         env:
-          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GH_TOKEN: ${{ secrets.RELEASE_TOKEN }}
           # Never hunt the runner keychain for identities; builds ship
           # unsigned until the signing accounts exist. Signing env vars must
           # be ABSENT while unused — electron-builder treats even an empty

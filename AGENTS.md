@@ -8,9 +8,9 @@ Marlen is a local-first AI email assistant shipped as a desktop app: it reads,
 drafts, and organizes mail (Gmail, Outlook / Microsoft 365, anything Pipedream
 connects), runs scheduled automations, and answers a chat. Single user, single
 machine — the Fastify server, SQLite db, and LLM agent all run on-device; there
-is no backend. That shapes the code: module-level singletons instead of DI, no
-SaaS telemetry, and the public repo exists for transparency and auto-update,
-not for contributions.
+is no backend. That shapes the code: module-level singletons instead of DI and
+no SaaS telemetry. This source repo is private; the public `Oktami-Labs/marlen`
+repo holds only the releases (the auto-update feed) and the download site.
 
 pnpm monorepo:
 

@@ -149,7 +149,7 @@ Settings / Einstellungen (sections in order)
   background at login so scheduled automations run without the app being opened first.
 - Local data / Lokale Daten: download a backup snapshot of everything stored on this computer
   (without account credentials).
-- About / Über Marlen: version, build, license, source code on GitHub, report an issue, the
+- About / Über Marlen: version, build, license, the GitHub page, report an issue, the
   full changelog, and "Check for updates / Nach Updates suchen".
 
 Running in the background
