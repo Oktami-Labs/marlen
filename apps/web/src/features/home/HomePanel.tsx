@@ -6,6 +6,7 @@ import { useTranslation } from "react-i18next";
 import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner, Notice } from "@/components/ui/feedback";
+import { DraftReader, draftStack } from "@/features/drafts/DraftReader";
 import { ActivitySection } from "@/features/home/ActivitySection";
 import { AttentionSection } from "@/features/home/AttentionSection";
 import { BriefingHero, findBriefingCard } from "@/features/home/BriefingHero";
@@ -63,25 +64,21 @@ export function HomePanel({
     missedQuery.error;
   const error = queryError ? errorMessage(queryError) : null;
 
-  const [focusDraft, setFocusDraft] = React.useState<{ accountId: string; draftId: string } | null>(
-    null,
-  );
-
   const refreshDrafts = () => void queryClient.invalidateQueries({ queryKey: ["drafts"] });
 
+  // `?draft=<accountId>:<draftId>` IS the reading screen: the approval list and
+  // the search palette both open a draft by writing it, so back closes the
+  // letter and a link to one survives a reload.
   const [searchParams, setSearchParams] = useSearchParams();
   const draftParam = searchParams.get("draft");
-  React.useEffect(() => {
-    if (!draftParam) return;
-    const separator = draftParam.indexOf(":");
-    if (separator > 0) {
-      setFocusDraft({
-        accountId: draftParam.slice(0, separator),
-        draftId: draftParam.slice(separator + 1),
-      });
-    }
-    setSearchParams({}, { replace: true });
-  }, [draftParam, setSearchParams]);
+  const separator = draftParam?.indexOf(":") ?? -1;
+  const selected =
+    draftParam && separator > 0
+      ? { accountId: draftParam.slice(0, separator), draftId: draftParam.slice(separator + 1) }
+      : null;
+  const openDraft = (accountId: string, draftId: string) =>
+    setSearchParams({ draft: `${accountId}:${draftId}` });
+  const closeDraft = () => setSearchParams({}, { replace: true });
 
   // Prefer the pinned run, then the newest successful briefing.
   const heroRun = React.useMemo(() => {
@@ -117,6 +114,32 @@ export function HomePanel({
       ({ run }) => [runSeenKey(run.id), run.startedAt] as const,
     ),
   ].filter(([key, createdAt]) => seen.isNew(key, createdAt)).length;
+
+  const stack = draftStack(drafts);
+  const entry = selected
+    ? stack.find(
+        (item) => item.accountId === selected.accountId && item.draft.id === selected.draftId,
+      )
+    : undefined;
+
+  // Selected but not in the list: it was sent or discarded elsewhere, so the
+  // letter has nothing to show and the list is the honest answer.
+  const missing = Boolean(selected && drafts && !entry);
+  React.useEffect(() => {
+    if (missing) setSearchParams({}, { replace: true });
+  }, [missing, setSearchParams]);
+
+  if (entry) {
+    return (
+      <DraftReader
+        entry={entry}
+        stack={stack}
+        onClose={closeDraft}
+        onOpen={openDraft}
+        onChanged={refreshDrafts}
+      />
+    );
+  }
 
   return (
     <div className="flex flex-col gap-10 pt-1">
@@ -164,7 +187,7 @@ export function HomePanel({
         automations={automations}
         drafts={drafts}
         colors={colors}
-        focusDraft={focusDraft}
+        onOpenDraft={openDraft}
         onDraftsChanged={refreshDrafts}
         onNavigate={onNavigate}
         seen={seen}

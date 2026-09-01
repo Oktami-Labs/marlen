@@ -82,15 +82,19 @@ Outbound flow (email and WhatsApp)
   Home's "To approve / Zur Freigabe" list; Send sends it right away; Discard drops it without
   a trace.
 - Automations create real mailbox drafts directly (nobody is there to keep a proposal). Those
-  wait on Home under "To approve / Zur Freigabe": send, edit in place, discard, or refine —
-  refine reopens the chat the draft came from with full context. Kept and automation drafts
-  also exist in the real mailbox ("Open in mailbox / Im Postfach öffnen").
+  wait on Home under "To approve / Zur Freigabe". Send or discard from the row, or open it to
+  read the whole letter with the conversation it answers below, edit subject and body there, and
+  step through the waiting drafts with the arrows. Refine reopens the chat the draft came from
+  with full context. Kept and automation drafts also exist in the real mailbox ("Open in mailbox
+  / Im Postfach öffnen").
 - Drafting does not authorize a send. Sending by the assistant needs an explicit instruction and
   the selected account's "Send / Senden" grant in Settings. Each connected account has its own
   grants; WhatsApp has its own "Auto-send / Automatisch senden" grant, off by default. A send grant
   applies in chat and in automations alike.
 - Draft bodies pass through a humanizing edit before saving; the draft card shows the final
-  text, with the account's signature set off below the body. Drafts written as an account with
+  text, with the account's signature set off below the body. A body may use markdown for
+  **bold**, *italic*, links, lists, quotes and `code`: mail goes out as HTML with the source as
+  its plain-text alternative, so formatting arrives as formatting, never as visible asterisks. Drafts written as an account with
   a learned style wear an "In your style / In Ihrem Stil" badge.
 
 Automations / Automatisierungen

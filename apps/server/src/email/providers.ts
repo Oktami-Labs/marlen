@@ -32,8 +32,10 @@ export interface CreateDraftInput {
   subject: string;
   /** Plain-text body unless bodyFormat is "html"; providers save it accordingly. */
   body: string;
-  /** "html" when body is an HTML fragment (agent prose with the account signature appended). */
+  /** "html" when body is an HTML fragment (rendered agent prose with the account signature appended). */
   bodyFormat?: "text" | "html";
+  /** The html body's plain-text twin, saved as the multipart/alternative text part where the provider's API can carry one. */
+  bodyText?: string;
   threadId?: string;
   attachments?: DraftAttachment[];
   /** Images the html body references via cid:; meaningless without bodyFormat "html". */
@@ -41,9 +43,15 @@ export interface CreateDraftInput {
 }
 
 export interface UpdateDraftPatch {
+  /** Replacement recipient sets. Absent means "leave the draft's own alone"; an empty array clears. */
+  to?: string[];
+  cc?: string[];
+  bcc?: string[];
   body?: string;
   /** Format of `body`; meaningless without it. */
   bodyFormat?: "text" | "html";
+  /** Plain-text twin of an html `body`; meaningless without it. */
+  bodyText?: string;
   subject?: string;
   /** Full replacement set of cid images for the new body; providers drop inline parts not in it, so an absent set clears them. Meaningless without `body`. */
   inlineImages?: InlineImage[];

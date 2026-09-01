@@ -263,7 +263,11 @@ export const api = {
       "DELETE",
       `/api/drafts/${encodeURIComponent(accountId)}/${encodeURIComponent(draftId)}`,
     ),
-  updateDraft: (accountId: string, draftId: string, patch: { body?: string; subject?: string }) =>
+  updateDraft: (
+    accountId: string,
+    draftId: string,
+    patch: { body?: string; subject?: string; to?: string; cc?: string; bcc?: string },
+  ) =>
     http<{ ok: boolean }>(
       "PATCH",
       `/api/drafts/${encodeURIComponent(accountId)}/${encodeURIComponent(draftId)}`,

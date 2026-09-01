@@ -4,7 +4,6 @@ import {
   LayoutList,
   ListTree,
   type LucideIcon,
-  Mails,
   MessagesSquare,
   MousePointerClick,
   Shapes,
@@ -17,7 +16,6 @@ import { cn } from "@/lib/utils";
 import { ComponentsTab } from "./componentsTab";
 import { ContentTab, StorageTab, SystemsTab } from "./contentTabs";
 import { ButtonsTab, FeedbackTab, FormsTab, MarksTab, SurfacesTab } from "./controlTabs";
-import { MailDesignsTab } from "./mailDesigns";
 import { ThemeLab } from "./ThemeLab";
 
 interface Tab {
@@ -66,12 +64,6 @@ const TAB_GROUPS: { label: string; tabs: Tab[] }[] = [
         render: () => <ContentTab />,
       },
       { id: "storage", label: "Storage", icon: HardDrive, render: () => <StorageTab /> },
-    ],
-  },
-  {
-    label: "Explore",
-    tabs: [
-      { id: "mail", label: "E-Mail Varianten", icon: Mails, render: () => <MailDesignsTab /> },
     ],
   },
   {

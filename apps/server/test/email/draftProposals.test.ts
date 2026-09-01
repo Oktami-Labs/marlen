@@ -93,11 +93,15 @@ describe("draft proposals", () => {
     const outcome = await service.keepDraftProposal(proposalId, {}, deps);
     expect(outcome.sent).toBe(false);
     expect(createdInputs).toHaveLength(1);
+    // The mailbox draft carries the proposal's prose: rendered as the html
+    // that is sent, with the source alongside it as the text alternative.
     expect(createdInputs[0]).toMatchObject({
       to: ["someone@example.com"],
       subject: "Hello",
-      body: "Guten Tag,\n\nbis morgen.",
+      bodyFormat: "html",
+      bodyText: "Guten Tag,\n\nbis morgen.",
     });
+    expect(createdInputs[0]?.body).toContain("bis morgen.");
 
     const proposal = await proposalStore.getDraftProposal(proposalId);
     expect(proposal?.status).toBe("kept");

@@ -2,6 +2,7 @@ import { createHash } from "node:crypto";
 import { EMAIL_BODY_STYLE, EMAIL_SIGNATURE_STYLE, styleAttribute } from "@marlen/shared";
 import addrs from "email-addresses";
 import { type HtmlToTextOptions, htmlToText } from "html-to-text";
+import { markdownToHtml } from "./markdown.js";
 import type { InlineImage } from "./providers.js";
 
 /** Keep link text but drop hrefs and images; keep heading case (html-to-text uppercases headings by default). */
@@ -53,27 +54,22 @@ export function withCidImages(html: string): { html: string; images: InlineImage
 }
 
 /**
- * Plain agent prose and the account's signature as one outgoing HTML body:
- * escaped body above the signature, mirroring a mail client's placement. Each
- * is its own block with its own typography, so the body's line spacing cannot
- * reach into a signature that was laid out somewhere else. The signature's
- * data-URI images are extracted to cid references the caller must pass on as
- * inlineImages.
+ * The agent's markdown prose and the account's signature as one outgoing HTML
+ * body: rendered body above the signature, mirroring a mail client's placement.
+ * Each is its own block with its own typography, so the body's line spacing
+ * cannot reach into a signature that was laid out somewhere else. The
+ * signature's data-URI images are extracted to cid references the caller must
+ * pass on as inlineImages.
  */
 export function htmlBodyWithSignature(
   body: string,
-  signatureHtml: string,
+  signatureHtml: string | undefined,
 ): { html: string; images: InlineImage[] } {
-  const escaped = body
-    .replace(/&/g, "&amp;")
-    .replace(/</g, "&lt;")
-    .replace(/>/g, "&gt;")
-    .replace(/\n/g, "<br>");
+  const prose = `<div style="${styleAttribute(EMAIL_BODY_STYLE)}">${markdownToHtml(body)}</div>`;
+  if (!signatureHtml) return { html: prose, images: [] };
   const { html: signature, images } = withCidImages(signatureHtml);
   return {
-    html:
-      `<div style="${styleAttribute(EMAIL_BODY_STYLE)}">${escaped}<br><br></div>` +
-      `<div style="${styleAttribute(EMAIL_SIGNATURE_STYLE)}">${signature}</div>`,
+    html: prose + `<div style="${styleAttribute(EMAIL_SIGNATURE_STYLE)}">${signature}</div>`,
     images,
   };
 }

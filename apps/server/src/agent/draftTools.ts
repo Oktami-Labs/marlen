@@ -166,7 +166,10 @@ export function buildDraftTool(
       cc: Type.Optional(Type.Array(Type.String(), { description: "Cc addresses." })),
       bcc: Type.Optional(Type.Array(Type.String(), { description: "Bcc addresses." })),
       subject: Type.String({ description: "Subject line." }),
-      body: Type.String({ description: "Plain-text body of the draft." }),
+      body: Type.String({
+        description:
+          "Body of the draft. Markdown is honoured for **bold**, *italic*, [links](https://…), bullet and numbered lists, > quotes and `code`; everything else is literal text.",
+      }),
       threadId: Type.Optional(
         Type.String({
           description: "Optional thread id to attach this draft to (for replies), when supported.",
@@ -409,7 +412,9 @@ export function buildUpdateDraftTool(
       (hasSignature ? SIGNATURE_TOOL_NOTE : ""),
     params: {
       draftId: Type.String({ description: "Id of the existing draft to rewrite." }),
-      body: Type.Optional(Type.String({ description: "The full replacement plain-text body." })),
+      body: Type.Optional(
+        Type.String({ description: "The full replacement body, same markdown subset." }),
+      ),
       subject: Type.Optional(
         Type.String({ description: "Replacement subject line, if it changes." }),
       ),

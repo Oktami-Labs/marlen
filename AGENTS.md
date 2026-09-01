@@ -73,6 +73,9 @@ before touching `apps/web`.
   the src area they cover.
 - **Less code.** Prefer removing and combining over adding; reuse the ui
   primitives and lib helpers; a new abstraction needs ≥2 clean call sites.
+- **No decorative header subtitles.** Page and settings-section headers contain
+  only the title plus relevant status or actions. Put necessary guidance next
+  to the control or state it explains, not in copy under the title.
 - **Comments** describe what the code does and the invariants it protects, as
   the code is today. Never document development history ("used to", "now",
   "after the split") or the instruction that prompted the change.

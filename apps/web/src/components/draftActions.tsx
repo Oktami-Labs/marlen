@@ -89,16 +89,19 @@ export function DraftActionDialog({
 export function RefineInChatButton({
   conversationId,
   subject,
+  label,
 }: {
   conversationId?: string | null;
   subject: string;
+  /** Renders the action as a labelled button; without it, a bare row icon. */
+  label?: string;
 }) {
   const { t } = useTranslation();
-  const label = conversationId ? t("drafts.refineInChat") : t("drafts.refine");
+  const title = conversationId ? t("drafts.refineInChat") : t("drafts.refine");
   return (
     <Button
       variant="ghost"
-      size="icon-xs"
+      size={label ? "sm" : "icon-xs"}
       className="icon-refine hover:bg-accent/10 hover:text-accent"
       onClick={(e) => {
         e.stopPropagation();
@@ -106,10 +109,11 @@ export function RefineInChatButton({
         if (conversationId) sendChatCommand({ kind: "open", conversationId });
         else sendChatCommand({ kind: "prefill", text: t("drafts.refinePrompt", { subject }) });
       }}
-      title={label}
-      aria-label={label}
+      title={title}
+      aria-label={label ?? title}
     >
       <Sparkles />
+      {label}
     </Button>
   );
 }

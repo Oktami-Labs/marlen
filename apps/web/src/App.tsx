@@ -294,14 +294,11 @@ export default function App() {
     );
   }
 
-  const meta = !isKnownPath(location.pathname)
-    ? { title: t("notFound.title"), description: location.pathname }
+  const pageTitle = !isKnownPath(location.pathname)
+    ? t("notFound.title")
     : import.meta.env.DEV && currentPath === "showcase"
-      ? { title: SHOWCASE_NAV.title, description: SHOWCASE_NAV.description }
-      : {
-          title: t(`views.${view}.title`),
-          description: t(`views.${view}.description`),
-        };
+      ? SHOWCASE_NAV.title
+      : t(`views.${view}.title`);
 
   return (
     <div ref={chatWidthRef} className="flex h-dvh overflow-hidden bg-sidebar">
@@ -350,10 +347,7 @@ export default function App() {
             <Menu />
           </HeaderIconButton>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold tracking-tight text-foreground">{meta.title}</h1>
-            <p className="hidden truncate text-sm text-muted-foreground sm:block">
-              {meta.description}
-            </p>
+            <h1 className="text-xl font-bold tracking-tight text-foreground">{pageTitle}</h1>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button

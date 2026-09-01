@@ -31,28 +31,22 @@
   },
   "views": {
     "chat": {
-      "title": "Chat",
-      "description": "Stellen Sie Fragen zu Ihrem Postfach oder lassen Sie den Assistenten Entwürfe schreiben, E-Mails mit Labels versehen oder aufräumen."
+      "title": "Chat"
     },
     "home": {
-      "title": "Start",
-      "description": "Was ansteht, was der Assistent vorbereitet hat und was zuletzt lief."
+      "title": "Start"
     },
     "leads": {
-      "title": "Leads",
-      "description": "Alle Interessenten, die der Assistent verfolgt, von der ersten Anfrage bis zum Abschluss."
+      "title": "Leads"
     },
     "automations": {
-      "title": "Automatisierungen",
-      "description": "Der Assistent führt eine feste Anweisung nach Zeitplan aus."
+      "title": "Automatisierungen"
     },
     "knowledge": {
-      "title": "Wissen",
-      "description": "Die Zusammenfassungen seiner Wiki-Seiten kennt Ihr Assistent in jedem Gespräch, Dokumente schlägt er bei Bedarf nach."
+      "title": "Wissen"
     },
     "settings": {
-      "title": "Einstellungen",
-      "description": "Ihre KI, verbundene Konten, Berechtigungen und Einstellungen."
+      "title": "Einstellungen"
     }
   },
   "sidebar": {
@@ -588,6 +582,15 @@
   },
   "drafts": {
     "noSubject": "(kein Betreff)",
+    "backToList": "Zur Freigabe",
+    "recipientsPlaceholder": "name@beispiel.de",
+    "addCopies": "Cc/Bcc",
+    "position": "{{index}} von {{total}}",
+    "previous": "Vorheriger Entwurf",
+    "next": "Nächster Entwurf",
+    "openReader": "Entwurf öffnen",
+    "refineLabel": "Überarbeiten",
+    "bodyLabel": "Nachricht",
     "open": "Im Postfach öffnen",
     "discard": "Entwurf verwerfen",
     "discardConfirm": "Diesen Entwurf verwerfen? Er wird aus Ihrem Mail-Konto entfernt.",
@@ -606,6 +609,7 @@
     "cc": "Cc:",
     "bcc": "Bcc:",
     "subject": "Betreff:",
+    "from": "Von:",
     "me": "mich"
   },
   "emailBody": {
@@ -832,29 +836,24 @@
     "sections": {
       "ai": {
         "title": "KI & Modell",
-        "description": "Die KI, die Ihre Post liest und beantwortet. Melden Sie sich mit einem vorhandenen Abo an (Claude, Copilot, ChatGPT) oder nutzen Sie einen API-Schlüssel. Ihre Anmeldung bleibt auf diesem Computer.",
         "chipReady": "Bereit",
         "chipSignIn": "Anmeldung nötig"
       },
       "accounts": {
         "title": "Konten",
-        "description": "E-Mail-, CRM- und Messaging-Konten, und was jedes Konto darf.",
         "chipSetup": "Einrichtung nötig",
         "chipConnected_one": "{{count}} verbunden",
         "chipConnected_other": "{{count}} verbunden",
         "chipNoAccounts": "Noch keine Konten"
       },
       "preferences": {
-        "title": "Darstellung & Sprache",
-        "description": "Wie Marlene aussieht, spricht und die Uhrzeit anzeigt."
+        "title": "Darstellung & Sprache"
       },
       "data": {
-        "title": "Lokale Daten",
-        "description": "Alles, was Marlene auf diesem Computer gespeichert hat, und wie Sie es sichern."
+        "title": "Lokale Daten"
       },
       "about": {
-        "title": "Über Marlene",
-        "description": "Welche Version Sie verwenden, und Updates, sobald eine neuere erscheint."
+        "title": "Über Marlene"
       },
       "language": {
         "title": "Sprache",
@@ -930,7 +929,6 @@
     "loginInputPlaceholder": "Code / Weiterleitungs-URL einfügen, falls der Vorgang nicht automatisch abschließt…",
     "fileAccess": {
       "title": "Dateizugriff",
-      "description": "Was der Assistent mit Dateien außerhalb seines Marlene-Ordners darf. In seinen eigenen Ordner (Wiki, Bibliothek) kommt er immer.",
       "chipOff": "Kein Zugriff",
       "read": {
         "title": "Dateien lesen",

@@ -21,6 +21,7 @@ import {
 import { listDraftsCached } from "../email/draftsCache.js";
 import { type DraftProvider, getDraftProvider } from "../email/providers.js";
 import { accountSignatureHtml, detachAccountSignature, outgoingBody } from "../email/signature.js";
+import { splitAddressList } from "../email/textUtils.js";
 import { listAccounts, pipedreamConfigured } from "../integrations/pipedream/connect.js";
 import { keepDraftProposal } from "../services/draftProposals.js";
 
@@ -60,6 +61,10 @@ const draftParams = Type.Object({ accountId: Type.String(), draftId: Type.String
 const draftPatchBody = Type.Object({
   body: Type.Optional(Type.String()),
   subject: Type.Optional(Type.String()),
+  /** Header values as typed, split RFC-aware below; "" clears the field. */
+  to: Type.Optional(Type.String()),
+  cc: Type.Optional(Type.String()),
+  bcc: Type.Optional(Type.String()),
 });
 const proposalParams = Type.Object({ proposalId: Type.String() });
 const keepProposalBody = Type.Object({ send: Type.Optional(Type.Boolean()) });
@@ -262,19 +267,31 @@ export const draftRoutes: FastifyPluginAsyncTypebox = async (app) => {
         if (!found.provider.updateDraft) {
           throw badRequest("editing a draft is not supported for this account");
         }
-        const { body, subject } = req.body;
+        const { body, subject, to, cc, bcc } = req.body;
+        // A quoted display name may hold its own commas, so the typed value is
+        // parsed rather than split.
+        const recipients = {
+          ...(to !== undefined ? { to: splitAddressList(to) } : {}),
+          ...(cc !== undefined ? { cc: splitAddressList(cc) } : {}),
+          ...(bcc !== undefined ? { bcc: splitAddressList(bcc) } : {}),
+        };
         let bodyPatch: { body?: string } | ReturnType<typeof outgoingBody> = { body };
         if (body !== undefined) {
           const signatureHtml = await accountSignatureHtml(found.account.id);
+          // The signature is re-appended only when the draft carried it before
+          // this edit; a hand-written one never had it. The prose itself always
+          // leaves as rendered html either way, so an edit cannot flatten a
+          // draft back to markdown source in the recipient's client.
+          let keepSignature: string | undefined;
           if (signatureHtml) {
             const current = await found.provider.getDraftDetail(found.account, req.params.draftId);
-            if (detachAccountSignature(current, signatureHtml)) {
-              bodyPatch = outgoingBody(body, signatureHtml);
-            }
+            if (detachAccountSignature(current, signatureHtml)) keepSignature = signatureHtml;
           }
+          bodyPatch = outgoingBody(body, keepSignature);
         }
         await found.provider.updateDraft(found.account, req.params.draftId, {
           ...bodyPatch,
+          ...recipients,
           subject,
         });
         // Best-effort: the provider save succeeded, so report success even if

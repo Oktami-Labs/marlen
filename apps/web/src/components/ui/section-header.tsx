@@ -4,14 +4,14 @@ import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { IconChip } from "@/components/ui/icon-chip";
 
-/** Title + description pair shared by top-level section/step headers. */
+/** Header shared by top-level sections and setup steps. */
 export function SectionHeader({
   title,
   description,
   icon,
 }: {
   title: string;
-  description: string;
+  description?: string;
   /** Replaces the accent bar with a 24px icon chip. */
   icon?: React.ReactNode;
 }) {
@@ -25,7 +25,7 @@ export function SectionHeader({
         )}
         {title}
       </h2>
-      <p className="text-sm text-muted-foreground">{description}</p>
+      {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
     </div>
   );
 }
@@ -124,7 +124,7 @@ export function Section({
   aside,
 }: {
   title: string;
-  description: string;
+  description?: string;
   children: React.ReactNode;
   className?: string;
   index?: number;

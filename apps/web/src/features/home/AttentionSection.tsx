@@ -93,7 +93,7 @@ export function AttentionSection({
   automations,
   drafts,
   colors,
-  focusDraft,
+  onOpenDraft,
   onDraftsChanged,
   onNavigate,
   seen,
@@ -102,9 +102,9 @@ export function AttentionSection({
   /** Email provider drafts; null while the (slow, live-mailbox) fetch is in flight. */
   drafts: AccountDrafts[] | null;
   colors: AccountColor[];
-  /** A draft opened via the search palette, expand and unfold so it's visible. */
-  focusDraft?: { accountId: string; draftId: string } | null;
-  /** A draft row was sent/discarded/saved: refresh the drafts list without waiting on the event debounce. */
+  /** Opens one draft on the reading screen that replaces this panel. */
+  onOpenDraft: (accountId: string, draftId: string) => void;
+  /** A draft row was sent/discarded: refresh the drafts list without waiting on the event debounce. */
   onDraftsChanged: () => void;
   onNavigate: (view: View) => void;
   seen: Seen;
@@ -136,12 +136,6 @@ export function AttentionSection({
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-
-  React.useEffect(() => {
-    if (!focusDraft) return;
-    setExpanded(true);
-    setAccountFilter("all");
-  }, [focusDraft]);
 
   const todos = todosQuery.data ?? [];
   // Most-recently completed first; reopening returns a todo to the open agenda.
@@ -404,7 +398,7 @@ export function AttentionSection({
               color={accountColor(colors, account.accountId)}
               markAccount={manyAccounts}
               dateLabel={dateLabel}
-              focusDraft={focusDraft?.accountId === account.accountId ? focusDraft : null}
+              onOpenDraft={onOpenDraft}
               onChanged={onDraftsChanged}
               onError={setRowError}
               seen={seen}
@@ -583,7 +577,7 @@ function AccountDraftGroup({
   color,
   markAccount,
   dateLabel,
-  focusDraft,
+  onOpenDraft,
   onChanged,
   onError,
   seen,
@@ -593,18 +587,13 @@ function AccountDraftGroup({
   /** Marks each row with this account's dot, set only when the list holds more than one inbox. */
   markAccount: boolean;
   dateLabel: (iso: string) => string;
-  /** Set when the palette targeted a draft in THIS account, unfold and expand it. */
-  focusDraft: { accountId: string; draftId: string } | null;
+  onOpenDraft: (accountId: string, draftId: string) => void;
   onChanged: () => void;
   onError: (message: string | null) => void;
   seen: Seen;
 }) {
   const { t } = useTranslation();
   const [showAll, setShowAll] = React.useState(false);
-
-  React.useEffect(() => {
-    if (focusDraft) setShowAll(true);
-  }, [focusDraft]);
 
   const visible = showAll ? account.drafts : account.drafts.slice(0, DRAFTS_VISIBLE);
   const hidden = account.drafts.length - visible.length;
@@ -631,10 +620,9 @@ function AccountDraftGroup({
                   markAccount={markAccount}
                   draft={draft}
                   dateLabel={dateLabel}
+                  onOpen={() => onOpenDraft(account.accountId, draft.id)}
                   onDeleted={onChanged}
-                  onSaved={onChanged}
                   onError={onError}
-                  forceOpen={focusDraft?.draftId === draft.id}
                   isNew={isNew}
                 />
               )}

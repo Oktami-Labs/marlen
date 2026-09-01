@@ -31,28 +31,22 @@
   },
   "views": {
     "chat": {
-      "title": "Chat",
-      "description": "Ask about your inbox, or tell the agent to draft, label, or clean up mail."
+      "title": "Chat"
     },
     "home": {
-      "title": "Home",
-      "description": "What needs you, what the agent prepared, and what ran recently."
+      "title": "Home"
     },
     "leads": {
-      "title": "Leads",
-      "description": "Every prospect the agent is tracking, from first inquiry to closed."
+      "title": "Leads"
     },
     "automations": {
-      "title": "Automations",
-      "description": "Run the agent on a schedule with a standing instruction."
+      "title": "Automations"
     },
     "knowledge": {
-      "title": "Knowledge",
-      "description": "Your assistant carries its wiki page summaries in every conversation and looks up documents as needed."
+      "title": "Knowledge"
     },
     "settings": {
-      "title": "Settings",
-      "description": "Your AI, connected accounts, permissions, and preferences."
+      "title": "Settings"
     }
   },
   "sidebar": {
@@ -588,6 +582,15 @@
   },
   "drafts": {
     "noSubject": "(no subject)",
+    "backToList": "Back to approvals",
+    "recipientsPlaceholder": "name@example.com",
+    "addCopies": "Cc/Bcc",
+    "position": "{{index}} of {{total}}",
+    "previous": "Previous draft",
+    "next": "Next draft",
+    "openReader": "Open draft",
+    "refineLabel": "Refine",
+    "bodyLabel": "Message",
     "open": "Open in mailbox",
     "discard": "Discard draft",
     "discardConfirm": "Discard this draft? It is removed from your mail account.",
@@ -606,6 +609,7 @@
     "cc": "Cc:",
     "bcc": "Bcc:",
     "subject": "Subject:",
+    "from": "From:",
     "me": "me"
   },
   "emailBody": {
@@ -832,29 +836,24 @@
     "sections": {
       "ai": {
         "title": "AI & model",
-        "description": "The AI that reads and answers your mail. Sign in with a subscription you already have (Claude, Copilot, ChatGPT) or use an API key, your sign-in stays on this computer.",
         "chipReady": "Ready",
         "chipSignIn": "Sign in required"
       },
       "accounts": {
         "title": "Accounts",
-        "description": "Email, CRM, and messaging accounts, and what each one is allowed to do.",
         "chipSetup": "Setup needed",
         "chipConnected_one": "{{count}} connected",
         "chipConnected_other": "{{count}} connected",
         "chipNoAccounts": "No accounts yet"
       },
       "preferences": {
-        "title": "Preferences",
-        "description": "How Marlene looks, speaks, and tells time."
+        "title": "Preferences"
       },
       "data": {
-        "title": "Local data",
-        "description": "Everything Marlene has stored on this computer, and how to back it up."
+        "title": "Local data"
       },
       "about": {
-        "title": "About",
-        "description": "The version you're running, and updates when a newer one ships."
+        "title": "About"
       },
       "language": {
         "title": "Language",
@@ -930,7 +929,6 @@
     "loginInputPlaceholder": "Paste the code / redirect URL if it doesn't finish…",
     "fileAccess": {
       "title": "File access",
-      "description": "What the assistant may do with files outside its own Marlene folder. That folder (wiki, your document library) is always available to it.",
       "chipOff": "No access",
       "read": {
         "title": "Read files",

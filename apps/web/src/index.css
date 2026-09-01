@@ -280,6 +280,27 @@
     cursor: not-allowed;
   }
 
+  /* A draft's own subject and body. They stay the panel's paper with no fill
+     and no box: a writing line under them appears on hover and turns accent
+     while you type, so the letter still reads as a letter and the parts you
+     can type in still say so. */
+  .field-paper {
+    background: transparent;
+    border-radius: 0;
+    border-bottom: 1px solid transparent;
+    cursor: text;
+    transition: border-color 0.15s ease;
+  }
+  .field-paper:hover {
+    border-bottom-color: var(--border);
+  }
+  .field-paper:focus-visible {
+    outline: none;
+    background: transparent;
+    border-bottom-color: var(--accent);
+    box-shadow: none;
+  }
+
   .tint-neutral {
     background: var(--surface-2-fill);
     color: var(--muted-foreground);

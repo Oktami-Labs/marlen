@@ -142,7 +142,8 @@ describe("gmail draft updates", () => {
     expect(mime).toContain("Content-Type: text/html; charset=UTF-8");
     expect(mime).toContain(`Content-ID: <${CONTENT_ID}>`);
     expect(mime).toContain('Content-Type: multipart/related; boundary="');
-    expect(mime).not.toContain("Content-Type: text/plain");
+    // The html survives beside its text twin rather than being flattened into it.
+    expect(mime).toContain("Content-Type: multipart/alternative");
     // The signature image stays an inline part, never a file attachment.
     expect(mime).not.toContain("Content-Disposition: attachment");
   });

@@ -12,11 +12,22 @@ export async function accountSignatureHtml(accountId: string): Promise<string | 
   return signatures.find((s) => s.accountId === accountId)?.html;
 }
 
-/** Provider body fields for a draft body: the styled html wrapper plus its cid images when the account has a signature, the plain body untouched otherwise. */
+/**
+ * Provider body fields for a draft body. Mail always leaves as html so the
+ * markdown the agent wrote arrives as formatting rather than asterisks, with
+ * the markdown source itself as the plain-text alternative: a text-only client
+ * gets readable prose, and reading the draft back returns the source it was
+ * written from rather than a flattened copy.
+ */
 export function outgoingBody(body: string, signatureHtml: string | undefined) {
-  if (!signatureHtml) return { body };
   const { html, images } = htmlBodyWithSignature(body, signatureHtml);
-  return { body: html, bodyFormat: "html" as const, inlineImages: images };
+  const signatureText = signatureHtml ? stripHtml(signatureHtml) : "";
+  return {
+    body: html,
+    bodyFormat: "html" as const,
+    bodyText: signatureText ? `${body}\n\n${signatureText}` : body,
+    ...(images.length > 0 ? { inlineImages: images } : {}),
+  };
 }
 
 /**

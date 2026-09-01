@@ -100,7 +100,6 @@ export function SettingsPanel({ onStatusChanged }: { onStatusChanged?: () => voi
         className="animate-in-up"
         icon={<Sparkles />}
         title={t("settings.sections.ai.title")}
-        description={t("settings.sections.ai.description")}
         aside={
           status &&
           (status.modelConfigured ? (
@@ -125,7 +124,6 @@ export function SettingsPanel({ onStatusChanged }: { onStatusChanged?: () => voi
         className="animate-in-up"
         icon={<Mail />}
         title={t("settings.sections.accounts.title")}
-        description={t("settings.sections.accounts.description")}
         aside={accountsChip}
       >
         <ConnectionsPanel onStatusChanged={() => void refresh()} />
@@ -138,7 +136,6 @@ export function SettingsPanel({ onStatusChanged }: { onStatusChanged?: () => voi
         className="animate-in-up"
         icon={<SlidersHorizontal />}
         title={t("settings.sections.preferences.title")}
-        description={t("settings.sections.preferences.description")}
       >
         <div className="flex flex-col gap-2">
           <AppearanceRow />
@@ -154,7 +151,6 @@ export function SettingsPanel({ onStatusChanged }: { onStatusChanged?: () => voi
         className="animate-in-up"
         icon={<DatabaseBackup />}
         title={t("settings.sections.data.title")}
-        description={t("settings.sections.data.description")}
       >
         <BackupRow />
       </Section>
@@ -164,7 +160,6 @@ export function SettingsPanel({ onStatusChanged }: { onStatusChanged?: () => voi
         className="animate-in-up"
         icon={<Info />}
         title={t("settings.sections.about.title")}
-        description={t("settings.sections.about.description")}
       >
         <AboutPanel />
       </Section>

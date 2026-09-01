@@ -10,12 +10,14 @@ it. Named helpers keep the effect consistent across call sites.
 
 1. **No borders, outlines, or strokes at rest.** No `border`, no `divide-*`, no
    outlined buttons, no hairline dividers. Separation is tone and whitespace.
-   Four exceptions, and nothing else: the `:focus-visible` ring; `border-border`
+   Five exceptions, and nothing else: the `:focus-visible` ring; `border-border`
    as a divider *inside* dense content (thread rails, markdown tables/blockquotes/
    hr, an expanded row's meta); `CardShell`, so agent work products read as
-   discrete blocks on the white chat rail; and `.surface-pop`, because a
-   scrimless panel over same-tone content has no other edge. Always the plain
-   hairline, never with an opacity modifier.
+   discrete blocks on the white chat rail; `.surface-pop`, because a
+   scrimless panel over same-tone content has no other edge; and `.field-paper`,
+   the draft's own fields, which must stay bare paper and so can only say "type
+   here" with a writing line under them. Always the plain hairline, never with
+   an opacity modifier.
 2. **No card-in-card.** A surface is never nested in a surface. Group with a
    heading and whitespace. One elevated panel holds plain rows, not more panels.
 3. **No drop shadows.** Nothing casts a blur, at rest or floating. Elevation is
@@ -37,7 +39,8 @@ clean call sites; when you add one, add it to this list.
 - **Spinners:** the shared `Spinner`. A busy button takes `loading` (which
   disables it and swaps its icon). Never use a raw `Loader2` or a spin-class ternary.
 - **Inputs / textareas / selects:** filled `surface-2`, no border; focus lightens
-  the fill and adds the ring.
+  the fill and adds the ring. `.field-paper` is the single exception (see
+  **Draft as a letter**).
 - **Badges:** pill, pastel tonal fill, no border.
 - **Account dots:** `AccountDot` (`ui/account-dot.tsx`) for every round dot marker.
   Never hand-mix a dot fill or repeat `UNASSIGNED_ACCOUNT_COLOR`.
@@ -51,11 +54,14 @@ clean call sites; when you add one, add it to this list.
   people (`lib/addresses.ts`) and the raw list stays in the tooltip; the account's
   own address reads as "me".
 - **Draft as a letter:** a draft sets its mail headers over a hairline and its
-  prose below, on the bare surface, in the chat card and in the open Home row
-  alike. Its subject and body fields carry no
-  fill at rest: they take a `surface-2` fill on hover and the ring on focus, so
-  the draft reads as a message and answers as a form only once you reach for it.
-  This is the one place an input is not a filled control at rest.
+  prose below, on the bare surface, in the chat card and on the reading screen
+  alike (`features/drafts/DraftReader.tsx`, which replaces the Home agenda while
+  `?draft=<accountId>:<draftId>` is set). Its subject and body are `.field-paper`:
+  no fill and no box, just the paper, with a writing line that surfaces under
+  the text on hover and turns accent while the caret is in it. A fill or a box
+  would stop the letter reading as a letter; the line alone still says which
+  parts you type in. Every other control in the app stays a filled `surface-2`
+  field. An approval row never edits in place; it opens the letter.
 - **App logos:** `AppIcon` with a mail-glyph fallback.
 - **Received message body:** `EmailBody` (`components/EmailBody.tsx`). It renders the
   sender's own HTML in a sandboxed frame that sizes itself to its content,
@@ -79,6 +85,9 @@ clean call sites; when you add one, add it to this list.
   palette rows; it sizes the icon.
 - **Section titles:** `SectionTitle` (`ui/section-header.tsx`) for every
   top-level page section; `SectionHeader`/`Section` for settings/setup pages.
+- **Headers:** page and settings-section headers contain only the title plus
+  relevant status or actions. Do not add a subtitle or description line. Put
+  necessary guidance beside the control or state it explains.
 - **Group labels:** `GroupLabel`, the uppercase muted overline over a group of
   rows; `sm` for dense meta lists.
 - **Settings rows:** `SettingRow`, with label and description left and control right. Use `bare`

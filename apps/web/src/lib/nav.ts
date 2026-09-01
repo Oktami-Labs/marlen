@@ -50,7 +50,6 @@ export const SHOWCASE_NAV = {
   path: "/showcase",
   icon: Palette,
   title: "UI Showcase",
-  description: "Component gallery & theme lab (dev only)",
 } as const;
 
 /**

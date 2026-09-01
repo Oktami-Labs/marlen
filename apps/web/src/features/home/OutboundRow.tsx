@@ -126,7 +126,7 @@ export function OutboundRow({
         <button
           type="button"
           onClick={() => setOpen((v) => !v)}
-          className="flex min-w-0 flex-1 basis-full items-center gap-2 text-left @md:basis-auto"
+          className="flex min-w-0 flex-1 basis-full items-center gap-2 text-left @md:basis-0"
         >
           <IconChip size="sm" tone="tint-success">
             <MessageSquare />

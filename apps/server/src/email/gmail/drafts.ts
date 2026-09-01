@@ -198,6 +198,24 @@ function relatedBodyLines(
   ];
 }
 
+/**
+ * The rich body and its plain-text twin as multipart/alternative. The text part
+ * comes first: a client picks the last alternative it understands, so anything
+ * that can render html does, and a text-only client falls back to the source.
+ */
+function alternativeBodyLines(bodyText: string, richLines: string[]): string[] {
+  const boundary = `alt-${randomUUID()}`;
+  return [
+    `Content-Type: multipart/alternative; boundary="${boundary}"`,
+    "",
+    `--${boundary}`,
+    ...bodyPartLines(bodyText, "text"),
+    `--${boundary}`,
+    ...richLines,
+    `--${boundary}--`,
+  ];
+}
+
 /** One attachment as MIME part lines: an ASCII `filename` fallback plus RFC 5987/6266 `filename*`, so names like "Exposé.pdf" survive. */
 function attachmentPartLines(attachment: DraftAttachment): string[] {
   // A CR/LF in a filename would smuggle extra MIME headers, same as a recipient (see assertSafeHeaderValue).
@@ -229,6 +247,7 @@ function buildRawMessage(input: {
   subject: string;
   body: string;
   bodyFormat?: "text" | "html";
+  bodyText?: string;
   extraHeaders?: string[];
   attachments?: DraftAttachment[];
   inlineImages?: InlineImage[];
@@ -246,9 +265,13 @@ function buildRawMessage(input: {
     "MIME-Version: 1.0",
   ];
 
-  const bodyLines = input.inlineImages?.length
+  const richLines = input.inlineImages?.length
     ? relatedBodyLines(input.body, input.bodyFormat, input.inlineImages)
     : bodyPartLines(input.body, input.bodyFormat);
+  const bodyLines =
+    input.bodyFormat === "html" && input.bodyText !== undefined
+      ? alternativeBodyLines(input.bodyText, richLines)
+      : richLines;
   const lines =
     input.attachments && input.attachments.length > 0
       ? [...headerLines, ...multipartMixedLines(bodyLines, input.attachments)]
@@ -321,6 +344,7 @@ async function createGmailDraft(
     subject: input.subject,
     body: input.body,
     ...(input.bodyFormat ? { bodyFormat: input.bodyFormat } : {}),
+    ...(input.bodyText !== undefined ? { bodyText: input.bodyText } : {}),
     ...(input.attachments?.length ? { attachments: input.attachments } : {}),
     ...(input.inlineImages?.length ? { inlineImages: input.inlineImages } : {}),
     ...(threadingHeaders
@@ -419,6 +443,8 @@ async function fetchGmailDraftFull(
   /** The stored body verbatim, html when the draft has an html part, so an update can carry it over unflattened. */
   body: string;
   bodyFormat: "text" | "html";
+  /** The stored text alternative, so an update that only touches the subject keeps it. */
+  bodyText: string;
   threadId: string;
   extraHeaders: string[];
   attachments: DraftAttachment[];
@@ -447,6 +473,7 @@ async function fetchGmailDraftFull(
     subject: header("Subject"),
     body: html ?? plainTextBody(payload),
     bodyFormat: html ? "html" : "text",
+    bodyText: plainTextBody(payload),
     threadId: full.message?.threadId ?? "",
     extraHeaders: PRESERVED_HEADERS.filter((name) => header(name)).map(
       (name) => `${name}: ${header(name)}`,
@@ -472,14 +499,21 @@ async function updateGmailDraft(
   const current = await fetchGmailDraftFull(account, draftId);
   const replacingBody = input.body !== undefined;
   const bodyFormat = replacingBody ? input.bodyFormat : current.bodyFormat;
+  const bodyText = replacingBody ? input.bodyText : current.bodyText;
   const inlineImages = replacingBody ? input.inlineImages : current.inlineImages;
+  // Gmail's update replaces the whole message, so an untouched recipient set
+  // is carried over verbatim rather than rebuilt from a lossy split/rejoin.
+  const to = input.to ? input.to.join(", ") : current.to;
+  const cc = input.cc ? input.cc.join(", ") : current.cc;
+  const bcc = input.bcc ? input.bcc.join(", ") : current.bcc;
   const raw = buildRawMessage({
-    to: current.to,
-    ...(current.cc ? { cc: current.cc } : {}),
-    ...(current.bcc ? { bcc: current.bcc } : {}),
+    to,
+    ...(cc ? { cc } : {}),
+    ...(bcc ? { bcc } : {}),
     subject: input.subject ?? current.subject,
     body: input.body ?? current.body,
     ...(bodyFormat ? { bodyFormat } : {}),
+    ...(bodyText !== undefined ? { bodyText } : {}),
     ...(inlineImages?.length ? { inlineImages } : {}),
     extraHeaders: current.extraHeaders,
     ...(current.attachments.length > 0 ? { attachments: current.attachments } : {}),

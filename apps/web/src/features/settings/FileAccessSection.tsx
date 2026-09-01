@@ -117,7 +117,6 @@ export function FileAccessSection({ index }: { index: number }) {
       className="animate-in-up"
       icon={<HardDrive />}
       title={t("settings.fileAccess.title")}
-      description={t("settings.fileAccess.description")}
       aside={chip}
     >
       <div className="flex flex-col gap-2">

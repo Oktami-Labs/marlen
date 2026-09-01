@@ -139,6 +139,8 @@ async function createStandaloneOutlookDraft(
   return (await proxyRequest(account.id, "post", `${GRAPH_API}/messages`, {
     body: {
       subject: input.subject,
+      // Graph carries one body, so there is no multipart/alternative to fill:
+      // `bodyText` is dropped and Exchange derives the text part downstream.
       body: { contentType: input.bodyFormat === "html" ? "HTML" : "Text", content: input.body },
       toRecipients: toRecipientsPayload(input.to),
       ...(input.cc?.length ? { ccRecipients: toRecipientsPayload(input.cc) } : {}),
@@ -239,8 +241,11 @@ async function updateOutlookDraft(
 ): Promise<void> {
   const body: Record<string, unknown> = {};
   if (patch.subject !== undefined) body.subject = patch.subject;
-  // Text unless the caller says html: an edit in Marlen's plain-text editor
-  // saves as plain text, not silently as HTML.
+  if (patch.to) body.toRecipients = toRecipientsPayload(patch.to);
+  if (patch.cc) body.ccRecipients = toRecipientsPayload(patch.cc);
+  if (patch.bcc) body.bccRecipients = toRecipientsPayload(patch.bcc);
+  // Rendered html unless the caller says otherwise, matching what the body was
+  // saved as when the draft was written.
   if (patch.body !== undefined) {
     body.body = {
       contentType: patch.bodyFormat === "html" ? "HTML" : "Text",
