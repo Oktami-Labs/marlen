@@ -1,4 +1,5 @@
 import { OptionRow } from "@/components/ui/option-row";
+import { ScrollEdges } from "@/components/ui/scroll-edges";
 import type { SlashMenuState } from "@/features/chat/composer/useSlashCommands";
 
 /**
@@ -9,10 +10,12 @@ import type { SlashMenuState } from "@/features/chat/composer/useSlashCommands";
 export function SlashMenu({ open, items, active, setActive, pick }: SlashMenuState) {
   if (!open) return null;
   return (
-    <div
+    <ScrollEdges
       role="listbox"
       aria-label="/"
-      className="surface-pop animate-in-up absolute inset-x-0 bottom-full z-20 mb-2 flex max-h-64 flex-col gap-0.5 overflow-y-auto p-1"
+      activeIndex={active}
+      className="surface-pop animate-in-up absolute inset-x-0 bottom-full z-20 mb-2"
+      viewportClassName="flex max-h-64 flex-col gap-0.5 p-1"
     >
       {items.map((command, i) => (
         <OptionRow
@@ -31,6 +34,6 @@ export function SlashMenu({ open, items, active, setActive, pick }: SlashMenuSta
           className="shrink-0 py-2"
         />
       ))}
-    </div>
+    </ScrollEdges>
   );
 }

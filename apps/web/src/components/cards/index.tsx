@@ -8,6 +8,7 @@ import { DelegationCard } from "./DelegationCard";
 import { EmailDraftCard } from "./EmailDraftCard";
 import { FormCard } from "./FormCard";
 import { LeadCard } from "./LeadCard";
+import { MailSourcesCard } from "./MailSourcesCard";
 import { MessageDraftCard } from "./MessageDraftCard";
 import { SourcesCard } from "./SourcesCard";
 import { WikiNoteCard } from "./WikiNoteCard";
@@ -41,6 +42,8 @@ export function AgentCardView({ card, colors }: { card: AgentCard; colors?: Acco
       return <ChoicesCard card={card} colors={colors} />;
     case "sources":
       return <SourcesCard card={card} />;
+    case "mail_sources":
+      return <MailSourcesCard card={card} colors={colors} />;
     case "form":
       return <FormCard card={card} />;
     case "wiki_note":

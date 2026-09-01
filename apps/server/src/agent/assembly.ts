@@ -6,11 +6,12 @@ import { loadOnOfficeTools } from "../integrations/onoffice/tools.js";
 import { buildWhatsAppTools } from "../integrations/whatsapp/tools.js";
 import { appHelpTool } from "./appHelpTool.js";
 import { automationManageTools, automationReadTools } from "./automationTools.js";
-import { composeBriefingTool } from "./briefingTool.js";
+import { buildComposeBriefingTool } from "./briefingTool.js";
 import type { SessionCapabilities } from "./capabilities.js";
 import { presentChartTool } from "./chartTool.js";
 import { presentChoicesTool } from "./choicesTool.js";
 import { compactedMessages } from "./compaction.js";
+import { buildConversationSearchTool } from "./conversationTools.js";
 import { buildDelegateTool } from "./delegate.js";
 import { keepDraftTool, listDraftsTool } from "./draftTools.js";
 import type { EmailToolset } from "./emailToolset.js";
@@ -19,6 +20,7 @@ import { presentFormTool } from "./formTool.js";
 import { recordCompactionMarker } from "./history.js";
 import { leadDeleteTool, leadTools } from "./leadTools.js";
 import { getThinkingLevel, resolveActiveModel } from "./llm/registry.js";
+import { buildMailReadTools } from "./mailTools.js";
 import { streamViaModelRegistry } from "./oneShot.js";
 import { buildSystemPrompt } from "./prompt.js";
 import { buildTodoTools } from "./todoTools.js";
@@ -45,7 +47,8 @@ export async function buildAgent(
   toolset: EmailToolset,
   history: Message[],
   caps: SessionCapabilities,
-  sessionId?: string,
+  toolSessionId: string,
+  conversationId = toolSessionId,
 ): Promise<Agent> {
   const model = await resolveActiveModel();
   const onOfficeTools = await loadOnOfficeTools({
@@ -53,17 +56,19 @@ export async function buildAgent(
     allowCreates: caps.onOffice.creates,
   });
   const whatsappTools = caps.whatsapp.linked
-    ? buildWhatsAppTools(caps.whatsapp.mirror, sessionId)
+    ? buildWhatsAppTools(caps.whatsapp.mirror, conversationId)
     : [];
   // Unattended sessions never receive whole-filesystem grants.
   const fileTools = await buildFileTools(caps.interactive);
   const systemPrompt = await buildSystemPrompt(caps);
+  const mailReadTools = buildMailReadTools(toolSessionId);
   const agent = new Agent({
     initialState: {
       systemPrompt,
       model,
       thinkingLevel: await resolveThinkingLevel(model),
       tools: [
+        ...mailReadTools,
         listDraftsTool,
         ...(caps.interactive ? [keepDraftTool] : []),
         ...toolset.tools,
@@ -78,20 +83,21 @@ export async function buildAgent(
         // Unattended content cannot create or alter standing prompts.
         ...(caps.interactive ? automationManageTools : []),
         ...automationReadTools,
+        ...(caps.interactive ? [buildConversationSearchTool(conversationId)] : []),
         // Lead deletion stays interactive because it cascades to automations.
         ...(caps.onOffice.configured ? leadTools : []),
         ...(caps.onOffice.configured && caps.interactive ? [leadDeleteTool] : []),
-        ...buildTodoTools(sessionId),
-        buildDelegateTool(toolset.readTools),
+        ...buildTodoTools(conversationId),
+        buildDelegateTool(toolset.readTools, mailReadTools),
         ...(caps.interactive ? [voiceLearnTool] : []),
-        composeBriefingTool,
+        buildComposeBriefingTool(toolSessionId),
         ...(caps.interactive ? [presentChoicesTool, presentFormTool] : []),
         ...(caps.interactive ? [presentChartTool] : []),
       ],
       messages: history,
     },
     streamFn: streamViaModelRegistry,
-    sessionId,
+    sessionId: toolSessionId,
   });
   // Prompt and tool definitions are the fixed context compaction cannot trim.
   log.info(
@@ -117,9 +123,9 @@ export async function buildAgent(
     );
     if (!compacted) return undefined;
     agent.state.messages = compacted;
-    if (sessionId) {
-      await recordCompactionMarker(sessionId, compacted).catch((err: unknown) => {
-        log.warn({ err, conversationId: sessionId }, "persisting the compaction marker failed");
+    if (conversationId) {
+      await recordCompactionMarker(conversationId, compacted).catch((err: unknown) => {
+        log.warn({ err, conversationId }, "persisting the compaction marker failed");
       });
     }
     return { context: { ...context, messages: compacted } };

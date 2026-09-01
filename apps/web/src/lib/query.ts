@@ -53,6 +53,7 @@ const DATA_TOPICS: Record<Exclude<ServerEventTopic, "notification">, true> = {
   wiki: true,
   library: true,
   conversations: true,
+  chat: true,
   automations: true,
   learn: true,
   leads: true,

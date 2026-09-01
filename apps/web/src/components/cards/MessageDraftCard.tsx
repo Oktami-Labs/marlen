@@ -39,18 +39,28 @@ export function MessageDraftCard({ card }: { card: MessageDraftData }) {
       try {
         await api.sendOutbound(card.draftId);
         setLocalStatus("sent");
+        return true;
       } catch (err) {
-        if (isNotFound(err)) setLocalStatus("gone");
-        else toast.error(err);
+        if (isNotFound(err)) {
+          setLocalStatus("gone");
+          return true;
+        }
+        toast.error(err);
+        return false;
       }
     },
     discard: async () => {
       try {
         await api.discardOutbound(card.draftId);
         setLocalStatus("discarded");
+        return true;
       } catch (err) {
-        if (isNotFound(err)) setLocalStatus("gone");
-        else toast.error(err);
+        if (isNotFound(err)) {
+          setLocalStatus("gone");
+          return true;
+        }
+        toast.error(err);
+        return false;
       }
     },
   });
@@ -97,7 +107,7 @@ export function MessageDraftCard({ card }: { card: MessageDraftData }) {
         pending={actions.pending}
         busy={actions.busy}
         onClose={actions.close}
-        onConfirm={() => void actions.confirm()}
+        onConfirm={actions.confirm}
         labels={{
           send: {
             title: t("chat.cards.draft.send"),

@@ -7,8 +7,10 @@ import type { TurnLogger } from "../../core/logger.js";
  */
 
 export interface TurnRunnerInput {
-  /** The run id; doubles as the run's conversation id. */
+  /** Unique execution id; also scopes this run's provider evidence and progress. */
   runId: string;
+  /** Stable transcript shared by every run of this automation. */
+  conversationId: string;
   prompt: string;
   title: string;
   signal: AbortSignal;

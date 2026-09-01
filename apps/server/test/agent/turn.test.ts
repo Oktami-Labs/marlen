@@ -91,9 +91,9 @@ describe("an agent turn", () => {
       log: silentLog,
     });
 
-    // Dashes reach neither the live stream nor the stored row.
-    expect(deltas.join("")).toBe("Done, the ");
-    expect(text).toBe("Done, the draft is ready.");
+    // The transcript preserves exactly what the model streamed and returned.
+    expect(deltas.join("")).toBe("Done — the ");
+    expect(text).toBe("Done — the draft is ready.");
     expect(cards).toEqual([{ toolCallId: "call-1", card }]);
 
     const { db, schema } = dbModule;
@@ -112,7 +112,7 @@ describe("an agent turn", () => {
     const assistant = rows.find((row) => row.role === "assistant");
     // The persisted user row keeps the RAW prompt; decoration is model-only.
     expect(user?.content).toBe("draft me a reply to Anna");
-    expect(assistant?.content).toBe("Done, the draft is ready.");
+    expect(assistant?.content).toBe("Done — the draft is ready.");
     expect(JSON.parse(assistant?.cards ?? "[]")).toEqual([{ toolCallId: "call-1", card }]);
     // The turn's tool activity persists with the row: the UI's activity view
     // and the model-history rebuild both read it.
@@ -137,7 +137,7 @@ describe("an agent turn", () => {
         id: "m2",
         conversationId,
         role: "assistant",
-        content: "Found it.",
+        content: "Searching. Found it.",
         toolCalls: JSON.stringify([
           {
             id: "t1",
@@ -146,6 +146,18 @@ describe("an agent turn", () => {
             done: true,
             parameters: { q: "invoice" },
             result: { content: [{ type: "text", text: "1 thread found." }] },
+            contentOffset: 0,
+            batch: 0,
+          },
+          {
+            id: "t2",
+            name: "read_thread",
+            isError: false,
+            done: true,
+            parameters: { threadId: "thread-1" },
+            result: { content: [{ type: "text", text: "Invoice 42." }] },
+            contentOffset: 10,
+            batch: 1,
           },
         ]),
         createdAt: at(1000),
@@ -154,7 +166,14 @@ describe("an agent turn", () => {
 
     const history = await import("../../src/agent/history.js");
     const first = await history.loadHistory(conversationId);
-    expect(first.map((m) => m.role)).toEqual(["user", "assistant", "toolResult", "assistant"]);
+    expect(first.map((m) => m.role)).toEqual([
+      "user",
+      "assistant",
+      "toolResult",
+      "assistant",
+      "toolResult",
+      "assistant",
+    ]);
     expect(first[1]).toMatchObject({
       role: "assistant",
       content: [{ type: "toolCall", id: "t1", name: "search_email" }],
@@ -163,6 +182,18 @@ describe("an agent turn", () => {
       role: "toolResult",
       toolCallId: "t1",
       content: [{ type: "text", text: "1 thread found." }],
+    });
+    expect(first[3]).toMatchObject({
+      role: "assistant",
+      content: [
+        { type: "text", text: "Searching." },
+        { type: "toolCall", id: "t2", name: "read_thread" },
+      ],
+    });
+    expect(first[4]).toMatchObject({
+      role: "toolResult",
+      toolCallId: "t2",
+      content: [{ type: "text", text: "Invoice 42." }],
     });
 
     // A compaction row replays as the live session experienced it: the rows
@@ -180,11 +211,13 @@ describe("an agent turn", () => {
     ]);
     const rebuilt = await history.loadHistory(conversationId);
     expect(rebuilt[0]).toMatchObject({
-      role: "user",
-      content: "[Summary] The invoice was found.",
+      role: "assistant",
+      content: [{ type: "text", text: "[Summary] The invoice was found." }],
     });
     expect(rebuilt.map((m) => m.role)).toEqual([
-      "user",
+      "assistant",
+      "assistant",
+      "toolResult",
       "assistant",
       "toolResult",
       "assistant",
@@ -246,6 +279,78 @@ describe("an agent turn", () => {
       .where(eq(schema.messages.conversationId, "run-1"));
     const assistant = rows.find((row) => row.role === "assistant");
     expect(assistant?.content).toContain("This turn failed: model exploded");
+  });
+
+  it("asks a run that worked in silence for its report and records that as the reply", async () => {
+    const prompts: string[] = [];
+    turnRecorder._setSessionsForTest({
+      ...unusedSessions,
+      ephemeral: async () =>
+        fakeSession(async (prompt, handlers) => {
+          prompts.push(prompt);
+          if (prompts.length === 1) {
+            // Work, then end the turn with nothing said after the tool call.
+            handlers?.onTextDelta?.("Checking the inbox.");
+            handlers?.onToolStart?.("call-1", "list_emails", "List emails", {});
+            handlers?.onToolEnd?.("call-1", "list_emails", false, {
+              content: [{ type: "text", text: "No new mail." }],
+            });
+            return "Checking the inbox.";
+          }
+          handlers?.onTextDelta?.("Nothing new since the last run.");
+          return "Nothing new since the last run.";
+        }),
+    });
+
+    const turn = turnRecorder.beginTurn("run-silent");
+    const result = await turn.run({
+      prompt: "Scheduled automation …",
+      session: "ephemeral",
+      conversation: { type: "automation", title: "Run: Mail sweep" },
+      requireReport: true,
+      log: silentLog,
+    });
+
+    expect(prompts).toHaveLength(2);
+    expect(prompts[1]).toContain("report");
+    expect(result.text).toBe("Checking the inbox.\n\nNothing new since the last run.");
+
+    // The report is the turn's reply on the transcript; the reminder is not.
+    const { db, schema } = dbModule;
+    const rows = await db
+      .select()
+      .from(schema.messages)
+      .where(eq(schema.messages.conversationId, "run-silent"));
+    expect(rows.map((row) => row.role)).toEqual(["user", "assistant"]);
+    expect(rows[1]?.content).toBe("Checking the inbox.\n\nNothing new since the last run.");
+  });
+
+  it("leaves a run that reported alone", async () => {
+    let calls = 0;
+    turnRecorder._setSessionsForTest({
+      ...unusedSessions,
+      ephemeral: async () =>
+        fakeSession(async (_prompt, handlers) => {
+          calls++;
+          handlers?.onToolStart?.("call-1", "list_emails", "List emails", {});
+          handlers?.onToolEnd?.("call-1", "list_emails", false, {
+            content: [{ type: "text", text: "No new mail." }],
+          });
+          handlers?.onTextDelta?.("Nothing new.");
+          return "Nothing new.";
+        }),
+    });
+
+    const turn = turnRecorder.beginTurn("run-reported");
+    const result = await turn.run({
+      prompt: "Scheduled automation …",
+      session: "ephemeral",
+      conversation: { type: "automation", title: "Run: Mail sweep" },
+      requireReport: true,
+      log: silentLog,
+    });
+    expect(calls).toBe(1);
+    expect(result.text).toBe("Nothing new.");
   });
 
   it("tells the user a new chat won't help when the request's fixed part is what overflows", async () => {

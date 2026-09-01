@@ -4,6 +4,7 @@ import type {
   ChatStreamEvent,
   ChatToolCall,
   EmailRef,
+  LiveChatTurn,
 } from "@marlen/shared";
 
 export interface DisplayMessage {
@@ -20,6 +21,7 @@ export interface DisplayMessage {
   errorKind?: "rate_limit";
   systemPrompt?: string;
   refs?: EmailRef[];
+  memoryIds?: string[];
 }
 
 export interface RunEntry {
@@ -37,7 +39,10 @@ export interface RunState {
   runs: Record<string, RunEntry>;
   runIdByConversation: Record<string, string>;
   messageCache: Record<string, DisplayMessage[]>;
+  messageCacheOrder: string[];
 }
+
+const MESSAGE_CACHE_LIMIT = 20;
 
 export type RunAction =
   | { type: "restore"; result: { conversationId: string; messages: DisplayMessage[] } | null }
@@ -58,18 +63,9 @@ export type RunAction =
   | { type: "update-message"; id: string; patch: Partial<DisplayMessage> }
   | { type: "set-busy"; busy: boolean };
 
-export const IDLE_RESET_MS = 60 * 60 * 1000;
-
-/** Active turns never expire. */
-export function isIdleStale(messages: DisplayMessage[], now: number): boolean {
-  const last = messages[messages.length - 1];
-  if (last?.role !== "assistant" || last.streaming) return false;
-  return now - Date.parse(last.createdAt) > IDLE_RESET_MS;
-}
-
-export function createInitialRunState(): RunState {
+export function createInitialRunState(activeConversationId?: string): RunState {
   return {
-    activeConversationId: undefined,
+    activeConversationId,
     messages: [],
     busy: false,
     restoring: true,
@@ -78,6 +74,7 @@ export function createInitialRunState(): RunState {
     runs: {},
     runIdByConversation: {},
     messageCache: {},
+    messageCacheOrder: [],
   };
 }
 
@@ -92,6 +89,20 @@ export function toDisplayMessage(m: ChatMessage): DisplayMessage {
     streaming: false,
     error: m.error,
     refs: m.refs,
+    memoryIds: m.memoryIds,
+  };
+}
+
+export function toLiveDisplayMessage(turn: LiveChatTurn): DisplayMessage {
+  return {
+    id: turn.id,
+    role: "assistant",
+    content: turn.content,
+    createdAt: turn.createdAt,
+    toolCalls: turn.toolCalls,
+    cards: turn.cards,
+    streaming: true,
+    thinking: turn.thinking,
   };
 }
 
@@ -100,6 +111,21 @@ function withoutKey<T>(map: Record<string, T>, key: string): Record<string, T> {
   const next = { ...map };
   delete next[key];
   return next;
+}
+
+function cacheMessages(
+  state: RunState,
+  conversationId: string,
+  messages: DisplayMessage[],
+): Pick<RunState, "messageCache" | "messageCacheOrder"> {
+  const messageCache = { ...state.messageCache, [conversationId]: messages };
+  const messageCacheOrder = [
+    ...state.messageCacheOrder.filter((id) => id !== conversationId),
+    conversationId,
+  ];
+  const evicted = messageCacheOrder.length > MESSAGE_CACHE_LIMIT ? messageCacheOrder.shift() : null;
+  if (evicted) delete messageCache[evicted];
+  return { messageCache, messageCacheOrder };
 }
 
 /** Update a run, its cache, and the visible transcript when they refer to the same run. */
@@ -114,10 +140,13 @@ function applyToRunMessages(
   const nextMessages = update(run.messages);
   const nextRun: RunEntry = { ...run, messages: nextMessages };
   const runs = { ...state.runs, [runId]: nextRun };
-  const messageCache =
+  const cached =
     run.conversationId !== undefined
-      ? { ...state.messageCache, [run.conversationId]: nextMessages }
-      : state.messageCache;
+      ? cacheMessages(state, run.conversationId, nextMessages)
+      : {
+          messageCache: state.messageCache,
+          messageCacheOrder: state.messageCacheOrder,
+        };
   const isVisible =
     state.activeRunId === runId ||
     (run.conversationId !== undefined && state.activeConversationId === run.conversationId);
@@ -125,7 +154,7 @@ function applyToRunMessages(
   return {
     ...state,
     runs,
-    messageCache,
+    ...cached,
     messages: isVisible ? nextMessages : state.messages,
   };
 }
@@ -171,13 +200,13 @@ function reduceStreamEvent(
       const updatedRun: RunEntry = { ...run, conversationId: event.conversationId };
       const runs = { ...state.runs, [runId]: updatedRun };
       const runIdByConversation = { ...state.runIdByConversation, [event.conversationId]: runId };
-      const messageCache = { ...state.messageCache, [event.conversationId]: run.messages };
+      const cached = cacheMessages(state, event.conversationId, run.messages);
       const wasActive = state.activeRunId === runId;
       return {
         ...state,
         runs,
         runIdByConversation,
-        messageCache,
+        ...cached,
         activeConversationId: wasActive ? event.conversationId : state.activeConversationId,
       };
     }
@@ -254,13 +283,15 @@ function reduceStreamEvent(
 export function reduceRunEvent(state: RunState, action: RunAction): RunState {
   switch (action.type) {
     case "restore": {
+      if (!state.restoring) return state;
       if (!action.result) return { ...state, restoring: false };
       const { conversationId, messages } = action.result;
+      const cached = cacheMessages(state, conversationId, messages);
       return {
         ...state,
         activeConversationId: conversationId,
         messages,
-        messageCache: { ...state.messageCache, [conversationId]: messages },
+        ...cached,
         restoring: false,
         resumed: false,
       };
@@ -275,15 +306,18 @@ export function reduceRunEvent(state: RunState, action: RunAction): RunState {
         conversationId !== undefined
           ? { ...state.runIdByConversation, [conversationId]: runId }
           : state.runIdByConversation;
-      const messageCache =
+      const cached =
         conversationId !== undefined
-          ? { ...state.messageCache, [conversationId]: nextMessages }
-          : state.messageCache;
+          ? cacheMessages(state, conversationId, nextMessages)
+          : {
+              messageCache: state.messageCache,
+              messageCacheOrder: state.messageCacheOrder,
+            };
       return {
         ...state,
         runs,
         runIdByConversation,
-        messageCache,
+        ...cached,
         activeRunId: runId,
         messages: nextMessages,
         busy: true,
@@ -321,22 +355,28 @@ export function reduceRunEvent(state: RunState, action: RunAction): RunState {
     case "open-conversation": {
       const { conversationId } = action;
       const liveRunId = state.runIdByConversation[conversationId];
-      const cached = state.messageCache[conversationId];
+      const messages =
+        (liveRunId ? state.runs[liveRunId]?.messages : undefined) ??
+        state.messageCache[conversationId];
+      const cached = messages ? cacheMessages(state, conversationId, messages) : null;
       return {
         ...state,
+        ...(cached ?? {}),
         activeConversationId: conversationId,
         activeRunId: liveRunId,
         busy: Boolean(liveRunId),
-        messages: cached ?? state.messages,
+        messages: messages ?? [],
+        restoring: false,
         resumed: true,
       };
     }
     case "open-conversation-loaded": {
       if (state.activeConversationId !== action.conversationId) return state;
+      const cached = cacheMessages(state, action.conversationId, action.messages);
       return {
         ...state,
         messages: action.messages,
-        messageCache: { ...state.messageCache, [action.conversationId]: action.messages },
+        ...cached,
       };
     }
     case "new-conversation":
@@ -346,6 +386,7 @@ export function reduceRunEvent(state: RunState, action: RunAction): RunState {
         activeRunId: undefined,
         busy: false,
         messages: [],
+        restoring: false,
         resumed: false,
       };
     case "append-messages":

@@ -38,11 +38,11 @@ export function useQuickActionMode() {
  * command lands on the persistent ChatPanel instance directly, so there is
  * no mount race to bridge.
  */
-export function openRunInChat(runId: string, goToChat: () => void): void {
-  openConversationInChat(runId, goToChat);
+export function openRunInChat(conversationId: string, goToChat: () => void): void {
+  openConversationInChat(conversationId, goToChat);
 }
 
-/** Navigate to Chat and open a conversation by id (a run id is one), used by todo provenance links. */
+/** Navigate to Chat and open a conversation by id, used by todo provenance links. */
 export function openConversationInChat(conversationId: string, goToChat: () => void): void {
   goToChat();
   sendChatCommand({ kind: "open", conversationId });

@@ -3,10 +3,17 @@ import { upstreamStatusCode } from "../../core/errors.js";
 import { mapWithConcurrency } from "../../core/utils/jobs.js";
 import { proxyRequest } from "../../integrations/pipedream/connect.js";
 import { sanitizeEmailHtml } from "../htmlBody.js";
-import type { MailReadProvider, SentMessage, ThreadDetail } from "../read/readProviders.js";
+import type {
+  MailMessageSummary,
+  MailReadProvider,
+  MailSearch,
+  SentMessage,
+  ThreadDetail,
+} from "../read/readProviders.js";
 import { splitAddressList } from "../textUtils.js";
 import {
   decodeHeaderText,
+  decodeHtmlEntities,
   GMAIL_API,
   headerLookup,
   htmlBody,
@@ -29,7 +36,16 @@ interface GmailMessageFull {
   id: string;
   threadId: string;
   internalDate?: string;
+  labelIds?: string[];
+  snippet?: string;
   payload?: MessagePart & { headers?: { name: string; value: string }[] };
+}
+
+/** internalDate is a millisecond epoch carried as a string. */
+function internalDateIso(msg: GmailMessageFull): string {
+  return msg.internalDate
+    ? new Date(Number(msg.internalDate)).toISOString()
+    : new Date().toISOString();
 }
 
 function toSentMessage(msg: GmailMessageFull): SentMessage {
@@ -40,11 +56,64 @@ function toSentMessage(msg: GmailMessageFull): SentMessage {
     subject: decodeHeaderText(header("Subject")),
     // Decode encoded-words AFTER splitting: a decoded display name may contain a comma that would create a bogus entry.
     to: splitAddressList(header("To")).map(decodeHeaderText),
-    date: msg.internalDate
-      ? new Date(Number(msg.internalDate)).toISOString()
-      : new Date().toISOString(),
+    date: internalDateIso(msg),
     bodyText: plainTextBody(msg.payload),
   };
+}
+
+function toSummary(msg: GmailMessageFull): MailMessageSummary {
+  const header = headerLookup(msg.payload);
+  return {
+    messageId: msg.id,
+    threadId: msg.threadId,
+    from: decodeHeaderText(header("From")),
+    to: splitAddressList(header("To")).map(decodeHeaderText),
+    subject: decodeHeaderText(header("Subject")),
+    date: internalDateIso(msg),
+    snippet: decodeHtmlEntities(msg.snippet ?? ""),
+    unread: msg.labelIds?.includes("UNREAD") ?? false,
+  };
+}
+
+const FOLDER_TERM: Record<MailSearch["folder"], string> = {
+  inbox: "in:inbox",
+  sent: "in:sent",
+  all: "",
+};
+
+function quoteTerm(value: string): string {
+  return /\s/.test(value) ? `"${value.replace(/"/g, "")}"` : value;
+}
+
+/** Gmail's search syntax; `after:` is inclusive and `before:` exclusive, both in epoch seconds. */
+function searchQuery(search: MailSearch): string {
+  const terms = [FOLDER_TERM[search.folder]];
+  if (search.unreadOnly) terms.push("is:unread");
+  if (search.from) terms.push(`from:${quoteTerm(search.from)}`);
+  if (search.since) terms.push(`after:${Math.floor(Date.parse(search.since) / 1000)}`);
+  if (search.until) terms.push(`before:${Math.floor(Date.parse(search.until) / 1000) + 1}`);
+  if (search.text) terms.push(search.text);
+  return terms.filter(Boolean).join(" ");
+}
+
+async function searchMessages(
+  account: ConnectedAccount,
+  search: MailSearch,
+  signal?: AbortSignal,
+): Promise<MailMessageSummary[]> {
+  const list = (await proxyRequest(account.id, "get", `${GMAIL_API}/messages`, {
+    params: { q: searchQuery(search), maxResults: String(search.limit) },
+    signal,
+  })) as MessagesListResponse;
+  const ids = (list.messages ?? []).map((m) => m.id);
+  // Metadata format carries headers, snippet and labels without the body.
+  const messages = await mapWithConcurrency(ids, BATCH_CONCURRENCY, async (id) => {
+    return (await proxyRequest(account.id, "get", `${GMAIL_API}/messages/${id}`, {
+      params: { format: "metadata" },
+      signal,
+    })) as GmailMessageFull;
+  });
+  return messages.map(toSummary).sort((a, b) => b.date.localeCompare(a.date));
 }
 
 async function listSentSince(
@@ -90,13 +159,7 @@ async function newestInbound(
     params: { format: "minimal" },
     signal: opts?.signal,
   })) as GmailMessageFull;
-  return {
-    id,
-    // internalDate is a millisecond epoch carried as a string.
-    date: msg.internalDate
-      ? new Date(Number(msg.internalDate)).toISOString()
-      : new Date().toISOString(),
-  };
+  return { id, date: internalDateIso(msg) };
 }
 
 async function getMessageBody(
@@ -167,4 +230,5 @@ export const gmailReadProvider: MailReadProvider = {
   listSentSince,
   getMessageBody,
   getThread,
+  searchMessages,
 };

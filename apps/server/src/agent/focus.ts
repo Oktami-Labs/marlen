@@ -20,6 +20,12 @@ export interface FocusPatch {
   subject?: string | null;
 }
 
+export interface ConversationFocus {
+  accountId: string;
+  threadId: string | null;
+  subject: string | null;
+}
+
 export async function applyConversationFocus(
   conversationId: string,
   patch: FocusPatch,
@@ -77,6 +83,7 @@ export function focusFromCard(card: AgentCard): FocusPatch | null {
     case "lead":
     case "chart":
     case "sources":
+    case "mail_sources":
     case "wiki_note":
     case "form":
       return null;
@@ -89,7 +96,9 @@ export function focusFromCard(card: AgentCard): FocusPatch | null {
  * The standing-focus note appended to each turn's prompt: what makes focus the
  * tool-call default. Empty string when the conversation has no focus.
  */
-export async function conversationFocusNote(conversationId: string): Promise<string> {
+export async function getConversationFocus(
+  conversationId: string,
+): Promise<ConversationFocus | null> {
   const [row] = await db
     .select({
       focusAccountId: schema.conversations.focusAccountId,
@@ -99,13 +108,21 @@ export async function conversationFocusNote(conversationId: string): Promise<str
     .from(schema.conversations)
     .where(eq(schema.conversations.id, conversationId))
     .limit(1);
-  if (!row?.focusAccountId) return "";
+  if (!row?.focusAccountId) return null;
+  return {
+    accountId: row.focusAccountId,
+    threadId: row.focusThreadId,
+    subject: row.focusThreadSubject,
+  };
+}
 
-  const thread = row.focusThreadId
-    ? `, currently discussing thread "${row.focusThreadSubject ?? row.focusThreadId}" (id ${row.focusThreadId})`
+export function formatConversationFocusNote(focus: ConversationFocus | null): string {
+  if (!focus) return "";
+  const thread = focus.threadId
+    ? `, currently discussing thread "${focus.subject ?? focus.threadId}" (id ${focus.threadId})`
     : "";
   return (
-    `\n\n[Conversation focus: account ${row.focusAccountId}${thread}. Default your ` +
+    `\n\n[Conversation focus: account ${focus.accountId}${thread}. Default your ` +
     `searches, reads, and drafts to this focus; go wider only when this message asks for it.]`
   );
 }

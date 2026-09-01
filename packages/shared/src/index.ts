@@ -125,6 +125,8 @@ export interface AccountVoice {
   accountId: string;
   learnedAt?: string;
   styleMemoryIds?: string[];
+  /** Last machine-authored content hash for each generated style page. */
+  generatedStyleHashes?: Record<string, string>;
 }
 
 export interface AccountVoiceInfo {
@@ -169,6 +171,8 @@ export interface ChatToolCall {
   parameters?: unknown;
   result?: unknown;
   contentOffset?: number;
+  /** Assistant tool-use batch within the persisted turn; parallel calls share one. */
+  batch?: number;
 }
 
 export interface ChatMessage {
@@ -180,7 +184,19 @@ export interface ChatMessage {
   cards?: MessageCard[];
   toolCalls?: ChatToolCall[];
   refs?: EmailRef[];
+  memoryIds?: string[];
   error?: string;
+}
+
+/** Process-local snapshot of a durable server turn while it is still running. */
+export interface LiveChatTurn {
+  id: string;
+  conversationId: string;
+  content: string;
+  createdAt: string;
+  toolCalls: ChatToolCall[];
+  cards: MessageCard[];
+  thinking: boolean;
 }
 
 export interface SttResult {
@@ -242,6 +258,7 @@ export type RunTrigger =
 export interface AutomationRun {
   id: string;
   automationId: string;
+  conversationId: string;
   status: "running" | "success" | "error";
   result: string;
   trigger: RunTrigger | null;
@@ -250,8 +267,23 @@ export interface AutomationRun {
   cards?: MessageCard[];
 }
 
+/**
+ * One tool call of a run in flight. The trail is ephemeral: it lives only while
+ * the run is running, and the finished run's calls persist on its assistant
+ * message. A step with no `endedAt` is the one working right now.
+ */
+export interface RunStep {
+  id: string;
+  label: string;
+  failed: boolean;
+  startedAt: string;
+  endedAt?: string;
+}
+
 export interface RunFeedItem extends AutomationRun {
   automationName: string | null;
+  /** Present only while `status` is "running"; the tail of what it has done so far. */
+  steps?: RunStep[];
 }
 
 export interface MissedAutomation {
@@ -441,11 +473,15 @@ export const WIKI_TYPE_SKILL = "skill";
  */
 export interface WikiPage {
   id: string;
+  /** Opaque version of the editable fields, used to reject stale replacements. */
+  revision: string;
   type: string | null;
   content: string;
   source: "user" | "agent";
   accountId: string | null;
   contactId: string | null;
+  /** User-selected pages whose summaries stay in every system prompt. */
+  pinned: boolean;
   usedCount: number;
   lastUsedAt: string | null;
   createdAt: string;
@@ -578,6 +614,7 @@ export type ServerEventTopic =
   | "wiki"
   | "library"
   | "conversations"
+  | "chat"
   | "automations"
   | "learn"
   | "leads"

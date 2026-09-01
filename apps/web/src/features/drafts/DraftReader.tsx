@@ -187,8 +187,10 @@ export function DraftReader({
         await api.sendDraft(accountId, draft.id);
         toast.success(t("drafts.sentToast"));
         advance();
+        return true;
       } catch (err) {
         setError(errorMessage(err));
+        return false;
       }
     },
     discard: async () => {
@@ -196,9 +198,14 @@ export function DraftReader({
       try {
         await api.deleteDraft(accountId, draft.id);
         advance();
+        return true;
       } catch (err) {
-        if (isNotFound(err)) advance();
-        else setError(errorMessage(err));
+        if (isNotFound(err)) {
+          advance();
+          return true;
+        }
+        setError(errorMessage(err));
+        return false;
       }
     },
   });
@@ -372,7 +379,7 @@ export function DraftReader({
         pending={actions.pending}
         busy={actions.busy}
         onClose={actions.close}
-        onConfirm={() => void actions.confirm()}
+        onConfirm={actions.confirm}
         labels={{
           send: { title: t("drafts.send"), description: t("drafts.sendConfirm") },
           discard: { title: t("drafts.discard"), description: t("drafts.discardConfirm") },

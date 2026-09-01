@@ -20,6 +20,7 @@ const log = moduleLogger("learn-extract");
 
 /** Pairs per account per LLM call; any excess waits for the next sweep. */
 const MAX_PAIRS_PER_CALL = 10;
+const MIN_PAIRS_PER_EXTRACTION = 3;
 
 interface PendingPair {
   providerDraftId: string;
@@ -133,17 +134,20 @@ export async function runExtractionSweep(deps: ExtractSweepDeps = {}): Promise<E
 
   const names = pendingByAccount.size > 0 ? await fetchAccountNameMap() : new Map<string, string>();
   for (const [accountId, allPairs] of pendingByAccount) {
+    if (allPairs.length < MIN_PAIRS_PER_EXTRACTION) continue;
     const pairs = allPairs.slice(0, MAX_PAIRS_PER_CALL);
     try {
       const directives = await extract({
         pairs: pairs.map((pair) => ({ draftBody: pair.draftBody, sentBody: pair.sentBody })),
         accountName: names.get(accountId) ?? accountId,
       });
-      try {
-        lessons += await mergeStyleDirectives(accountId, directives);
-      } catch (error) {
-        // Rejected by memory's own limits ("memory is full"); drop this batch's lessons, keep the stamps.
-        log.warn({ err: errorMessage(error), accountId }, "style lessons rejected by memory store");
+      const merged = await mergeStyleDirectives(accountId, directives);
+      lessons += merged.added;
+      if (merged.status === "protected") {
+        log.info(
+          { accountId, pending: pairs.length },
+          "style page was user-edited — extracted lessons were not applied",
+        );
       }
       for (const pair of pairs) {
         await markDraftLearned(accountId, pair.providerDraftId);

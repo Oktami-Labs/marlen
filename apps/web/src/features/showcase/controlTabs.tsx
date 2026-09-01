@@ -494,7 +494,7 @@ function ConfirmDialogDemo() {
         title="Discard this draft?"
         description="The draft is deleted from your mailbox. This can't be undone."
         confirmLabel="Discard"
-        onConfirm={() => setOpen(false)}
+        onConfirm={() => true}
       />
     </>
   );

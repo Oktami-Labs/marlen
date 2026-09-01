@@ -125,9 +125,10 @@ export function ArmedToggleRow({
     try {
       await persist(enabled);
       await onChanged();
-      setConfirmArm(false);
+      return true;
     } catch (err) {
       toast.error(err);
+      return false;
     } finally {
       setSaving(false);
     }
@@ -154,7 +155,7 @@ export function ArmedToggleRow({
         description={texts.confirmBody}
         confirmLabel={texts.confirmCta}
         busy={saving}
-        onConfirm={() => void save(true)}
+        onConfirm={() => save(true)}
       />
     </>
   );
@@ -241,10 +242,10 @@ export function AccountPermissionsEditor({
   };
 
   const confirmArm = async () => {
-    if (!confirmKey) return;
+    if (!confirmKey) return false;
     setConfirmBusy(true);
     try {
-      if (await persist(confirmKey, true)) setConfirmKey(null);
+      return await persist(confirmKey, true);
     } finally {
       setConfirmBusy(false);
     }
@@ -276,7 +277,7 @@ export function AccountPermissionsEditor({
         description={confirmKey ? copy[confirmKey].confirmBody : ""}
         confirmLabel={confirmKey ? copy[confirmKey].confirmCta : ""}
         busy={confirmBusy}
-        onConfirm={() => void confirmArm()}
+        onConfirm={confirmArm}
       />
     </div>
   );

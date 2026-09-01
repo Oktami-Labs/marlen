@@ -1,11 +1,11 @@
 import {
   type AccountColor,
-  type AccountPermissions,
   type ConnectedAccount,
   EMAIL_APP_LABELS,
   type EmailApp,
   type PipedreamApp,
 } from "@marlen/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Inbox, LogOut, Plus, Settings } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -16,6 +16,7 @@ import { Card } from "@/components/ui/card";
 import { ColorPicker } from "@/components/ui/color-picker";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
+import { RetryableError } from "@/components/ui/feedback";
 import { GroupLabel } from "@/components/ui/group-label";
 import { Input } from "@/components/ui/input";
 import { ListRow } from "@/components/ui/list-row";
@@ -44,9 +45,13 @@ import {
   WhatsAppPermissionsEditor,
   WhatsAppPickerButton,
 } from "@/features/connections/WhatsApp";
-import { isEmailApp } from "@/lib/accounts";
+import {
+  accountColorsQuery,
+  accountListQuery,
+  accountPermissionsQuery,
+  isEmailApp,
+} from "@/lib/accounts";
 import { api, isPipedreamMissing } from "@/lib/api";
-import { useServerEvents } from "@/lib/serverEvents";
 import { toast } from "@/lib/toast";
 import { stagger, UNASSIGNED_ACCOUNT_COLOR } from "@/lib/utils";
 
@@ -147,17 +152,21 @@ function generateTonalHex(index: number): string {
 
 export function Accounts({ onChanged }: { onChanged?: () => void }) {
   const { t } = useTranslation();
-  const [accounts, setAccounts] = React.useState<ConnectedAccount[] | null>(null);
+  const queryClient = useQueryClient();
+  const accountsQuery = useQuery(accountListQuery);
+  const colorsQuery = useQuery(accountColorsQuery);
+  const permissionsQuery = useQuery(accountPermissionsQuery);
+  const accounts = accountsQuery.data ?? null;
+  const [colorDraft, setColorDraft] = React.useState<AccountColor[] | null>(null);
+  const colors = colorDraft ?? colorsQuery.data ?? [];
+  const permissions = permissionsQuery.data ?? null;
   const [busy, setBusy] = React.useState<string | null>(null);
   const [connecting, setConnecting] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
   const [query, setQuery] = React.useState("");
-  const [results, setResults] = React.useState<PipedreamApp[] | null>(null);
+  const [debouncedQuery, setDebouncedQuery] = React.useState("");
   const [confirmId, setConfirmId] = React.useState<string | null>(null);
   const [removing, setRemoving] = React.useState(false);
-  const [colors, setColors] = React.useState<AccountColor[]>([]);
-  // Never persist permissions before loading the complete grant set.
-  const [permissions, setPermissions] = React.useState<AccountPermissions[] | null>(null);
   const [permissionsAccountId, setPermissionsAccountId] = React.useState<string | null>(null);
   const [onOfficePermsOpen, setOnOfficePermsOpen] = React.useState(false);
   const { status: onOffice, refresh: refreshOnOffice } = useOnOfficeStatus();
@@ -169,46 +178,23 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
   React.useEffect(() => {
     if (!pickerOpen) return;
     const q = query.trim();
-    setResults(null);
-    const timer = setTimeout(
-      () => {
-        api
-          .pipedreamApps(q)
-          .then(setResults)
-          .catch((err) => {
-            if (!isPipedreamMissing(err)) toast.error(err);
-            setResults([]);
-          });
-      },
-      q ? 300 : 0,
-    );
+    const timer = setTimeout(() => setDebouncedQuery(q), q ? 300 : 0);
     return () => clearTimeout(timer);
   }, [query, pickerOpen]);
 
-  const load = React.useCallback(async (): Promise<ConnectedAccount[] | null> => {
-    try {
-      const next = await api.pipedreamAccounts();
-      setAccounts(next);
-      return next;
-    } catch (err) {
-      if (isPipedreamMissing(err)) {
-        setAccounts([]);
-        return [];
+  const appsQuery = useQuery({
+    queryKey: ["accounts", "apps", debouncedQuery],
+    queryFn: async () => {
+      try {
+        return await api.pipedreamApps(debouncedQuery);
+      } catch (error) {
+        if (isPipedreamMissing(error)) return [];
+        throw error;
       }
-      toast.error(err);
-      return null;
-    }
-  }, []);
-
-  const loadColors = React.useCallback(async () => {
-    try {
-      const { colors: saved } = await api.accountColors();
-      setColors(saved);
-      return saved;
-    } catch {
-      return [] as AccountColor[];
-    }
-  }, []);
+    },
+    enabled: pickerOpen,
+  });
+  const results = debouncedQuery === query.trim() ? (appsQuery.data ?? null) : null;
 
   const ensureColors = React.useCallback(
     async (accts: ConnectedAccount[], existing: AccountColor[]) => {
@@ -224,22 +210,17 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
       });
 
       const merged = [...existing, ...additions];
-      setColors(merged);
+      queryClient.setQueryData(accountColorsQuery.queryKey, merged);
       try {
-        await api.setAccountColors(merged);
-      } catch {}
+        const { colors: saved } = await api.setAccountColors(merged);
+        queryClient.setQueryData(accountColorsQuery.queryKey, saved);
+      } catch (error) {
+        toast.error(error);
+        await queryClient.invalidateQueries({ queryKey: accountColorsQuery.queryKey });
+      }
     },
-    [],
+    [queryClient],
   );
-
-  const loadPermissions = React.useCallback(async () => {
-    try {
-      const { permissions: saved } = await api.accountPermissions();
-      setPermissions(saved);
-    } catch (err) {
-      toast.error(err);
-    }
-  }, []);
 
   const grantsFor = (accountId: string): PermissionGrants =>
     permissions?.find((p) => p.accountId === accountId) ?? READ_ONLY_GRANTS;
@@ -251,15 +232,14 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
       { accountId, ...next },
     ];
     const { permissions: saved } = await api.setAccountPermissions(merged);
-    setPermissions(saved);
+    queryClient.setQueryData(accountPermissionsQuery.queryKey, saved);
   };
 
   React.useEffect(() => {
-    void loadPermissions();
-    void Promise.all([load(), loadColors()]).then(([accts, saved]) => {
-      if (accts && saved) void ensureColors(accts, saved);
-    });
-  }, [load, loadColors, loadPermissions, ensureColors]);
+    if (accountsQuery.data && colorsQuery.data) {
+      void ensureColors(accountsQuery.data, colorsQuery.data);
+    }
+  }, [accountsQuery.data, colorsQuery.data, ensureColors]);
 
   const stopWatchRef = React.useRef<(() => void) | null>(null);
   React.useEffect(() => () => stopWatchRef.current?.(), []);
@@ -283,12 +263,15 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
         if (stopped) return;
         const next = await api.pipedreamAccounts().catch(() => null);
         if (!next) continue;
-        setAccounts(next);
+        queryClient.setQueryData(accountListQuery.queryKey, next);
         const added = next.find((a) => !priorIds.has(a.id));
         if (!added) continue;
         stopWatchRef.current = null;
         setConnecting(false);
-        void loadColors().then((saved) => ensureColors(next, saved));
+        void queryClient
+          .fetchQuery(accountColorsQuery)
+          .then((saved) => ensureColors(next, saved))
+          .catch(() => {});
         if (isEmailApp(added.app)) {
           void api
             .learnAccountVoice(added.id)
@@ -327,13 +310,14 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
     setRemoving(true);
     try {
       await api.deletePipedreamAccount(id);
-      await load();
+      await queryClient.invalidateQueries({ queryKey: ["accounts"] });
       onChanged?.();
+      return true;
     } catch (err) {
       toast.error(err);
+      return false;
     } finally {
       setRemoving(false);
-      setConfirmId(null);
     }
   };
 
@@ -344,6 +328,14 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
     pending: AccountColor[] | null;
   }>({ timer: null, saving: false, pending: null });
 
+  React.useEffect(
+    () => () => {
+      const timer = colorPersistRef.current.timer;
+      if (timer) clearTimeout(timer);
+    },
+    [],
+  );
+
   const flushColorPersist = async () => {
     const state = colorPersistRef.current;
     if (state.saving || !state.pending) return;
@@ -351,9 +343,17 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
     state.pending = null;
     state.saving = true;
     try {
-      await api.setAccountColors(next);
+      const { colors: saved } = await api.setAccountColors(next);
+      if (!state.pending) {
+        queryClient.setQueryData(accountColorsQuery.queryKey, saved);
+        setColorDraft(null);
+      }
     } catch (err) {
       toast.error(err);
+      if (!state.pending) {
+        setColorDraft(null);
+        void queryClient.invalidateQueries({ queryKey: accountColorsQuery.queryKey });
+      }
     } finally {
       state.saving = false;
       if (state.pending) void flushColorPersist();
@@ -363,7 +363,8 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
   const updateColor = (accountId: string, hex: string) => {
     const next = colors.filter((c) => c.accountId !== accountId);
     next.push({ accountId, hex });
-    setColors(next);
+    setColorDraft(next);
+    queryClient.setQueryData(accountColorsQuery.queryKey, next);
 
     const state = colorPersistRef.current;
     state.pending = next;
@@ -373,17 +374,6 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
       void flushColorPersist();
     }, 300);
   };
-
-  // Keep local color edits authoritative until their write settles.
-  useServerEvents(["accounts"], () => {
-    void loadPermissions();
-    const colorState = colorPersistRef.current;
-    const colorEditInFlight =
-      colorState.timer !== null || colorState.saving || colorState.pending !== null;
-    void Promise.all([load(), colorEditInFlight ? null : loadColors()]).then(([accts, saved]) => {
-      if (accts && saved) void ensureColors(accts, saved);
-    });
-  });
 
   const colorFor = (accountId: string): AccountColor | undefined =>
     colors.find((c) => c.accountId === accountId);
@@ -443,7 +433,11 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
               placeholder={t("connections.searchProviders")}
               autoFocus
             />
-            {query.trim() ? (
+            {appsQuery.isError && debouncedQuery === query.trim() ? (
+              <RetryableError onRetry={() => void appsQuery.refetch()}>
+                {appsQuery.error.message}
+              </RetryableError>
+            ) : query.trim() ? (
               results?.length === 0 && !showOnOfficePick && !showWhatsAppPick ? (
                 <p className="px-1 py-2 text-xs text-muted-foreground">
                   {t("connections.noProvidersFound", { q: query.trim() })}
@@ -541,20 +535,26 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
         )}
 
         {!accounts ? (
-          <div className="flex flex-col gap-2">
-            {[0, 1].map((i) => (
-              <ListRow key={i}>
-                <div className="flex items-center gap-3">
-                  <Skeleton className="h-4 w-4 rounded-full" />
-                  <div className="flex flex-col gap-1.5">
-                    <Skeleton className="h-3.5 w-40" />
-                    <Skeleton className="h-3 w-16" />
+          accountsQuery.isError ? (
+            <RetryableError onRetry={() => void accountsQuery.refetch()}>
+              {accountsQuery.error.message}
+            </RetryableError>
+          ) : (
+            <div className="flex flex-col gap-2">
+              {[0, 1].map((i) => (
+                <ListRow key={i}>
+                  <div className="flex items-center gap-3">
+                    <Skeleton className="h-4 w-4 rounded-full" />
+                    <div className="flex flex-col gap-1.5">
+                      <Skeleton className="h-3.5 w-40" />
+                      <Skeleton className="h-3 w-16" />
+                    </div>
                   </div>
-                </div>
-                <Skeleton className="h-5 w-16 rounded-full" />
-              </ListRow>
-            ))}
-          </div>
+                  <Skeleton className="h-5 w-16 rounded-full" />
+                </ListRow>
+              ))}
+            </div>
+          )
         ) : accounts.length === 0 && !onOffice?.configured && !whatsApp?.linked ? (
           <EmptyState icon={Inbox} description={t("connections.noAccounts")} />
         ) : (
@@ -574,10 +574,14 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
                     >
                       <ListRow className="relative">
                         <div className="flex min-w-0 items-center gap-3">
-                          <ColorPicker
-                            color={colorFor(account.id)?.hex ?? UNASSIGNED_ACCOUNT_COLOR}
-                            onSelect={(hex) => updateColor(account.id, hex)}
-                          />
+                          {colorsQuery.data ? (
+                            <ColorPicker
+                              color={colorFor(account.id)?.hex ?? UNASSIGNED_ACCOUNT_COLOR}
+                              onSelect={(hex) => updateColor(account.id, hex)}
+                            />
+                          ) : (
+                            <Skeleton className="h-4 w-4 shrink-0 rounded-full" />
+                          )}
                           <AppIcon src={account.imgSrc} />
                           <p className="min-w-0 truncate text-sm font-medium">{account.name}</p>
                         </div>
@@ -589,6 +593,7 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
                           <Button
                             variant="ghost"
                             size="icon-sm"
+                            disabled={!permissions}
                             onClick={() =>
                               setPermissionsAccountId((id) =>
                                 id === account.id ? null : account.id,
@@ -690,7 +695,10 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
                       status={whatsApp}
                       onTogglePermissions={() => setWhatsAppPermsOpen((open) => !open)}
                       onDisconnected={async () => {
-                        await Promise.all([refreshWhatsApp(), load()]);
+                        await Promise.all([
+                          refreshWhatsApp(),
+                          queryClient.invalidateQueries({ queryKey: accountListQuery.queryKey }),
+                        ]);
                         onChanged?.();
                       }}
                     />
@@ -711,7 +719,7 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
         description={t("connections.disconnectConfirm")}
         confirmLabel={t("connections.disconnect")}
         busy={removing}
-        onConfirm={() => confirmId && void remove(confirmId)}
+        onConfirm={() => (confirmId ? remove(confirmId) : false)}
       />
     </div>
   );

@@ -1,10 +1,4 @@
-import {
-  type AppStatus,
-  isLanguage,
-  LANGUAGE_LABELS,
-  type LlmProviderInfo,
-  SUPPORTED_LANGUAGES,
-} from "@marlen/shared";
+import { type AppStatus, isLanguage, LANGUAGE_LABELS, SUPPORTED_LANGUAGES } from "@marlen/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Check,
@@ -42,28 +36,28 @@ import { toast } from "@/lib/toast";
 import { type ThemePref, useTheme } from "@/lib/useTheme";
 import { errorMessage } from "@/lib/utils";
 
-export function SettingsPanel({ onStatusChanged }: { onStatusChanged?: () => void }) {
+export function SettingsPanel({
+  status,
+  onStatusChanged,
+}: {
+  status: AppStatus | null;
+  onStatusChanged?: () => void;
+}) {
   const { t } = useTranslation();
-  const [providers, setProviders] = React.useState<LlmProviderInfo[] | null>(null);
-  const [status, setStatus] = React.useState<AppStatus | null>(null);
+  const queryClient = useQueryClient();
   const { accounts } = useAccountColors();
   const { status: onOffice } = useOnOfficeStatus();
   const { status: whatsApp } = useWhatsAppStatus();
+  const providersQuery = useQuery({
+    queryKey: ["llm", "providers"],
+    queryFn: api.llmProviders,
+  });
+  const providers = providersQuery.data ?? null;
 
   const refresh = React.useCallback(async () => {
-    try {
-      const [nextProviders, nextStatus] = await Promise.all([api.llmProviders(), api.status()]);
-      setProviders(nextProviders);
-      setStatus(nextStatus);
-      onStatusChanged?.();
-    } catch (err) {
-      toast.error(err);
-    }
-  }, [onStatusChanged]);
-
-  React.useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    await queryClient.invalidateQueries({ queryKey: ["llm"] });
+    onStatusChanged?.();
+  }, [onStatusChanged, queryClient]);
 
   const connectedIds = React.useMemo(
     () => providers?.filter((p) => p.auth !== null).map((p) => p.id) ?? [],
@@ -152,7 +146,7 @@ export function SettingsPanel({ onStatusChanged }: { onStatusChanged?: () => voi
         icon={<DatabaseBackup />}
         title={t("settings.sections.data.title")}
       >
-        <BackupRow />
+        <DataExportRow />
       </Section>
 
       <Section
@@ -167,27 +161,29 @@ export function SettingsPanel({ onStatusChanged }: { onStatusChanged?: () => voi
   );
 }
 
-function BackupRow() {
+function DataExportRow() {
   const { t } = useTranslation();
   return (
-    <SettingRow label={t("settings.backup.label")} description={t("settings.backup.description")}>
-      <Button variant="secondary" size="sm" onClick={() => api.downloadBackup()}>
+    <SettingRow label={t("settings.export.label")} description={t("settings.export.description")}>
+      <Button variant="secondary" size="sm" onClick={() => api.downloadDataExport()}>
         <Download />
-        {t("settings.backup.cta")}
+        {t("settings.export.cta")}
       </Button>
     </SettingRow>
   );
 }
 
 function useSaveState() {
-  const [state, setState] = React.useState<"idle" | "saving" | "error">("idle");
+  const { i18n } = useTranslation();
+  const [state, setState] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = React.useState<string | null>(null);
   const run = async (save: () => Promise<void>) => {
     setState("saving");
     setError(null);
     try {
       await save();
-      setState("idle");
+      setState("saved");
+      toast.success(i18n.t("common.saved"));
     } catch (err) {
       setState("error");
       setError(errorMessage(err));
@@ -202,6 +198,7 @@ function PreferenceRow({
   description,
   error,
   saving,
+  saved,
   value,
   onChange,
   options,
@@ -212,14 +209,23 @@ function PreferenceRow({
   description: React.ReactNode;
   error?: string | null;
   saving?: boolean;
+  saved?: boolean;
   value: string;
   onChange: (value: string) => void;
   options: { value: string; label: string }[];
   searchable?: boolean;
 }) {
+  const { t } = useTranslation();
   return (
     <SettingRow htmlFor={id} label={label} description={description} error={error}>
-      {saving && <Spinner className="h-3.5 w-3.5 text-muted-foreground" />}
+      {saving ? (
+        <Spinner className="h-3.5 w-3.5 text-muted-foreground" />
+      ) : saved ? (
+        <span className="inline-flex items-center gap-1 text-xs text-success">
+          <Check className="h-3.5 w-3.5" />
+          {t("common.saved")}
+        </span>
+      ) : null}
       <Select
         id={id}
         aria-label={label}
@@ -273,6 +279,7 @@ function LanguageRow() {
       description={t("settings.sections.language.description")}
       error={state === "error" ? error : null}
       saving={state === "saving"}
+      saved={state === "saved"}
       value={i18n.language}
       onChange={(value) => void persist(value)}
       options={SUPPORTED_LANGUAGES.map((code) => ({
@@ -362,6 +369,7 @@ function TimezoneRow() {
       description={description}
       error={state === "error" ? error : null}
       saving={state === "saving"}
+      saved={state === "saved"}
       value={value}
       onChange={(next) => void persist(next)}
       options={options}

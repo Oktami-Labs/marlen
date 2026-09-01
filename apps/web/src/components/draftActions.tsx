@@ -17,26 +17,25 @@ export type DraftAction = "send" | "discard";
  * in how an action is confirmed.
  */
 export function useDraftActions(callbacks: {
-  send: () => Promise<void>;
-  discard: () => Promise<void>;
+  send: () => Promise<boolean>;
+  discard: () => Promise<boolean>;
 }): {
   pending: DraftAction | null;
   busy: boolean;
   arm: (action: DraftAction) => void;
   close: () => void;
-  confirm: () => Promise<void>;
+  confirm: () => Promise<boolean>;
 } {
   const [pending, setPending] = React.useState<DraftAction | null>(null);
   const [busy, setBusy] = React.useState(false);
 
   const confirm = async () => {
-    if (!pending) return;
+    if (!pending) return false;
     setBusy(true);
     try {
-      await (pending === "send" ? callbacks.send() : callbacks.discard());
+      return await (pending === "send" ? callbacks.send() : callbacks.discard());
     } finally {
       setBusy(false);
-      setPending(null);
     }
   };
 
@@ -60,7 +59,7 @@ export function DraftActionDialog({
   pending: DraftAction | null;
   busy: boolean;
   onClose: () => void;
-  onConfirm: () => void;
+  onConfirm: () => Promise<boolean>;
   /** Title doubles as the confirm-button label, matching both surfaces today. */
   labels: Record<DraftAction, { title: string; description: string }>;
 }) {

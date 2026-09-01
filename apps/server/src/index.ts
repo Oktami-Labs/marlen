@@ -15,6 +15,7 @@ import {
 } from "./integrations/whatsapp/session.js";
 import { seedDefaultAutomations } from "./services/automations/defaults.js";
 import { startMailProbe, stopMailProbe } from "./services/automations/mailProbe.js";
+import { clearRunSteps, endRunStep, startRunStep } from "./services/automations/runProgress.js";
 import { startScheduler, stopScheduler } from "./services/automations/scheduler.js";
 import { startNightlySuggest, stopNightlySuggest } from "./services/automations/suggest.js";
 import { registerTurnRunner } from "./services/automations/turnRunner.js";
@@ -30,16 +31,27 @@ async function main(): Promise<void> {
   const app = await buildApp();
 
   // Registered before listen, so a run fired the instant the API opens finds it.
-  registerTurnRunner(async ({ runId, prompt, title, signal, log }) => {
-    const turn = beginTurn(runId);
-    const { text, cards } = await turn.run({
-      prompt,
-      session: "ephemeral",
-      conversation: { type: "automation", title },
-      signal,
-      log,
-    });
-    return { text, cardsJson: serializeTurnCards(cards) };
+  registerTurnRunner(async ({ runId, conversationId, prompt, title, signal, log }) => {
+    const turn = beginTurn(conversationId);
+    try {
+      const { text, cards } = await turn.run({
+        prompt,
+        session: "ephemeral",
+        ephemeral: { resumeHistory: true, toolSessionId: runId },
+        conversation: { type: "automation", title },
+        signal,
+        log,
+        requireReport: true,
+        handlers: {
+          onToolStart: (toolCallId, _toolName, toolLabel) =>
+            startRunStep(runId, toolCallId, toolLabel),
+          onToolEnd: (toolCallId, _toolName, isError) => endRunStep(runId, toolCallId, isError),
+        },
+      });
+      return { text, cardsJson: serializeTurnCards(cards) };
+    } finally {
+      clearRunSteps(runId);
+    }
   });
 
   // app.close() is the one complete teardown path (cron tasks, learn loops,

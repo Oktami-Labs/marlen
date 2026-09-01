@@ -15,7 +15,7 @@ export function isToday(iso: string): boolean {
 
 const rtfCache = new Map<string, Intl.RelativeTimeFormat>();
 
-/** "3 days ago", "yesterday", "last month", in the given language. */
+/** "3 days ago", "yesterday", "6 weeks ago", in the given language. */
 export function relativeTime(iso: string, lang: string): string {
   const then = new Date(iso).getTime();
   if (Number.isNaN(then)) return "";
@@ -31,7 +31,9 @@ export function relativeTime(iso: string, lang: string): string {
   const day = 24 * hour;
   if (abs < hour) return rtf.format(Math.round(diff / minute), "minute");
   if (abs < day) return rtf.format(Math.round(diff / hour), "hour");
-  if (abs < 30 * day) return rtf.format(Math.round(diff / day), "day");
+  if (abs < 7 * day) return rtf.format(Math.round(diff / day), "day");
+  // Weeks run to two months so a six-week wait never rounds to "last month".
+  if (abs < 60 * day) return rtf.format(Math.round(diff / (7 * day)), "week");
   if (abs < 365 * day) return rtf.format(Math.round(diff / (30 * day)), "month");
   return rtf.format(Math.round(diff / (365 * day)), "year");
 }
@@ -47,6 +49,16 @@ export function dateTimeLabel(iso: string, lang: string): string {
     minute: "2-digit",
     ...HOUR_CYCLE,
   });
+}
+
+/**
+ * `dateTimeLabel` for a fresh timestamp, its age ("3 weeks ago") once it is
+ * older than three days. For a list of things waiting on the user, how long
+ * one has waited says more than the clock time it was filed at.
+ */
+export function waitingLabel(iso: string, lang: string): string {
+  const age = Date.now() - new Date(iso).getTime();
+  return age > 3 * 86_400_000 ? relativeTime(iso, lang) : dateTimeLabel(iso, lang);
 }
 
 /** "Wednesday, 9 July"-style day heading, groups the Home activity feed. */

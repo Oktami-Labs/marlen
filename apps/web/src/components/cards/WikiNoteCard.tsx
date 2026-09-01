@@ -31,9 +31,10 @@ export function WikiNoteCard({ card }: { card: WikiNoteData }) {
     try {
       await api.deletePage(card.pageId);
       setDeleted(true);
-      setConfirming(false);
+      return true;
     } catch (err) {
       toast.error(err);
+      return false;
     } finally {
       setDeleting(false);
     }
@@ -114,7 +115,7 @@ export function WikiNoteCard({ card }: { card: WikiNoteData }) {
         description={card.summary}
         confirmLabel={t("chat.cards.wikiNote.discard")}
         busy={deleting}
-        onConfirm={() => void remove()}
+        onConfirm={remove}
       />
     </div>
   );

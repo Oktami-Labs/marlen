@@ -89,6 +89,7 @@
     "noConversations": "Noch keine Unterhaltungen.",
     "untitled": "(ohne Titel)",
     "thinking": "Denkt nach…",
+    "memoryUsed": "Wissen im Kontext",
     "working": "Der Assistent arbeitet",
     "emptyTitle": "Fragen Sie alles zu Ihrem Postfach",
     "emptyBody": "Der Assistent durchsucht Ihre verbundenen Konten, versieht E-Mails mit Labels und schreibt Entwürfe.",
@@ -139,6 +140,12 @@
       "regenerateWith": "Neu beantworten mit"
     },
     "refs": {
+      "add": "E-Mail-Kontext hinzufügen",
+      "picker": "E-Mail-Kontext",
+      "searching": "E-Mails werden durchsucht…",
+      "noResults": "Keine passenden E-Mails.",
+      "partial": "Einige Konten konnten nicht durchsucht werden.",
+      "noSubject": "(kein Betreff)",
       "remove": "{{label}} entfernen"
     },
     "voice": {
@@ -224,6 +231,7 @@
         "draftReply": "Antwort entwerfen",
         "reviewDraft": "Entwurf prüfen",
         "askAbout": "Dazu nachfragen",
+        "markHandled": "Als erledigt markieren",
         "showMore_one": "{{count}} weitere anzeigen",
         "showMore_other": "{{count}} weitere anzeigen",
         "draftReplyPrompt": "Entwirf eine Antwort auf {{sender}}s E-Mail „{{subject}}“ in {{account}} (Thread {{threadId}}). Im Briefing zusammengefasst als: {{gist}}",
@@ -250,6 +258,9 @@
       "sources": {
         "badge": "Quellen",
         "open": "Quelle öffnen"
+      },
+      "mailSources": {
+        "badge": "E-Mail-Quellen"
       },
       "wikiNote": {
         "saved": "Gemerkt",
@@ -325,6 +336,8 @@
       "automation": "Automatisierung",
       "builtin": "Befehl",
       "skillPrompt": "Folge dem Skill „{{name}}“: ",
+      "saveSkill": "Als Skill speichern",
+      "saveSkillPrompt": "Speichere, was wir hier gerade gemacht haben, als Skill, damit du es beim nächsten Mal wiederholen kannst.",
       "automationStarted": "„{{name}}“ läuft.",
       "new": "Neue Unterhaltung",
       "systemPrompt": "System-Prompt zeigen"
@@ -562,8 +575,6 @@
     "todosDone_one": "1 erledigt",
     "todosDone_other": "{{count}} erledigt",
     "todosRestore": "Wieder öffnen",
-    "resultsTitle": "Neue Ergebnisse",
-    "activityTitle": "Aktivität",
     "activityEmptyTitle": "Noch nichts hier",
     "activityEmptyBody": "Lassen Sie Ihr Postfach für sich arbeiten: Eine feste Anweisung läuft nach Zeitplan und berichtet hier.",
     "activityNoRunsBody": "Noch keine Ergebnisse. Führen Sie eine Automatisierung aus oder warten Sie auf den nächsten Termin.",
@@ -573,12 +584,26 @@
     "createAutomation": "Automatisierung erstellen",
     "viewAutomations": "Automatisierungen ansehen",
     "deletedAutomation": "Gelöschte Automatisierung",
-    "briefingToday": "Heute um {{time}}",
     "briefingUrgent_one": "{{count}} dringend",
     "briefingUrgent_other": "{{count}} dringend",
-    "briefingRefresh": "Briefing aktualisieren",
-    "briefingNext": "Nächstes Briefing: {{when}}",
-    "openInChat": "Im Chat öffnen"
+    "openInChat": "Im Chat öffnen",
+    "greetingMorning": "Guten Morgen.",
+    "greetingDay": "Guten Tag.",
+    "greetingEvening": "Guten Abend.",
+    "statusClear": "Nichts wartet auf Sie",
+    "statusNeeds_one": "Eine Sache wartet auf Sie",
+    "statusNeeds_other": "{{count}} Dinge warten auf Sie",
+    "statusMine_one": "eine erledige ich selbst",
+    "statusMine_other": "{{count}} erledige ich selbst",
+    "statusBriefing": "{{name}}, {{when}}: {{headline}}",
+    "statusOpenBriefing": "Briefing öffnen",
+    "workTitle": "Marlene arbeitet",
+    "workNow": "jetzt",
+    "workStarting": "Startet…",
+    "workStepRunning": "läuft",
+    "workUpNext": "Als Nächstes",
+    "workScheduled": "Geplant",
+    "workFailed": "Fehlgeschlagen."
   },
   "drafts": {
     "noSubject": "(kein Betreff)",
@@ -630,9 +655,13 @@
     "save": "Speichern",
     "create": "Erstellen",
     "formTitle": "Neue Automatisierung",
-    "formHint": "Geben Sie eine feste Anweisung und wählen Sie, wann sie läuft.",
+    "editTitle": "Automatisierung bearbeiten",
+    "taskSection": "Aufgabe",
+    "timingSection": "Ausführung",
+    "runSettings": "Lauf-Einstellungen",
     "name": "Name",
     "namePlaceholder": "Morgenbriefing",
+    "instructionHint": "Beschreiben Sie vollständig, was Marlene bei jedem Lauf erledigen soll.",
     "schedule": "Zeitplan",
     "frequency": {
       "daily": "Jeden Tag",
@@ -642,14 +671,14 @@
       "manual": "Nur auf Abruf"
     },
     "time": "Uhrzeit",
+    "days": "Wochentage",
     "month": "Monat",
     "day": "Tag",
     "customDaysRequired": "Wählen Sie mindestens einen Tag.",
     "dateOnceHint": "Läuft einmal an diesem Datum und schaltet sich dann aus.",
     "manualHint": "Läuft nie von selbst, nur wenn Sie „Jetzt ausführen“ drücken.",
-    "advancedToggle": "Erweitert: als Cron bearbeiten",
-    "simpleToggle": "Zurück zum einfachen Zeitplan",
-    "advancedLossNote": "Der eigene Cron-Ausdruck wurde durch den Zeitplan oben ersetzt.",
+    "customSchedule": "Eigener Zeitplan",
+    "customScheduleHint": "Diese Automatisierung hat einen eigenen Zeitplan. Wählen Sie eine Option, um ihn zu ersetzen, oder lassen Sie ihn unverändert.",
     "scheduleLabel": {
       "daily": "Täglich · {{time}}",
       "weekdays": "Werktags · {{time}}",
@@ -657,8 +686,6 @@
       "date": "{{date}} · {{time}}",
       "manual": "Auf Abruf"
     },
-    "cronInvalid": "Sieht nicht nach einem Cron-Ausdruck mit 5 Feldern aus. Wird beim Erstellen geprüft.",
-    "cronHint": "<c>0 8 * * 1-5</c> läuft werktags um 08:00 Uhr.",
     "instruction": "Anweisung für den Assistenten",
     "instructionPlaceholder": "Fasse die ungelesenen E-Mails der letzten 24 Stunden zusammen…",
     "showInActivity": "In der Aktivität anzeigen",
@@ -754,6 +781,21 @@
     "deleteManyConfirm_other": "{{count}} Einträge werden gelöscht, Ordner samt Inhalt."
   },
   "storage": {
+    "wikiGroups": {
+      "person": "Personen",
+      "contact": "Kontakte",
+      "company": "Unternehmen",
+      "deal": "Vorgänge",
+      "style": "Schreibstil",
+      "skill": "Skills",
+      "triage": "Triage-Lernen",
+      "account": "Kontowissen",
+      "general": "Allgemein"
+    },
+    "wikiPinned": "Angeheftet",
+    "wikiUnused": "Noch nicht verwendet",
+    "wikiUsed_one": "Einmal verwendet",
+    "wikiUsed_other": "{{count}}-mal verwendet",
     "nav": {
       "folder": "Alle Dateien",
       "recent": "Zuletzt geändert"
@@ -799,7 +841,11 @@
       "save": "Speichern",
       "scope": "Gilt für",
       "general": "Allgemein",
-      "pageHint": "Seiten sind das Gedächtnis des Assistenten: Der erste Absatz ist die Zusammenfassung, die er in jedem Gespräch dabei hat. Alles nach einer Leerzeile bleibt auf der Festplatte und wird bei Bedarf gelesen.",
+      "pinned": "Immer im Kontext behalten",
+      "used_one": "{{count}}-mal verwendet",
+      "used_other": "{{count}}-mal verwendet",
+      "lastUsed": "zuletzt {{date}}",
+      "pageHint": "Seiten sind das Gedächtnis des Assistenten: Der erste Absatz ist die durchsuchbare Zusammenfassung. Passende und angeheftete Zusammenfassungen kommen in den Kontext; alles nach einer Leerzeile bleibt bis zum Abruf auf der Festplatte.",
       "new": "Neu",
       "newTitle": "Neue Datei",
       "namePlaceholder": "Dateiname",
@@ -822,6 +868,8 @@
     "aiDone": "Angemeldet, verwendet {{model}}.",
     "stepEmailTitle": "E-Mail-Konto verbinden",
     "stepEmailDescription": "Verbinden Sie Gmail oder Outlook, damit der Assistent Ihre Post sehen kann. Weitere Konten können Sie später hinzufügen.",
+    "emailDone_one": "Ein E-Mail-Konto verbunden.",
+    "emailDone_other": "{{count}} E-Mail-Konten verbunden.",
     "pipedreamMissingBody": "Diese Version hat keine eingebaute E-Mail-Brücke. Marlene verbindet sich stattdessen über Ihr eigenes kostenloses Pipedream-Projekt. Einmal hier einrichten, dann Konten verbinden:",
     "advancedLink": "Erweitert: eigenes Pipedream-Projekt verwenden",
     "allSetTitle": "Alles bereit",
@@ -882,10 +930,10 @@
       "label": "Mit dem Computer starten",
       "description": "Marlene startet beim Anmelden im Hintergrund, damit geplante Automatisierungen laufen, ohne dass Sie die App vorher öffnen."
     },
-    "backup": {
-      "label": "Sicherung",
-      "description": "Ein Abbild der lokalen Datenbank: Chats, Entwürfe, Wiki-Seiten und Automatisierungen. Die Zugangsdaten Ihrer Konten sind nicht dabei.",
-      "cta": "Herunterladen"
+    "export": {
+      "label": "Vollständiger Export",
+      "description": "Lädt Datenbank, Chats, Entwürfe, Automatisierungen, Wiki, Wissensdateien und Diagnoseprotokolle in einer ZIP-Datei herunter. Anmeldungen, API-Schlüssel und Zugangsdaten verbundener Konten sind ausgeschlossen.",
+      "cta": "Alles exportieren"
     },
     "about": {
       "tagline": "Lokaler KI-Assistent für Ihre E-Mails und Leads",

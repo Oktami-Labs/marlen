@@ -4,19 +4,32 @@ import {
   type LlmProviderInfo,
   type PipedreamStatus,
 } from "@marlen/shared";
-import { Check } from "lucide-react";
+import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { LoadingRow, Notice } from "@/components/ui/feedback";
 import { LinkButton } from "@/components/ui/link-button";
-import { SectionHeader } from "@/components/ui/section-header";
 import { StepCircle } from "@/components/ui/step-circle";
 import { Accounts } from "@/features/connections/Accounts";
 import { PipedreamWizard } from "@/features/connections/ConnectionsPanel";
 import { Providers } from "@/features/settings/Providers";
 import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";
+import { cn, rowTransition, stagger, withViewTransition } from "@/lib/utils";
+
+type SetupStepId = "ai" | "email";
+
+interface SetupProgress {
+  ai: boolean;
+  email: boolean;
+}
+
+function nextIncompleteStep(progress: SetupProgress): SetupStepId | null {
+  if (!progress.ai) return "ai";
+  if (!progress.email) return "email";
+  return null;
+}
 
 /**
  * If the freshly signed-in provider isn't the active one, silently make it
@@ -61,6 +74,25 @@ export function SetupGate({
   const { t } = useTranslation();
   const [providers, setProviders] = React.useState<LlmProviderInfo[] | null>(null);
   const complete = status !== null && isSetupComplete(status);
+  const aiComplete = Boolean(status?.modelConfigured);
+  const emailComplete = (status?.emailAccounts ?? 0) > 0;
+  const [openStep, setOpenStep] = React.useState<SetupStepId | null>(() =>
+    nextIncompleteStep({ ai: aiComplete, email: emailComplete }),
+  );
+
+  React.useEffect(() => {
+    setOpenStep((current) => {
+      const next = nextIncompleteStep({ ai: aiComplete, email: emailComplete });
+      if (next === null) return null;
+      const currentComplete = current === "ai" ? aiComplete : emailComplete;
+      if (current === null || currentComplete) return next;
+      return current;
+    });
+  }, [aiComplete, emailComplete]);
+
+  const toggleStep = (step: SetupStepId) => {
+    withViewTransition(() => setOpenStep((current) => (current === step ? null : step)));
+  };
 
   // A build without a usable email bridge gets the Pipedream credentials
   // wizard inline in step 2, the guided flow must not dead-end in Settings.
@@ -122,10 +154,14 @@ export function SetupGate({
         ) : (
           <>
             <Step
+              id="ai"
               index={1}
               done={status.modelConfigured}
+              expanded={openStep === "ai"}
               title={t("setup.stepAiTitle")}
               description={t("setup.stepAiDescription")}
+              summary={t("setup.aiDone", { model: status.model })}
+              onToggle={() => toggleStep("ai")}
             >
               {status.modelConfigured ? (
                 <p className="text-sm font-medium text-success">
@@ -137,10 +173,14 @@ export function SetupGate({
             </Step>
 
             <Step
+              id="email"
               index={2}
               done={status.emailAccounts > 0}
+              expanded={openStep === "email"}
               title={t("setup.stepEmailTitle")}
               description={t("setup.stepEmailDescription")}
+              summary={t("setup.emailDone", { count: status.emailAccounts })}
+              onToggle={() => toggleStep("email")}
             >
               {status.pipedreamConfigured ? (
                 <div className="flex flex-col gap-3">
@@ -181,30 +221,75 @@ export function SetupGate({
 }
 
 function Step({
+  id,
   index,
   done,
+  expanded,
   title,
   description,
+  summary,
+  onToggle,
   children,
 }: {
+  id: SetupStepId;
   index: number;
   done: boolean;
+  expanded: boolean;
   title: string;
   description: string;
+  summary: string;
+  onToggle: () => void;
   children: React.ReactNode;
 }) {
+  const triggerId = `setup-${id}-trigger`;
+  const bodyId = `setup-${id}-body`;
+  const descriptionId = `setup-${id}-description`;
+
   return (
     <section
       className="animate-in-up flex flex-col gap-4"
-      style={{ animationDelay: `${(index - 1) * 90}ms` }}
+      style={{ ...stagger(index - 1), ...rowTransition(`setup-${id}`) }}
     >
-      <div className="flex items-start gap-3">
-        <StepCircle tone={done ? "tint-success" : "tint-neutral"} className="mt-0.5">
-          {done ? <Check className="h-3 w-3" /> : index}
-        </StepCircle>
-        <SectionHeader title={title} description={description} />
-      </div>
-      <div className="sm:pl-8">{children}</div>
+      <h2>
+        <button
+          id={triggerId}
+          type="button"
+          aria-expanded={expanded}
+          aria-controls={bodyId}
+          aria-label={title}
+          aria-describedby={descriptionId}
+          onClick={onToggle}
+          className="group flex w-full items-start gap-3 rounded-lg text-left focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background"
+        >
+          <StepCircle tone={done ? "tint-success" : "tint-neutral"} className="mt-0.5">
+            {done ? <Check className="h-3 w-3" /> : index}
+          </StepCircle>
+          <span className="flex min-w-0 flex-1 flex-col gap-1.5">
+            <span className="text-base font-semibold tracking-tight text-foreground group-hover:text-muted-foreground">
+              {title}
+            </span>
+            <span
+              id={descriptionId}
+              className={cn(
+                "text-sm font-normal",
+                done && !expanded ? "text-success" : "text-muted-foreground",
+              )}
+            >
+              {done && !expanded ? summary : description}
+            </span>
+          </span>
+          {expanded ? (
+            <ChevronUp className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          ) : (
+            <ChevronDown className="mt-0.5 h-4 w-4 shrink-0 text-muted-foreground" />
+          )}
+        </button>
+      </h2>
+      {expanded && (
+        <section id={bodyId} aria-labelledby={triggerId} className="animate-in-up sm:pl-8">
+          {children}
+        </section>
+      )}
     </section>
   );
 }

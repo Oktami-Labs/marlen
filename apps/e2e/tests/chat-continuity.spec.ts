@@ -115,7 +115,7 @@ function seedFinishedChat(stateDir: string, id: string, hoursAgo: number, questi
   );
 }
 
-test("a chat finished over an hour ago opens as a fresh one, and stays in history", async ({
+test("a chat finished over an hour ago reopens where the user left it", async ({
   page,
   server,
   request,
@@ -128,8 +128,9 @@ test("a chat finished over an hour ago opens as a fresh one, and stays in histor
   }, id);
 
   await openApp(page);
-  await expect(page.getByText(t("chat.emptyTitle"))).toBeVisible();
-  await expect(page.getByText(question)).toHaveCount(0);
+  await expect(page.getByText(question)).toBeVisible();
+  await expect(page.getByText("Erledigt.", { exact: true })).toBeVisible();
+  await expect(page.getByText(t("chat.emptyTitle"))).toHaveCount(0);
 
   const listed = (await (await request.get("/api/conversations?limit=200")).json()) as {
     items: { id: string }[];
@@ -137,10 +138,7 @@ test("a chat finished over an hour ago opens as a fresh one, and stays in histor
   expect(listed.items.some((c) => c.id === id)).toBe(true);
 });
 
-test("a chat left open past the idle hour clears to a fresh one on its own", async ({
-  page,
-  server,
-}) => {
+test("a chat left open past the idle hour stays open", async ({ page, server }) => {
   const id = `e2e-${randomUUID()}`;
   const question = `Frage von vorhin (${id})`;
   seedFinishedChat(server.stateDir, id, 0.5, question);
@@ -153,10 +151,12 @@ test("a chat left open past the idle hour clears to a fresh one on its own", asy
   await openApp(page);
   await expect(page.getByText(question)).toBeVisible();
 
-  // Forty more minutes pass with the window open.
+  // Forty more minutes pass with the window open. Time alone must not discard
+  // the user's place or make the conversation look finished and forgotten.
   await page.clock.fastForward("40:00");
-  await expect(page.getByText(t("chat.emptyTitle"))).toBeVisible();
-  await expect(page.getByText(question)).toHaveCount(0);
+  await expect(page.getByText(question)).toBeVisible();
+  await expect(page.getByText("Erledigt.", { exact: true })).toBeVisible();
+  await expect(page.getByText(t("chat.emptyTitle"))).toHaveCount(0);
 });
 
 test("a message the server never received returns to the composer", async ({ page }) => {
@@ -171,6 +171,103 @@ test("a message the server never received returns to the composer", async ({ pag
   await expect(composer).toHaveValue(text);
   // Nothing was sent, so the transcript is still the empty state, not a failed turn.
   await expect(page.getByText(t("chat.emptyTitle"))).toBeVisible();
+});
+
+test("each conversation keeps its own unsent draft across switches and reloads", async ({
+  page,
+  server,
+}) => {
+  const firstId = `e2e-${randomUUID()}`;
+  const secondId = `e2e-${randomUUID()}`;
+  const firstTitle = `First draft ${firstId}`;
+  const secondTitle = `Second draft ${secondId}`;
+  const createdAt = new Date().toISOString();
+  sql(
+    server.stateDir,
+    `INSERT INTO conversations (id, title, type, created_at) VALUES
+       ('${firstId}', '${firstTitle}', 'chat', '${createdAt}'),
+       ('${secondId}', '${secondTitle}', 'chat', '${createdAt}');
+     INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES
+       ('${firstId}-u', '${firstId}', 'user', 'First question', '${createdAt}'),
+       ('${firstId}-a', '${firstId}', 'assistant', 'First answer', '${createdAt}'),
+       ('${secondId}-u', '${secondId}', 'user', 'Second question', '${createdAt}'),
+       ('${secondId}-a', '${secondId}', 'assistant', 'Second answer', '${createdAt}');`,
+  );
+  await page.addInitScript((conversationId) => {
+    localStorage.setItem("marlen-last-conversation", conversationId);
+  }, firstId);
+
+  let releaseRestore!: () => void;
+  const restoreGate = new Promise<void>((resolve) => {
+    releaseRestore = resolve;
+  });
+  await page.route(`**/api/conversations/${firstId}/messages`, async (route) => {
+    await restoreGate;
+    await route.continue();
+  });
+
+  await openApp(page, "/chat");
+  const composer = page.getByPlaceholder(t("chat.placeholder"));
+  const firstDraft = `Ask about catering ${firstId}`;
+  const secondDraft = `Ask about the venue ${secondId}`;
+  await composer.fill(firstDraft);
+
+  // The saved conversation is already the composer owner while its transcript
+  // is still restoring. Text entered during that window must not become a
+  // separate "new conversation" draft.
+  releaseRestore();
+  await expect(page.getByText("First answer", { exact: true })).toBeVisible();
+  await expect(composer).toHaveValue(firstDraft);
+
+  await page.getByRole("button", { name: new RegExp(secondTitle) }).click();
+  await expect(composer).toHaveValue("");
+  await composer.fill(secondDraft);
+
+  await page.getByRole("button", { name: new RegExp(firstTitle) }).click();
+  await expect(composer).toHaveValue(firstDraft);
+
+  await page.reload();
+  await expect(page.getByRole("navigation")).toBeVisible();
+  await expect(composer).toHaveValue(firstDraft);
+
+  await page.getByRole("button", { name: new RegExp(secondTitle) }).click();
+  await expect(composer).toHaveValue(secondDraft);
+});
+
+test("a destructive confirmation stays open when the delete fails", async ({ page, server }) => {
+  const id = `e2e-${randomUUID()}`;
+  const title = `Delete failure ${id}`;
+  const createdAt = new Date().toISOString();
+  sql(
+    server.stateDir,
+    `INSERT INTO conversations (id, title, type, created_at) VALUES ('${id}', '${title}', 'chat', '${createdAt}');`,
+  );
+  await page.route(`**/api/conversations/${id}`, async (route) => {
+    if (route.request().method() !== "DELETE") {
+      await route.continue();
+      return;
+    }
+    await route.fulfill({
+      status: 500,
+      contentType: "application/json",
+      body: JSON.stringify({ error: "Delete failed", requestId: "e2e" }),
+    });
+  });
+
+  await openApp(page, "/chat");
+  const conversation = page.getByRole("button", { name: new RegExp(title) });
+  await conversation.hover();
+  await conversation
+    .locator("..")
+    .getByRole("button", { name: t("chat.delete") })
+    .click();
+
+  const dialog = page.getByRole("dialog");
+  await dialog.getByRole("button", { name: t("chat.delete") }).click();
+  await expect(page.getByText("Delete failed", { exact: true })).toBeVisible();
+  await expect(dialog).toBeVisible();
+  await dialog.getByRole("button", { name: t("common.cancel") }).click();
+  await expect(conversation).toBeVisible();
 });
 
 test("a message typed while a reply is running waits its turn, then goes", async ({

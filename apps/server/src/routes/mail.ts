@@ -1,5 +1,6 @@
 import { extname } from "node:path";
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
+import type { MailSearchHit, MailSearchResponse } from "@marlen/shared";
 import { Type } from "@sinclair/typebox";
 import { findAccount } from "../agent/accounts.js";
 import { badRequest, notFound, toProviderError } from "../core/errors.js";
@@ -28,7 +29,59 @@ const threadQuery = Type.Object({
   threadId: Type.String({ minLength: 1 }),
 });
 
+const searchQuery = Type.Object({
+  q: Type.Optional(Type.String({ maxLength: 500 })),
+  limit: Type.Optional(Type.Integer({ minimum: 1, maximum: 30 })),
+});
+
 export const mailRoutes: FastifyPluginAsyncTypebox = async (app) => {
+  app.get(
+    "/api/mail/search",
+    { schema: { querystring: searchQuery } },
+    async (req): Promise<MailSearchResponse> => {
+      const text = req.query.q?.trim() ?? "";
+      const limit = req.query.limit ?? 12;
+      const accounts = await listAccounts();
+      const searched = await Promise.all(
+        accounts.map(async (account) => {
+          const provider = getMailReadProvider(account.app);
+          if (!provider) return { items: [] as MailSearchHit[], failed: false };
+          try {
+            const messages = await provider.searchMessages(account, {
+              ...(text ? { text } : {}),
+              folder: text ? "all" : "inbox",
+              limit,
+            });
+            return {
+              failed: false,
+              items: messages.map((message) => ({
+                threadId: message.threadId,
+                accountId: account.id,
+                accountName: account.name,
+                messageId: message.messageId,
+                subject: message.subject,
+                from: message.from,
+                date: message.date,
+                snippet: message.snippet,
+              })),
+            };
+          } catch (error) {
+            req.log.warn({ err: error, accountId: account.id }, "searching mail account failed");
+            return { items: [] as MailSearchHit[], failed: true };
+          }
+        }),
+      );
+
+      return {
+        items: searched
+          .flatMap((result) => result.items)
+          .sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""))
+          .slice(0, limit),
+        partial: searched.some((result) => result.failed),
+      };
+    },
+  );
+
   // The served MIME comes from the filename extension, never the provider's
   // declared type, so foreign content can't be served as executable text/html.
   app.get(
@@ -77,7 +130,7 @@ export const mailRoutes: FastifyPluginAsyncTypebox = async (app) => {
       if (!account) throw notFound("connected account not found");
 
       const provider = getMailReadProvider(account.app);
-      if (!provider?.getThread) throw badRequest(`${account.app} has no thread read support`);
+      if (!provider) throw badRequest(`${account.app} has no thread read support`);
 
       const thread = await provider.getThread(account, threadId).catch((error: unknown) => {
         throw toProviderError(error, "thread not found");

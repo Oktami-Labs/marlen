@@ -91,10 +91,10 @@ export function FileAccessSection({ index }: { index: number }) {
   };
 
   const confirmArm = async () => {
-    if (!confirmKey || !grants) return;
+    if (!confirmKey || !grants) return false;
     setConfirmBusy(true);
     try {
-      if (await persist({ ...grants, [confirmKey]: true })) setConfirmKey(null);
+      return await persist({ ...grants, [confirmKey]: true });
     } finally {
       setConfirmBusy(false);
     }
@@ -144,7 +144,7 @@ export function FileAccessSection({ index }: { index: number }) {
         description={confirmKey ? copy[confirmKey].confirmBody : ""}
         confirmLabel={confirmKey ? copy[confirmKey].confirmCta : ""}
         busy={confirmBusy}
-        onConfirm={() => void confirmArm()}
+        onConfirm={confirmArm}
       />
     </Section>
   );

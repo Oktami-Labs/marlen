@@ -20,6 +20,7 @@ import {
   type FormField,
   type Lead,
   type LeadCardData,
+  type MailSearchHit,
   type MessageCard,
   type SourceItem,
   splitPage,
@@ -291,6 +292,7 @@ export function coerceBriefingItem(
     deadline,
     receivedAt,
     draftId,
+    handled,
   } = value;
   if (
     !isNonEmptyString(threadId) ||
@@ -313,6 +315,7 @@ export function coerceBriefingItem(
     ...(isNonEmptyString(receivedAt) ? { receivedAt } : {}),
     ...(isNonEmptyString(draftId) ? { draftId } : {}),
     ...(webUrl ? { webUrl } : {}),
+    ...(handled === true ? { handled: true } : {}),
   };
 }
 
@@ -464,6 +467,37 @@ function parseSourcesCard(details: Record<string, unknown>): CardOf<"sources"> |
       age: isString(item.age) ? item.age : undefined,
     })),
   );
+}
+
+const MAX_MAIL_SOURCES = 10;
+const MAX_MAIL_SOURCE_SNIPPET = 500;
+
+export function buildMailSourcesCard(
+  query: string,
+  results: unknown[],
+): CardOf<"mail_sources"> | undefined {
+  const items: MailSearchHit[] = [];
+  const seen = new Set<string>();
+  for (const result of results) {
+    if (items.length >= MAX_MAIL_SOURCES) break;
+    const ref = parseEmailRef(result);
+    if (!ref || !isRecord(result)) continue;
+    const key = `${ref.accountId}\n${ref.threadId}`;
+    if (seen.has(key)) continue;
+    seen.add(key);
+    items.push({
+      ...ref,
+      snippet: isString(result.snippet) ? result.snippet.slice(0, MAX_MAIL_SOURCE_SNIPPET) : "",
+    });
+  }
+  return items.length > 0 ? { kind: "mail_sources", query, items } : undefined;
+}
+
+function parseMailSourcesCard(
+  details: Record<string, unknown>,
+): CardOf<"mail_sources"> | undefined {
+  if (!Array.isArray(details.items) || !isString(details.query)) return undefined;
+  return buildMailSourcesCard(details.query, details.items);
 }
 
 /** What the agent just wrote to the wiki, so the turn shows what it will remember. */
@@ -639,6 +673,7 @@ const CARD_PARSERS: {
   choices: parseChoicesCard,
   briefing: parseBriefingCard,
   sources: (details) => parseSourcesCard(details),
+  mail_sources: (details) => parseMailSourcesCard(details),
   form: (details) => parseFormCard(details),
   wiki_note: (details) => parseWikiNoteCard(details),
 };

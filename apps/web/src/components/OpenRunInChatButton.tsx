@@ -5,10 +5,10 @@ import { openRunInChat } from "@/lib/quickActions";
 
 /** Per-run "continue in chat" icon action shared by the activity feeds. */
 export function OpenRunInChatButton({
-  runId,
+  conversationId,
   onNavigateToChat,
 }: {
-  runId: string;
+  conversationId: string;
   /** Route change to perform once the run's conversation is targeted. */
   onNavigateToChat: () => void;
 }) {
@@ -21,7 +21,7 @@ export function OpenRunInChatButton({
       aria-label={t("home.openInChat")}
       onClick={(e) => {
         e.stopPropagation();
-        openRunInChat(runId, onNavigateToChat);
+        openRunInChat(conversationId, onNavigateToChat);
       }}
     >
       <MessageSquareShare />

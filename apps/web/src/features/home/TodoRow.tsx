@@ -5,6 +5,7 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { ExpandButton } from "@/components/ui/disclosure-toggle";
+import { HoverActions } from "@/components/ui/hover-actions";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
@@ -66,7 +67,9 @@ export function useTodoPatch(): PatchFn {
  * One todo: checkbox to complete, expand for the body note, dismiss, drag to
  * reorder/reschedule, pencil to edit title/note/due/linked automation in place
  * (fields save on blur/change, no Save button). A linked automation shows as
- * a bolt: ticking done starts that automation.
+ * a bolt: ticking done starts that automation. Only the checkbox and the
+ * expand chevron show at rest; chat, edit and dismiss wait for hover, so a
+ * list of twelve rows is twelve titles and not fifty icons.
  */
 export function TodoRow({
   todo,
@@ -147,7 +150,7 @@ export function TodoRow({
   return (
     <article
       className={cn(
-        "surface surface-hover flex flex-col gap-2 rounded-lg px-2.5 py-2.5 transition",
+        "surface surface-hover group flex flex-col gap-2 rounded-lg px-2.5 py-2.5 transition",
         completing && "opacity-60",
       )}
     >
@@ -202,42 +205,56 @@ export function TodoRow({
           </button>
         )}
         <div className="ml-auto flex shrink-0 items-center gap-1">
-          {onOpenChat && !editing && (
+          {editing ? (
             <Button
               variant="ghost"
               size="icon-xs"
-              title={t("home.openInChat")}
-              aria-label={t("home.openInChat")}
-              onClick={onOpenChat}
+              title={t("home.todosEditDone")}
+              aria-label={t("home.todosEditDone")}
+              onClick={() => withViewTransition(() => setEditing(false))}
             >
-              <MessageSquareShare />
+              <Check />
             </Button>
-          )}
-          <Button
-            variant="ghost"
-            size="icon-xs"
-            title={t(editing ? "home.todosEditDone" : "home.todosEdit")}
-            aria-label={t(editing ? "home.todosEditDone" : "home.todosEdit")}
-            onClick={() => withViewTransition(() => setEditing((v) => !v))}
-          >
-            {editing ? <Check /> : <Pencil />}
-          </Button>
-          {!editing && (
-            <Button
-              variant="ghost-danger"
-              size="icon-xs"
-              title={t("home.todosDismiss")}
-              aria-label={t("home.todosDismiss")}
-              onClick={dismiss}
-            >
-              <Trash2 />
-            </Button>
-          )}
-          {expandable && !editing && (
-            <ExpandButton
-              open={open}
-              onToggle={() => withViewTransition(() => setOpen((v) => !v))}
-            />
+          ) : (
+            <>
+              <HoverActions className="gap-1">
+                {onOpenChat && (
+                  <Button
+                    variant="ghost"
+                    size="icon-xs"
+                    title={t("home.openInChat")}
+                    aria-label={t("home.openInChat")}
+                    onClick={onOpenChat}
+                  >
+                    <MessageSquareShare />
+                  </Button>
+                )}
+                <Button
+                  variant="ghost"
+                  size="icon-xs"
+                  title={t("home.todosEdit")}
+                  aria-label={t("home.todosEdit")}
+                  onClick={() => withViewTransition(() => setEditing(true))}
+                >
+                  <Pencil />
+                </Button>
+                <Button
+                  variant="ghost-danger"
+                  size="icon-xs"
+                  title={t("home.todosDismiss")}
+                  aria-label={t("home.todosDismiss")}
+                  onClick={dismiss}
+                >
+                  <Trash2 />
+                </Button>
+              </HoverActions>
+              {expandable && (
+                <ExpandButton
+                  open={open}
+                  onToggle={() => withViewTransition(() => setOpen((v) => !v))}
+                />
+              )}
+            </>
           )}
         </div>
       </div>

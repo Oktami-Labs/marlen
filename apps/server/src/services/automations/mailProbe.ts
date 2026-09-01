@@ -10,8 +10,8 @@ import { requestRun } from "./scheduler.js";
 
 const log = moduleLogger("mailProbe");
 
-/** Poll cadence. Tunable: each tick costs 1–2 proxied calls per connected account. */
-const PROBE_INTERVAL_MS = 5 * 60_000;
+/** Poll cadence. Each tick is one lightweight newest-message read per mail account. */
+const PROBE_INTERVAL_MS = 60_000;
 
 const CURSORS_SETTING_KEY = "mailProbe.cursors";
 

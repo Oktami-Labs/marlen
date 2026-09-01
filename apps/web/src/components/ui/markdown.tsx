@@ -1,4 +1,5 @@
 import { Mail } from "lucide-react";
+import { memo } from "react";
 import { useTranslation } from "react-i18next";
 import ReactMarkdown, { type Components } from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -163,7 +164,7 @@ const STREAM_PLUGINS = [rehypeStreamWords];
 
 /** Renders LLM-produced markdown (chat replies, automation run reports) as styled text.
  *  `stream` marks text still being generated: new words fade in as they arrive. */
-export function Markdown({
+export const Markdown = memo(function Markdown({
   content,
   className,
   stream,
@@ -183,4 +184,4 @@ export function Markdown({
       </ReactMarkdown>
     </div>
   );
-}
+});

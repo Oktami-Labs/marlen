@@ -1,4 +1,3 @@
-import type { MissedAutomation, RunFeedItem } from "@marlen/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { CheckCheck } from "lucide-react";
 import * as React from "react";
@@ -7,17 +6,11 @@ import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
 import { ErrorBanner, Notice } from "@/components/ui/feedback";
 import { DraftReader, draftStack } from "@/features/drafts/DraftReader";
-import { ActivitySection } from "@/features/home/ActivitySection";
 import { AttentionSection } from "@/features/home/AttentionSection";
-import { BriefingHero, findBriefingCard } from "@/features/home/BriefingHero";
-import { freshResultRuns, ResultsSection } from "@/features/home/ResultsSection";
-import {
-  draftSeenKey,
-  outboundSeenKey,
-  runSeenKey,
-  todoSeenKey,
-  useSeen,
-} from "@/features/home/seen";
+import { upcomingRuns } from "@/features/home/agenda";
+import { StatusLine } from "@/features/home/StatusLine";
+import { draftSeenKey, outboundSeenKey, todoSeenKey, useSeen } from "@/features/home/seen";
+import { findBriefingCard, freshRuns, runSummary, WorkSection } from "@/features/home/WorkSection";
 import { useAccountColors } from "@/lib/accounts";
 import { api } from "@/lib/api";
 import type { View } from "@/lib/nav";
@@ -41,8 +34,6 @@ export function HomePanel({
     queryKey: ["automations", "list"],
     queryFn: () => api.automations(),
   });
-  const pinnedQuery = useQuery({ queryKey: ["runs", "pinned"], queryFn: () => api.pinnedRun() });
-  const missedQuery = useQuery({ queryKey: ["runs", "missed"], queryFn: () => api.missedRuns() });
   const todosQuery = useQuery({ queryKey: ["todos"], queryFn: () => api.todos("open") });
   const outboundQuery = useQuery({
     queryKey: ["outbound", "open"],
@@ -54,14 +45,7 @@ export function HomePanel({
   const drafts = draftsQuery.data ?? null;
   const runs = runsQuery.data?.items ?? null;
   const automations = automationsQuery.data ?? null;
-  const pinned = pinnedQuery.data ?? null;
-  const missed = missedQuery.data?.items ?? [];
-  const queryError =
-    draftsQuery.error ??
-    runsQuery.error ??
-    automationsQuery.error ??
-    pinnedQuery.error ??
-    missedQuery.error;
+  const queryError = draftsQuery.error ?? runsQuery.error ?? automationsQuery.error;
   const error = queryError ? errorMessage(queryError) : null;
 
   const refreshDrafts = () => void queryClient.invalidateQueries({ queryKey: ["drafts"] });
@@ -80,40 +64,52 @@ export function HomePanel({
     setSearchParams({ draft: `${accountId}:${draftId}` });
   const closeDraft = () => setSearchParams({}, { replace: true });
 
-  // Prefer the pinned run, then the newest successful briefing.
-  const heroRun = React.useMemo(() => {
-    if (pinned?.run) return pinned.run;
-    if (!runs) return null;
-    let best: RunFeedItem | null = null;
-    for (const run of runs) {
-      if (run.status !== "success") continue;
-      if (!findBriefingCard(run)) continue;
-      if (!best || new Date(run.startedAt).getTime() > new Date(best.startedAt).getTime()) {
-        best = run;
-      }
-    }
-    return best;
-  }, [runs, pinned]);
+  // One run unfolds at a time, and the status line's briefing button opens it,
+  // so the open row lives here rather than inside the work column. Opened from
+  // the status line the row also scrolls into view and flashes, since the
+  // button sits across the page from its effect; a click on the row itself
+  // does neither.
+  const [openRunId, setOpenRunId] = React.useState<string | null>(null);
+  const [focusRunId, setFocusRunId] = React.useState<string | null>(null);
+  const toggleRun = (runId: string | null) => {
+    setOpenRunId(runId);
+    setFocusRunId(null);
+  };
 
-  const activityRuns = React.useMemo(() => {
-    if (!runs) return runs;
-    return heroRun ? runs.filter((r) => r.id !== heroRun.id) : runs;
-  }, [runs, heroRun]);
+  const todos = todosQuery.data ?? [];
+  const outbound = outboundQuery.data ?? [];
+  const approvals =
+    outbound.length + (drafts ?? []).reduce((n, account) => n + account.drafts.length, 0);
+  const needsYou = todos.length + approvals;
+  const mine =
+    (runs ?? []).filter((run) => run.status === "running").length +
+    upcomingRuns(automations).length;
 
-  const newCount = [
-    ...(todosQuery.data ?? []).map((todo) => [todoSeenKey(todo.id), todo.createdAt] as const),
-    ...(outboundQuery.data ?? []).map(
-      (draft) => [outboundSeenKey(draft.id), draft.createdAt] as const,
-    ),
-    ...(drafts ?? []).flatMap((account) =>
-      account.drafts.map(
-        (draft) => [draftSeenKey(account.accountId, draft.id), draft.date] as const,
+  // The newest run whose turn composed a briefing: its headline rides the
+  // status line, and the line's button unfolds this row.
+  const briefingRun = (runs ?? []).find((run) => run.status === "success" && findBriefingCard(run));
+  const briefing = briefingRun && {
+    name: briefingRun.automationName ?? t("home.deletedAutomation"),
+    startedAt: briefingRun.startedAt,
+    headline: runSummary(briefingRun),
+  };
+  const openBriefing = () => {
+    if (!briefingRun) return;
+    setOpenRunId(briefingRun.id);
+    setFocusRunId(briefingRun.id);
+  };
+
+  const newCount =
+    [
+      ...todos.map((todo) => [todoSeenKey(todo.id), todo.createdAt] as const),
+      ...outbound.map((draft) => [outboundSeenKey(draft.id), draft.createdAt] as const),
+      ...(drafts ?? []).flatMap((account) =>
+        account.drafts.map(
+          (draft) => [draftSeenKey(account.accountId, draft.id), draft.date] as const,
+        ),
       ),
-    ),
-    ...freshResultRuns(activityRuns, heroRun?.automationId).map(
-      ({ run }) => [runSeenKey(run.id), run.startedAt] as const,
-    ),
-  ].filter(([key, createdAt]) => seen.isNew(key, createdAt)).length;
+    ].filter(([key, createdAt]) => seen.isNew(key, createdAt)).length +
+    freshRuns(runs, seen).length;
 
   const stack = draftStack(drafts);
   const entry = selected
@@ -132,6 +128,7 @@ export function HomePanel({
   if (entry) {
     return (
       <DraftReader
+        key={`${entry.accountId}:${entry.draft.id}`}
         entry={entry}
         stack={stack}
         onClose={closeDraft}
@@ -142,7 +139,7 @@ export function HomePanel({
   }
 
   return (
-    <div className="flex flex-col gap-10 pt-1">
+    <div className="flex flex-col gap-8 pt-1">
       {error && !offline && <ErrorBanner>{error}</ErrorBanner>}
 
       {setupIncomplete ? (
@@ -158,10 +155,15 @@ export function HomePanel({
         </Notice>
       ) : null}
 
-      {missed.length > 0 && <MissedRunsBanner missed={missed} />}
+      <StatusLine
+        needsYou={needsYou}
+        mine={mine}
+        briefing={briefing}
+        onOpenBriefing={openBriefing}
+      />
 
       {newCount > 0 && (
-        <div className="-mb-6 flex items-center justify-between gap-3">
+        <div className="-mb-4 flex items-center justify-between gap-3">
           <p className="text-xs text-muted-foreground">{t("home.newCount", { count: newCount })}</p>
           <Button variant="ghost" size="sm" onClick={seen.seeAll}>
             <CheckCheck />
@@ -170,73 +172,29 @@ export function HomePanel({
         </div>
       )}
 
-      {heroRun && (
-        <BriefingHero
-          run={heroRun}
-          runs={runs}
-          onNavigate={onNavigate}
+      {/* Two stacks: what waits on you, what the agent does itself. Side by side
+          as soon as the canvas can hold two draft rows, stacked below that. */}
+      <div className="grid grid-cols-1 items-start gap-8 @3xl:grid-cols-2 @3xl:gap-7">
+        <AttentionSection
+          drafts={drafts}
           colors={colors}
-          nextRunAt={
-            pinned?.automation?.nextRunAt ??
-            automations?.find((a) => a.id === heroRun.automationId)?.nextRunAt
-          }
+          onOpenDraft={openDraft}
+          onDraftsChanged={refreshDrafts}
+          automations={automations}
+          onNavigate={onNavigate}
+          seen={seen}
         />
-      )}
-
-      <AttentionSection
-        automations={automations}
-        drafts={drafts}
-        colors={colors}
-        onOpenDraft={openDraft}
-        onDraftsChanged={refreshDrafts}
-        onNavigate={onNavigate}
-        seen={seen}
-      />
-      <ResultsSection
-        runs={activityRuns}
-        heroAutomationId={heroRun?.automationId}
-        colors={colors}
-        onNavigate={onNavigate}
-        seen={seen}
-      />
-      <ActivitySection
-        runs={activityRuns}
-        automations={automations}
-        colors={colors}
-        onNavigate={onNavigate}
-        hasHero={!!heroRun}
-      />
-    </div>
-  );
-}
-
-function MissedRunsBanner({ missed }: { missed: MissedAutomation[] }) {
-  const { t } = useTranslation();
-  const [running, setRunning] = React.useState(false);
-  const [error, setError] = React.useState<string | null>(null);
-
-  const run = async () => {
-    setRunning(true);
-    setError(null);
-    try {
-      await api.runMissed();
-    } catch (e) {
-      setError(errorMessage(e));
-      setRunning(false);
-    }
-  };
-
-  return (
-    <Notice tone="warning" className="flex flex-wrap items-center justify-between gap-3">
-      <div className="min-w-0">
-        <p className="text-sm">{error ?? t("home.missedBanner", { count: missed.length })}</p>
-        {!error && (
-          <p className="truncate text-xs opacity-80">{missed.map((m) => m.name).join(", ")}</p>
-        )}
+        <WorkSection
+          runs={runs}
+          automations={automations}
+          colors={colors}
+          onNavigate={onNavigate}
+          seen={seen}
+          openRunId={openRunId}
+          focusRunId={focusRunId}
+          onToggleRun={toggleRun}
+        />
       </div>
-      <Button size="sm" onClick={run} disabled={running}>
-        {running ? t("home.missedRunning") : t("home.missedRun")}
-      </Button>
-    </Notice>
+    </div>
   );
 }

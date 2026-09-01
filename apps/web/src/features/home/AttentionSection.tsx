@@ -21,7 +21,6 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronRight,
   CircleCheck,
-  Clock,
   ListTodo,
   Menu,
   Plus,
@@ -54,12 +53,11 @@ import {
 import { DoneTodoRow, TodoRow, useTodoPatch } from "@/features/home/TodoRow";
 import { accountColor } from "@/lib/accounts";
 import { api } from "@/lib/api";
-import { dateTimeLabel, dayLabel, timeLabel } from "@/lib/dates";
+import { dayLabel, waitingLabel } from "@/lib/dates";
 import type { View } from "@/lib/nav";
 import { openConversationInChat } from "@/lib/quickActions";
 import { cn, errorMessage, midpoint, rowTransition, stagger } from "@/lib/utils";
 
-const AUTOMATION_HORIZON_DAYS = 14;
 const OVERDUE = "overdue";
 const ANYTIME = "anytime";
 const dayGroupId = (ms: number) => `day:${ms}`;
@@ -74,20 +72,15 @@ type Group = {
   droppable: boolean;
   /** The sortable todos, in display order. */
   todos: Todo[];
-  /** Read-only automation rows (day groups only), pre-merged for render order. */
-  render: RenderItem[];
 };
-type RenderItem =
-  | { kind: "todo"; at: number; todo: Todo }
-  | { kind: "auto"; at: number; automation: Automation };
 
 /**
- * "Zu erledigen", the one agenda of everything on your plate: overdue todos,
- * every draft awaiting approval (email and outbound channels), then the days
- * ahead, dated todos with the next scheduled automation runs interleaved
- * read-only, and undated todos last. Drag a todo onto another day to
- * reschedule, or onto "Anytime" to undate it; mutations are optimistic and
- * the "todos" server event reconciles the cache.
+ * "Zu erledigen", everything waiting on the user: overdue todos, every draft
+ * awaiting approval (email and outbound channels), then the days ahead and
+ * undated todos last. What the agent does by itself is the work column's
+ * business, never this one's. Drag a todo onto another day to reschedule, or
+ * onto "Anytime" to undate it; mutations are optimistic and the "todos" server
+ * event reconciles the cache.
  */
 export function AttentionSection({
   automations,
@@ -113,7 +106,6 @@ export function AttentionSection({
   const lang = i18n.language;
   const queryClient = useQueryClient();
   const navigate = useNavigate();
-  const [expanded, setExpanded] = React.useState(true);
   const [adding, setAdding] = React.useState(false);
   const [showDone, setShowDone] = React.useState(false);
   /** Account id, or "all", narrows the approvals block only. */
@@ -159,15 +151,9 @@ export function AttentionSection({
     return at !== null && startOfDayMs(new Date(at)) >= todayStart;
   });
 
-  const upcomingAutos = (automations ?? [])
-    .filter((a) => a.enabled && a.nextRunAt)
-    .map((a) => ({ automation: a, at: new Date(a.nextRunAt as string).getTime() }))
-    .filter((a) => a.at < todayStart + AUTOMATION_HORIZON_DAYS * DAY_MS);
-
-  // Day buckets keyed by local day-start ms, holding the day's todos + automations.
+  // Day buckets keyed by local day-start ms.
   const dayKeys = new Set<number>();
   for (const td of datedTodos) dayKeys.add(startOfDayMs(new Date(dueMs(td) as number)));
-  for (const a of upcomingAutos) dayKeys.add(startOfDayMs(new Date(a.at)));
 
   const dayHeading = (ms: number): string => {
     if (ms === todayStart) return t("home.todosToday");
@@ -183,26 +169,18 @@ export function AttentionSection({
       overdue: true,
       droppable: false,
       todos: overdueTodos,
-      render: overdueTodos.map((td) => ({ kind: "todo", at: dueMs(td) as number, todo: td })),
     });
   }
   for (const ms of [...dayKeys].sort((a, b) => a - b)) {
     const dayTodos = datedTodos
       .filter((td) => startOfDayMs(new Date(dueMs(td) as number)) === ms)
       .sort((a, b) => (dueMs(a) as number) - (dueMs(b) as number));
-    const render: RenderItem[] = [
-      ...dayTodos.map((td) => ({ kind: "todo" as const, at: dueMs(td) as number, todo: td })),
-      ...upcomingAutos
-        .filter((a) => startOfDayMs(new Date(a.at)) === ms)
-        .map((a) => ({ kind: "auto" as const, at: a.at, automation: a.automation })),
-    ].sort((a, b) => a.at - b.at);
     groups.push({
       id: dayGroupId(ms),
       heading: dayHeading(ms),
       overdue: false,
       droppable: true,
       todos: dayTodos,
-      render,
     });
   }
   if (anytimeTodos.length > 0) {
@@ -212,7 +190,6 @@ export function AttentionSection({
       overdue: false,
       droppable: true,
       todos: anytimeTodos,
-      render: anytimeTodos.map((td) => ({ kind: "todo", at: 0, todo: td })),
     });
   }
 
@@ -227,13 +204,15 @@ export function AttentionSection({
   // that reads as their legend both appear only from the second one on.
   const manyAccounts = emailGroups.length > 1;
 
-  const dateLabel = (iso: string) => dateTimeLabel(iso, lang);
+  // Approvals wear how long they have waited once that is longer than a few days.
+  const dateLabel = (iso: string) => waitingLabel(iso, lang);
 
   const suggestions = suggestionsQuery.data ?? [];
-  const count = todos.length + approvalsCount + suggestions.length;
   const loaded = !!todosQuery.data && drafts !== null && !!outboundQuery.data;
   const allClear =
-    loaded && count === 0 && upcomingAutos.length === 0 && !emailGroups.some((a) => a.error);
+    loaded &&
+    todos.length + approvalsCount + suggestions.length === 0 &&
+    !emailGroups.some((a) => a.error);
 
   const groupOfTodo = new Map<string, Group>();
   for (const g of groups) for (const td of g.todos) groupOfTodo.set(td.id, g);
@@ -295,45 +274,36 @@ export function AttentionSection({
         items={group.todos.map((td) => td.id)}
         strategy={verticalListSortingStrategy}
       >
-        {group.render.map((item) =>
-          item.kind === "todo" ? (
-            <SeenOnInteract
-              key={item.todo.id}
-              seen={seen}
-              itemKey={todoSeenKey(item.todo.id)}
-              createdAt={item.todo.createdAt}
-            >
-              {(isNew) => (
-                <SortableTodoRow id={item.todo.id}>
-                  <TodoRow
-                    todo={item.todo}
-                    overdue={group.overdue}
-                    lang={lang}
-                    todayStart={todayStart}
-                    onPatch={patch}
-                    automations={automations}
-                    isNew={isNew}
-                    onOpenChat={
-                      item.todo.conversationId
-                        ? () =>
-                            openConversationInChat(item.todo.conversationId as string, () =>
-                              onNavigate("chat"),
-                            )
-                        : undefined
-                    }
-                  />
-                </SortableTodoRow>
-              )}
-            </SeenOnInteract>
-          ) : (
-            <AutomationRow
-              key={item.automation.id}
-              automation={item.automation}
-              at={item.at}
-              lang={lang}
-            />
-          ),
-        )}
+        {group.todos.map((todo) => (
+          <SeenOnInteract
+            key={todo.id}
+            seen={seen}
+            itemKey={todoSeenKey(todo.id)}
+            createdAt={todo.createdAt}
+          >
+            {(isNew) => (
+              <SortableTodoRow id={todo.id}>
+                <TodoRow
+                  todo={todo}
+                  overdue={group.overdue}
+                  lang={lang}
+                  todayStart={todayStart}
+                  onPatch={patch}
+                  automations={automations}
+                  isNew={isNew}
+                  onOpenChat={
+                    todo.conversationId
+                      ? () =>
+                          openConversationInChat(todo.conversationId as string, () =>
+                            onNavigate("chat"),
+                          )
+                      : undefined
+                  }
+                />
+              </SortableTodoRow>
+            )}
+          </SeenOnInteract>
+        ))}
       </SortableContext>
     </GroupBlock>
   );
@@ -411,98 +381,84 @@ export function AttentionSection({
 
   return (
     <section className="flex flex-col gap-3">
-      <SectionTitle
-        icon={ListTodo}
-        tone="tint-neutral"
-        title={t("home.attentionTitle")}
-        count={loaded ? count : null}
-        expanded={expanded}
-        onToggle={() => setExpanded((v) => !v)}
-      >
+      <SectionTitle icon={ListTodo} tone="tint-neutral" title={t("home.attentionTitle")}>
         <Button
           variant="ghost"
           size="icon-xs"
           title={t("home.todosAdd")}
           aria-label={t("home.todosAdd")}
-          onClick={() => {
-            setAdding((v) => (expanded ? !v : true));
-            setExpanded(true);
-          }}
+          onClick={() => setAdding((v) => !v)}
         >
           <Plus />
         </Button>
       </SectionTitle>
-      {expanded && (
-        <>
-          {rowError && <ErrorBanner>{rowError}</ErrorBanner>}
-          {!todosQuery.data && <LoadingRow />}
-          <DndContext
-            sensors={sensors}
-            collisionDetection={closestCenter}
-            onDragStart={(e) => {
-              setDragId(String(e.active.id));
-              setDropCross(false);
-            }}
-            onDragCancel={() => setDragId(null)}
-            onDragEnd={onDragEnd}
-          >
-            <div className="flex flex-col gap-6">
-              {groups.filter((g) => g.overdue).map(renderGroup)}
-              {suggestions.length > 0 && (
-                <button
-                  type="button"
-                  // Router state (not onNavigate) so the panel can flash the cards on arrival.
-                  onClick={() => navigate("/automations", { state: { focusSuggestions: true } })}
-                  className="surface surface-hover flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm"
-                >
-                  <IconChip size="sm">
-                    <Sparkles />
-                  </IconChip>
-                  <span className="min-w-0 truncate">
-                    {t("home.suggestionsWaiting", { count: suggestions.length })}
-                  </span>
-                  <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-                </button>
-              )}
-              {approvalsZone}
-              {groups.filter((g) => !g.overdue).map(renderGroup)}
-              {adding && (
-                <AddTodoRow seen={seen} onClose={() => setAdding(false)} onError={setRowError} />
-              )}
-              {allClear && !adding && (
-                <EmptyState icon={CircleCheck} description={t("home.attentionEmpty")} />
-              )}
-            </div>
-            <DragOverlay dropAnimation={dropCross ? null : undefined}>
-              {draggedTodo && (
-                <TodoRow
-                  todo={draggedTodo}
-                  overdue={groupOfTodo.get(draggedTodo.id)?.overdue ?? false}
-                  lang={lang}
-                  todayStart={todayStart}
-                  onPatch={patch}
-                  automations={automations}
-                />
-              )}
-            </DragOverlay>
-          </DndContext>
-          {done.length > 0 && (
+      {rowError && <ErrorBanner>{rowError}</ErrorBanner>}
+      {!todosQuery.data && <LoadingRow />}
+      <DndContext
+        sensors={sensors}
+        collisionDetection={closestCenter}
+        onDragStart={(e) => {
+          setDragId(String(e.active.id));
+          setDropCross(false);
+        }}
+        onDragCancel={() => setDragId(null)}
+        onDragEnd={onDragEnd}
+      >
+        <div className="flex flex-col gap-6">
+          {groups.filter((g) => g.overdue).map(renderGroup)}
+          {suggestions.length > 0 && (
+            <button
+              type="button"
+              // Router state (not onNavigate) so the panel can flash the cards on arrival.
+              onClick={() => navigate("/automations", { state: { focusSuggestions: true } })}
+              className="surface surface-hover flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm"
+            >
+              <IconChip size="sm">
+                <Sparkles />
+              </IconChip>
+              <span className="min-w-0 truncate">
+                {t("home.suggestionsWaiting", { count: suggestions.length })}
+              </span>
+              <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
+            </button>
+          )}
+          {approvalsZone}
+          {groups.filter((g) => !g.overdue).map(renderGroup)}
+          {adding && (
+            <AddTodoRow seen={seen} onClose={() => setAdding(false)} onError={setRowError} />
+          )}
+          {allClear && !adding && (
+            <EmptyState icon={CircleCheck} description={t("home.attentionEmpty")} />
+          )}
+        </div>
+        <DragOverlay dropAnimation={dropCross ? null : undefined}>
+          {draggedTodo && (
+            <TodoRow
+              todo={draggedTodo}
+              overdue={groupOfTodo.get(draggedTodo.id)?.overdue ?? false}
+              lang={lang}
+              todayStart={todayStart}
+              onPatch={patch}
+              automations={automations}
+            />
+          )}
+        </DragOverlay>
+      </DndContext>
+      {done.length > 0 && (
+        <div className="flex flex-col gap-2">
+          <DisclosureToggle open={showDone} onToggle={() => setShowDone((v) => !v)}>
+            {t("home.todosDone", { count: done.length })}
+          </DisclosureToggle>
+          {showDone && (
             <div className="flex flex-col gap-2">
-              <DisclosureToggle open={showDone} onToggle={() => setShowDone((v) => !v)}>
-                {t("home.todosDone", { count: done.length })}
-              </DisclosureToggle>
-              {showDone && (
-                <div className="flex flex-col gap-2">
-                  {done.map((td, i) => (
-                    <div key={td.id} className="animate-in-up" style={stagger(i)}>
-                      <DoneTodoRow todo={td} onRestore={() => restoreTodo(td.id)} />
-                    </div>
-                  ))}
+              {done.map((td, i) => (
+                <div key={td.id} className="animate-in-up" style={stagger(i)}>
+                  <DoneTodoRow todo={td} onRestore={() => restoreTodo(td.id)} />
                 </div>
-              )}
+              ))}
             </div>
           )}
-        </>
+        </div>
       )}
     </section>
   );
@@ -680,33 +636,5 @@ function GroupBlock({ group, children }: { group: Group; children: React.ReactNo
       </GroupLabel>
       <div className="flex flex-col gap-2">{children}</div>
     </div>
-  );
-}
-
-/** A scheduled run in the agenda: a real (raised) row so it reads as an item,
- *  kept secondary through muted content. Clicking jumps to the Automations
- *  page, which scrolls to and flashes this automation's card. */
-function AutomationRow({
-  automation,
-  at,
-  lang,
-}: {
-  automation: Automation;
-  at: number;
-  lang: string;
-}) {
-  const navigate = useNavigate();
-  return (
-    <button
-      type="button"
-      onClick={() => navigate("/automations", { state: { focusAutomation: automation.id } })}
-      className="surface surface-hover flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm text-muted-foreground"
-    >
-      <Clock className="h-3.5 w-3.5 shrink-0" />
-      <span className="min-w-0 truncate text-foreground/80">{automation.name}</span>
-      <span className="ml-auto shrink-0 text-xs tabular-nums">
-        {timeLabel(new Date(at).toISOString(), lang)}
-      </span>
-    </button>
   );
 }

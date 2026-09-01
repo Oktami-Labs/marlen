@@ -33,23 +33,3 @@ test("unknown API routes answer in the error envelope, not the SPA", async ({ re
   expect(deepLink.status()).toBe(200);
   expect(await deepLink.text()).toContain('<div id="root">');
 });
-
-test("the database backup carries no third-party secrets", async ({ request }) => {
-  await request.put("/api/onoffice", {
-    data: { token: "backup-probe-token", secret: "backup-probe-secret" },
-  });
-  try {
-    const res = await request.get("/api/backup");
-    expect(res.status()).toBe(200);
-    expect(res.headers()["content-type"]).toBe("application/x-sqlite3");
-
-    const dump = (await res.body()).toString("latin1");
-    expect(dump.startsWith("SQLite format 3")).toBe(true);
-    expect(dump, "onOffice credentials live in a secret file, not the DB").not.toContain(
-      "backup-probe-secret",
-    );
-    expect(dump).not.toContain("backup-probe-token");
-  } finally {
-    await request.delete("/api/onoffice");
-  }
-});

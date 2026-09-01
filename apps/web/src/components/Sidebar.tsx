@@ -58,10 +58,16 @@ function SidebarNavLink({
         isWarning
           ? "text-warning hover:bg-accent/[0.08]"
           : active
-            ? "tint-accent"
+            ? "text-accent"
             : "text-muted-foreground hover:bg-accent/[0.08] hover:text-foreground",
       )}
     >
+      {!isWarning && active && (
+        <span
+          aria-hidden="true"
+          className="sidebar-active-indicator pointer-events-none absolute inset-0 rounded-lg bg-accent/10"
+        />
+      )}
       <Icon className="h-4 w-4 shrink-0" />
       <span className={cn(isCollapsed && "md:hidden")}>{label}</span>
       {isCollapsed && (

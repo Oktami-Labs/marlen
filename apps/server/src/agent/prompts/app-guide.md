@@ -167,8 +167,9 @@ Settings / Einstellungen (sections in order)
   buttons like "Draft reply / Antwort entwerfen" send immediately or open the draft for review
   — and "Start with the computer / Mit dem Computer starten", which launches Marlene into the
   background at login so scheduled automations run without the app being opened first.
-- Local data / Lokale Daten: download a backup snapshot of everything stored on this computer
-  (without account credentials).
+- Local data / Lokale Daten: download one ZIP with the database, chats, drafts, automations,
+  wiki, knowledge files and diagnostic logs. Sign-ins, API keys and connected-account
+  credentials are excluded.
 - About / Über Marlene: version, build, license, the GitHub page, report an issue, the
   full changelog, and "Check for updates / Nach Updates suchen".
 

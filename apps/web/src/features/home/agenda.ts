@@ -1,4 +1,4 @@
-import type { Todo } from "@marlen/shared";
+import type { Automation, Todo } from "@marlen/shared";
 import { timeLabel } from "@/lib/dates";
 
 /** Due-date arithmetic shared by the Home agenda (rows + due-date picker). */
@@ -40,4 +40,19 @@ export function dueChip(
   if (dayContext) return { text: dateOnly ? "" : timeLabel(at.toISOString(), lang), overdue };
   const date = at.toLocaleDateString(lang, { weekday: "short", day: "numeric", month: "short" });
   return { text: dateOnly ? date : `${date}, ${timeLabel(at.toISOString(), lang)}`, overdue };
+}
+
+/** How far ahead a scheduled run still counts as the agent's work for today. */
+const UPCOMING_HORIZON_MS = 36 * 60 * 60 * 1000;
+
+/** Enabled automations due inside the horizon, soonest first. */
+export function upcomingRuns(
+  automations: Automation[] | null,
+): { automation: Automation; at: number }[] {
+  const now = Date.now();
+  return (automations ?? [])
+    .filter((a) => a.enabled && a.nextRunAt)
+    .map((a) => ({ automation: a, at: new Date(a.nextRunAt as string).getTime() }))
+    .filter(({ at }) => at >= now && at < now + UPCOMING_HORIZON_MS)
+    .sort((a, b) => a.at - b.at);
 }

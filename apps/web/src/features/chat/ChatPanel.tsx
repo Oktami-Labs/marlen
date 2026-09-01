@@ -1,14 +1,16 @@
 import type { ChatToolCall, EmailRef } from "@marlen/shared";
 import type { ParseKeys } from "i18next";
-import { ArrowDown, Quote, Send, Square } from "lucide-react";
+import { ArrowDown, Plus, Quote, Send, Square } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { LoadingRow, Notice } from "@/components/ui/feedback";
 import { AgentAvatar } from "@/features/chat/AgentAvatar";
+import { GroundingMenu } from "@/features/chat/composer/GroundingMenu";
 import { RefChips } from "@/features/chat/composer/RefChips";
 import { SlashMenu } from "@/features/chat/composer/SlashMenu";
-import { useComposerRefs } from "@/features/chat/composer/useComposerRefs";
+import { useComposerDraft } from "@/features/chat/composer/useComposerDraft";
+import { useGroundingPicker } from "@/features/chat/composer/useGroundingPicker";
 import { useSlashCommands } from "@/features/chat/composer/useSlashCommands";
 import { VoiceInput } from "@/features/chat/composer/VoiceInput";
 import { onChatCommand } from "@/features/chat/controller";
@@ -57,10 +59,8 @@ export function ChatPanel({
   onSearchHits?: (count: number) => void;
 }) {
   const { t } = useTranslation();
-  const [input, setInput] = React.useState("");
   const [queue, setQueue] = React.useState<PendingSend[]>([]);
   const { colors: accountColors } = useAccountColors({ withAccounts: false });
-  const composerRefs = useComposerRefs();
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
   const focusComposer = React.useCallback(() => {
@@ -71,6 +71,7 @@ export function ChatPanel({
     onFocusComposer: focusComposer,
     pendingFocusAccountId,
   });
+  const { text: input, setText: setInput, ...composerRefs } = useComposerDraft(runs.conversationId);
 
   const isPage = layout === "page";
   const transcriptShown = (isPage || !historyOpen) && !runs.restoring && runs.messages.length > 0;
@@ -110,10 +111,6 @@ export function ChatPanel({
   React.useEffect(() => {
     onConversationChange?.(runs.conversationId);
   }, [runs.conversationId, onConversationChange]);
-
-  React.useEffect(() => {
-    if (runs.idleStale && !input.trim() && !historyOpen) runs.newConversation();
-  }, [runs.idleStale, input, historyOpen, runs.newConversation]);
 
   useAutoGrow(textareaRef, input);
 
@@ -253,6 +250,11 @@ export function ChatPanel({
     submit: sendOrQueue,
     newConversation: runs.newConversation,
   });
+  const grounding = useGroundingPicker({
+    input,
+    setInput,
+    addRef: composerRefs.add,
+  });
 
   const send = () => {
     const message = input.trim();
@@ -319,7 +321,7 @@ export function ChatPanel({
           return;
       }
     });
-  }, [runs.newConversation, runs.openConversation, composerRefs.add]);
+  }, [runs.newConversation, runs.openConversation, composerRefs.add, setInput]);
 
   return (
     <div
@@ -421,6 +423,7 @@ export function ChatPanel({
 
       <div className="thread-column relative flex flex-col gap-1.5 rounded-2xl bg-surface-2 p-1.5 pl-4">
         <SlashMenu {...slash} />
+        <GroundingMenu {...grounding} colors={accountColors} />
         {composerRefs.refs.length > 0 && (
           <RefChips
             refs={composerRefs.refs}
@@ -436,6 +439,10 @@ export function ChatPanel({
             onKeyDown={(e) => {
               // The command menu owns its keys while it is open.
               if (slash.onKeyDown(e)) {
+                e.preventDefault();
+                return;
+              }
+              if (grounding.onKeyDown(e)) {
                 e.preventDefault();
                 return;
               }
@@ -457,6 +464,20 @@ export function ChatPanel({
             )}
             aria-busy={runs.busy}
           />
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="mb-1 shrink-0"
+            onClick={() => {
+              grounding.start();
+              focusComposer();
+            }}
+            aria-label={t("chat.refs.add")}
+            title={t("chat.refs.add")}
+          >
+            <Plus />
+          </Button>
           <ModelControl conversationId={runs.conversationId} className="mb-1 shrink-0" />
           <VoiceInput
             className="mb-1 shrink-0"

@@ -40,13 +40,12 @@ function resultText(result: unknown): string {
 }
 
 /**
- * One assistant row back into model messages: an assistant message with the
- * turn's tool calls, each call's toolResult, then the reply text. A multi-batch
- * turn flattens into one batch, but every result still follows an assistant
- * message containing its call, the shape providers require.
+ * One assistant row back into the model messages the live turn produced:
+ * text/tool-call batch, its results, then the next batch. `batch` is persisted
+ * on new rows; older rows fall back to their streamed text offset.
  */
 function expandAssistantRow(row: MessageRow, model: Model<Api>, timestamp: number): Message[] {
-  const text = row.content.trim();
+  const text = row.content;
   const toolCalls = parseStoredToolCalls(row.toolCalls) ?? [];
   const modelFields = {
     api: model.api,
@@ -58,29 +57,58 @@ function expandAssistantRow(row: MessageRow, model: Model<Api>, timestamp: numbe
 
   const messages: Message[] = [];
   if (toolCalls.length > 0) {
-    messages.push({
-      role: "assistant",
-      content: toolCalls.map((call) => ({
-        type: "toolCall" as const,
-        id: call.id,
-        name: call.name,
-        arguments: (call.parameters ?? {}) as Record<string, unknown>,
-      })),
-      stopReason: "toolUse",
-      ...modelFields,
-    });
+    const batches = new Map<string, ChatToolCall[]>();
     for (const call of toolCalls) {
+      const key =
+        call.batch === undefined ? `offset:${call.contentOffset ?? 0}` : `batch:${call.batch}`;
+      const group = batches.get(key);
+      if (group) group.push(call);
+      else batches.set(key, [call]);
+    }
+    let textOffset = 0;
+    for (const calls of batches.values()) {
+      const nextOffset = Math.max(
+        textOffset,
+        Math.min(text.length, calls[0]?.contentOffset ?? textOffset),
+      );
+      const beforeTools = text.slice(textOffset, nextOffset);
+      const content = [
+        ...(beforeTools ? [{ type: "text" as const, text: beforeTools }] : []),
+        ...calls.map((call) => ({
+          type: "toolCall" as const,
+          id: call.id,
+          name: call.name,
+          arguments: (call.parameters ?? {}) as Record<string, unknown>,
+        })),
+      ];
       messages.push({
-        role: "toolResult",
-        toolCallId: call.id,
-        toolName: call.name,
-        content: [{ type: "text", text: resultText(call.result) }],
-        isError: call.isError,
-        timestamp,
+        role: "assistant",
+        content,
+        stopReason: "toolUse",
+        ...modelFields,
+      });
+      for (const call of calls) {
+        messages.push({
+          role: "toolResult",
+          toolCallId: call.id,
+          toolName: call.name,
+          content: [{ type: "text", text: resultText(call.result) }],
+          isError: call.isError,
+          timestamp,
+        });
+      }
+      textOffset = nextOffset;
+    }
+    const afterTools = text.slice(textOffset);
+    if (afterTools.trim()) {
+      messages.push({
+        role: "assistant",
+        content: [{ type: "text", text: afterTools }],
+        stopReason: "stop",
+        ...modelFields,
       });
     }
-  }
-  if (text) {
+  } else if (text.trim()) {
     messages.push({
       role: "assistant",
       content: [{ type: "text", text }],
@@ -120,7 +148,21 @@ export async function loadHistory(conversationId: string): Promise<Message[]> {
       const kept = expanded.filter((entry) => entry.ms >= cutoff);
       expanded.length = 0;
       expanded.push(
-        { ms, messages: [{ role: "user", content: row.content, timestamp: ms }] },
+        {
+          ms,
+          messages: [
+            {
+              role: "assistant",
+              content: [{ type: "text", text: row.content }],
+              stopReason: "stop",
+              api: model.api,
+              provider: model.provider,
+              model: model.id,
+              usage: zeroUsage(),
+              timestamp: ms,
+            },
+          ],
+        },
         ...kept,
       );
       continue;
@@ -160,10 +202,20 @@ export async function recordCompactionMarker(
   conversationId: string,
   compacted: AgentMessage[],
 ): Promise<void> {
-  // The summary is the user message compactedMessages prepends; pi's wider
-  // AgentMessage union doesn't guarantee `content`, so check structurally.
+  // The summary is the assistant message compactedMessages prepends; pi's
+  // wider AgentMessage union doesn't guarantee `content`, so check structurally.
   const summary = compacted[0] as { content?: unknown } | undefined;
-  const content = typeof summary?.content === "string" ? summary.content : "";
+  const content = Array.isArray(summary?.content)
+    ? summary.content
+        .map((block) => {
+          const value = block as { type?: unknown; text?: unknown };
+          return value.type === "text" && typeof value.text === "string" ? value.text : "";
+        })
+        .filter(Boolean)
+        .join("\n")
+    : typeof summary?.content === "string"
+      ? summary.content
+      : "";
   if (!content) return;
   await db.insert(schema.messages).values({
     id: randomUUID(),

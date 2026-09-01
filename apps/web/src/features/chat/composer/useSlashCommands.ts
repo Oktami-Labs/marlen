@@ -106,6 +106,15 @@ export function useSlashCommands({
         },
       });
     }
+    // Teaching by demonstration: the conversation so far is the demonstration,
+    // and the agent writes it up as a skill page. Prefilled so the user can
+    // narrow it ("…but without the CC step") before sending.
+    commands.push({
+      id: "save-skill",
+      label: t("chat.slash.saveSkill"),
+      hint: t("chat.slash.builtin"),
+      perform: () => setInput(t("chat.slash.saveSkillPrompt")),
+    });
     commands.push({
       id: "new",
       label: t("chat.slash.new"),

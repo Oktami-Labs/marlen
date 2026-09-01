@@ -1,4 +1,4 @@
-import type { LibraryDocument, LibraryStatus, WikiPage } from "@marlen/shared";
+import { type LibraryDocument, type LibraryStatus, splitPage, type WikiPage } from "@marlen/shared";
 import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
@@ -12,6 +12,7 @@ import { Input } from "@/components/ui/input";
 import { Skeleton } from "@/components/ui/skeleton";
 import { useAccountColors } from "@/lib/accounts";
 import { api } from "@/lib/api";
+import { dateTimeLabel } from "@/lib/dates";
 import { toast } from "@/lib/toast";
 
 /**
@@ -74,11 +75,12 @@ export function FileEditor({
   /** A document save returns fresh LibraryStatus; the caller pushes it into its query. */
   onStatus: (status: LibraryStatus) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { accounts, colors } = useAccountColors();
   const [saving, setSaving] = React.useState(false);
   const [createKind, setCreateKind] = React.useState<CreateKind>("page");
   const [name, setName] = React.useState("");
+  const [pinned, setPinned] = React.useState(target.kind === "page" && target.page.pinned);
   const [scope, setScope] = React.useState<PageScope>(
     target.kind === "page" && target.page.contactId !== null
       ? null
@@ -118,14 +120,19 @@ export function FileEditor({
     try {
       if (target.kind === "page") {
         await (scope === null
-          ? api.updatePage(target.page.id, markdown)
-          : api.updatePage(target.page.id, markdown, scope.accountId, null));
+          ? api.updatePage(target.page.id, markdown, target.page.revision, { pinned })
+          : api.updatePage(target.page.id, markdown, target.page.revision, {
+              accountId: scope.accountId,
+              contactId: null,
+              pinned,
+            }));
       } else if (target.kind === "document") {
         onStatus(await api.saveDocumentContent(target.doc.id, markdown));
       } else if (createKind === "page") {
         await api.addPage(markdown, {
           ...(name.trim() ? { name: name.trim() } : {}),
           accountId: scope?.accountId ?? null,
+          pinned,
         });
       } else if (createKind === "skill") {
         await api.addPage(markdown, { name: name.trim(), type: "skill" });
@@ -147,7 +154,7 @@ export function FileEditor({
 
   const title =
     target.kind === "page"
-      ? `${target.page.id}.md`
+      ? splitPage(target.page.content).summary.split("\n", 1)[0] || target.page.id
       : target.kind === "document"
         ? target.doc.path
         : t("storage.editor.newTitle");
@@ -237,7 +244,21 @@ export function FileEditor({
                 @{target.page.contactId}
               </Chip>
             )}
+            <Chip active={pinned} onClick={() => setPinned((value) => !value)}>
+              {t("storage.editor.pinned")}
+            </Chip>
           </div>
+        )}
+
+        {target.kind === "page" && (
+          <p className="font-mono text-2xs text-muted-foreground">
+            {target.page.id} · {t("storage.editor.used", { count: target.page.usedCount })}
+            {target.page.lastUsedAt
+              ? ` · ${t("storage.editor.lastUsed", {
+                  date: dateTimeLabel(target.page.lastUsedAt, i18n.language),
+                })}`
+              : ""}
+          </p>
         )}
       </div>
     </Dialog>

@@ -2,7 +2,13 @@ import type { ConnectedAccount, EmailThreadMessage } from "@marlen/shared";
 import { upstreamStatusCode } from "../../core/errors.js";
 import { proxyRequest } from "../../integrations/pipedream/connect.js";
 import { sanitizeEmailHtml } from "../htmlBody.js";
-import type { MailReadProvider, SentMessage, ThreadDetail } from "../read/readProviders.js";
+import type {
+  MailMessageSummary,
+  MailReadProvider,
+  MailSearch,
+  SentMessage,
+  ThreadDetail,
+} from "../read/readProviders.js";
 import { stripHtml } from "../textUtils.js";
 import {
   fetchConversationMessages,
@@ -17,6 +23,19 @@ const DEFAULT_LIMIT = 50;
 const SENT_SELECT = "subject,toRecipients,sentDateTime,body,conversationId";
 
 const THREAD_SELECT = "subject,from,toRecipients,ccRecipients,receivedDateTime,body,isDraft";
+
+const SEARCH_SELECT =
+  "id,conversationId,subject,from,toRecipients,receivedDateTime,bodyPreview,isRead";
+
+const FOLDER_PATH: Record<MailSearch["folder"], string> = {
+  inbox: "/mailFolders('inbox')/messages",
+  sent: "/mailFolders('sentitems')/messages",
+  all: "/messages",
+};
+
+/** `$search` results come ranked, not dated, and cannot carry `$filter`, so bounds apply here after over-fetching this many times the limit. */
+const SEARCH_OVERFETCH = 3;
+const SEARCH_PAGE_MAX = 100;
 
 /** Display cap on a conversation view, not a paging unit. */
 const THREAD_LIMIT = 50;
@@ -49,6 +68,17 @@ interface GraphListResponse {
 interface GraphThreadListResponse {
   value?: GraphThreadMessage[];
   "@odata.nextLink"?: string;
+}
+
+interface GraphSummaryMessage {
+  id: string;
+  conversationId?: string;
+  subject?: string;
+  from?: GraphRecipient;
+  toRecipients?: GraphRecipient[];
+  receivedDateTime?: string;
+  bodyPreview?: string;
+  isRead?: boolean;
 }
 
 function isHtmlBody(message: { body?: { contentType?: string; content?: string } }): boolean {
@@ -158,6 +188,73 @@ async function getMessageBody(
   return bodyTextOf(message);
 }
 
+function toSummary(message: GraphSummaryMessage): MailMessageSummary {
+  return {
+    messageId: message.id,
+    threadId: message.conversationId ?? message.id,
+    from: formatRecipient(message.from) ?? "",
+    to: formatRecipients(message.toRecipients),
+    subject: message.subject ?? "",
+    date: message.receivedDateTime ?? "",
+    snippet: (message.bodyPreview ?? "").replace(/\s+/g, " ").trim(),
+    unread: message.isRead === false,
+  };
+}
+
+function withinBounds(summary: MailMessageSummary, search: MailSearch): boolean {
+  if (search.since && summary.date < search.since) return false;
+  if (search.until && summary.date > search.until) return false;
+  if (search.unreadOnly && !summary.unread) return false;
+  return true;
+}
+
+/**
+ * Free text and sender go through `$search` (KQL, which excludes `$filter`
+ * and `$orderby`); a search without them uses `$filter`, whose first clause is
+ * the `$orderby` property, as Graph requires.
+ */
+async function searchMessages(
+  account: ConnectedAccount,
+  search: MailSearch,
+  signal?: AbortSignal,
+): Promise<MailMessageSummary[]> {
+  const url = `${GRAPH_API}${FOLDER_PATH[search.folder]}`;
+  const kql = [
+    search.text ?? "",
+    ...(search.from ? search.from.split(/\s+/).map((term) => `from:${term}`) : []),
+  ]
+    .filter(Boolean)
+    .join(" ");
+
+  let params: Record<string, string>;
+  if (kql) {
+    params = {
+      $search: `"${kql.replace(/"/g, "")}"`,
+      $select: SEARCH_SELECT,
+      $top: String(Math.min(search.limit * SEARCH_OVERFETCH, SEARCH_PAGE_MAX)),
+    };
+  } else {
+    const clauses = [`receivedDateTime ge ${search.since ?? "1970-01-01T00:00:00Z"}`];
+    if (search.until) clauses.push(`receivedDateTime le ${search.until}`);
+    if (search.unreadOnly) clauses.push("isRead eq false");
+    params = {
+      $filter: clauses.join(" and "),
+      $orderby: "receivedDateTime desc",
+      $select: SEARCH_SELECT,
+      $top: String(search.limit),
+    };
+  }
+
+  const page = (await proxyRequest(account.id, "get", url, { params, signal })) as {
+    value?: GraphSummaryMessage[];
+  };
+  return (page.value ?? [])
+    .map(toSummary)
+    .filter((summary) => withinBounds(summary, search))
+    .sort((a, b) => b.date.localeCompare(a.date))
+    .slice(0, search.limit);
+}
+
 function toThreadMessage(message: GraphThreadMessage): EmailThreadMessage {
   const html = bodyHtmlOf(message);
   return {
@@ -198,4 +295,5 @@ export const outlookReadProvider: MailReadProvider = {
   listSentSince,
   getMessageBody,
   getThread,
+  searchMessages,
 };

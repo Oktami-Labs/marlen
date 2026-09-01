@@ -194,11 +194,12 @@ export function WhatsAppAccountRow({
     try {
       await api.whatsAppUnlink();
       await onUnlinked();
+      return true;
     } catch (err) {
       toast.error(err);
+      return false;
     } finally {
       setRemoving(false);
-      setConfirm(false);
     }
   };
 
@@ -241,7 +242,7 @@ export function WhatsAppAccountRow({
         description={t("whatsapp.unlinkConfirm")}
         confirmLabel={t("whatsapp.unlink")}
         busy={removing}
-        onConfirm={() => void unlink()}
+        onConfirm={unlink}
       />
     </ListRow>
   );
@@ -269,16 +270,17 @@ export function WhatsAppBusinessRow({
   const accountId = status.business.accountId;
 
   const disconnect = async () => {
-    if (!accountId) return;
+    if (!accountId) return false;
     setRemoving(true);
     try {
       await api.deletePipedreamAccount(accountId);
       await onDisconnected();
+      return true;
     } catch (err) {
       toast.error(err);
+      return false;
     } finally {
       setRemoving(false);
-      setConfirm(false);
     }
   };
 
@@ -327,7 +329,7 @@ export function WhatsAppBusinessRow({
         description={t("whatsapp.businessDisconnectConfirm")}
         confirmLabel={t("whatsapp.businessDisconnect")}
         busy={removing}
-        onConfirm={() => void disconnect()}
+        onConfirm={disconnect}
       />
     </ListRow>
   );

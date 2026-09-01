@@ -132,10 +132,11 @@ export function LeadsPanel() {
   const remove = async (lead: Lead) => {
     try {
       await api.deleteLead(lead.id);
-      setConfirmDelete(null);
       await load();
+      return true;
     } catch (err) {
       toast.error(err);
+      return false;
     }
   };
 
@@ -272,7 +273,7 @@ export function LeadsPanel() {
         title={t("leads.delete")}
         description={t("leads.deleteConfirm", { email: confirmDelete?.email ?? "" })}
         confirmLabel={t("leads.delete")}
-        onConfirm={() => confirmDelete && void remove(confirmDelete)}
+        onConfirm={() => (confirmDelete ? remove(confirmDelete) : false)}
       />
     </div>
   );

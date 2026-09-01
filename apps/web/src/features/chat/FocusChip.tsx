@@ -1,6 +1,6 @@
 import type { Conversation } from "@marlen/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown } from "lucide-react";
-import * as React from "react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { AccountDot } from "@/components/ui/account-dot";
@@ -8,16 +8,9 @@ import { Chip } from "@/components/ui/chip";
 import { OptionRow } from "@/components/ui/option-row";
 import { accountColor, useAccountColors } from "@/lib/accounts";
 import { api } from "@/lib/api";
-import { useServerEvents } from "@/lib/serverEvents";
 import { toast } from "@/lib/toast";
 import { useAnchoredPopover } from "@/lib/useAnchoredPopover";
 import { cn } from "@/lib/utils";
-
-// The conversations endpoint has no by-id lookup, only the paginated list
-// (routes/chat.ts caps it at 200), this reads the same page the history
-// rail's first load would, wide enough that the open conversation is
-// virtually always in range by recency.
-const CONVERSATIONS_LOOKUP_LIMIT = 200;
 
 type Focus = Pick<Conversation, "focusAccountId" | "focusThreadId" | "focusThreadSubject">;
 
@@ -49,36 +42,22 @@ export function FocusChip({
   onPendingFocusChange?: (accountId: string | null) => void;
 }) {
   const { t } = useTranslation();
+  const queryClient = useQueryClient();
   const { accounts, colors } = useAccountColors();
-  const [focus, setFocus] = React.useState<Focus>(NO_FOCUS);
   const { open, setOpen, pos, triggerRef, popoverRef } = useAnchoredPopover<HTMLSpanElement>();
-
-  const loadFocus = React.useCallback(() => {
-    if (!conversationId) {
-      setFocus(NO_FOCUS);
-      return;
-    }
-    api
-      .conversations({ limit: CONVERSATIONS_LOOKUP_LIMIT })
-      .then(({ items }) => {
-        const row = items.find((c) => c.id === conversationId);
-        setFocus(
-          row
-            ? {
-                focusAccountId: row.focusAccountId ?? null,
-                focusThreadId: row.focusThreadId ?? null,
-                focusThreadSubject: row.focusThreadSubject ?? null,
-              }
-            : NO_FOCUS,
-        );
-      })
-      .catch(() => {});
-  }, [conversationId]);
-
-  React.useEffect(loadFocus, [loadFocus]);
-  // A manual pick from another tab, or the agent moving focus mid-turn,
-  // both land here through the same topic the history rail refetches on.
-  useServerEvents(["conversations"], loadFocus);
+  const detailKey = ["conversations", "detail", conversationId] as const;
+  const detailQuery = useQuery({
+    queryKey: detailKey,
+    queryFn: () => api.conversation(conversationId as string),
+    enabled: Boolean(conversationId),
+  });
+  const focus: Focus = detailQuery.data
+    ? {
+        focusAccountId: detailQuery.data.focusAccountId ?? null,
+        focusThreadId: detailQuery.data.focusThreadId ?? null,
+        focusThreadSubject: detailQuery.data.focusThreadSubject ?? null,
+      }
+    : NO_FOCUS;
 
   const pick = async (accountId: string | null) => {
     setOpen(false);
@@ -88,16 +67,22 @@ export function FocusChip({
       return;
     }
     if (accountId === focus.focusAccountId) return;
-    const previous = focus;
-    setFocus(
-      accountId === null
-        ? NO_FOCUS
-        : { focusAccountId: accountId, focusThreadId: null, focusThreadSubject: null },
+    await queryClient.cancelQueries({ queryKey: detailKey });
+    const previous = queryClient.getQueryData<Conversation>(detailKey);
+    queryClient.setQueryData<Conversation>(detailKey, (current) =>
+      current
+        ? {
+            ...current,
+            focusAccountId: accountId,
+            focusThreadId: null,
+            focusThreadSubject: null,
+          }
+        : current,
     );
     try {
       await api.setConversationFocus(conversationId, accountId);
     } catch (err) {
-      setFocus(previous);
+      queryClient.setQueryData(detailKey, previous);
       toast.error(err);
     }
   };
@@ -117,6 +102,7 @@ export function FocusChip({
     <span ref={triggerRef} className="inline-flex min-w-0">
       <Chip
         active={hasFocus}
+        disabled={Boolean(conversationId) && detailQuery.isPending}
         aria-expanded={open}
         title={label}
         onClick={(e) => {

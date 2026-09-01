@@ -12,6 +12,23 @@ test("a fresh install opens the app and navigates between views", async ({ page 
   }
 });
 
+test("setup keeps one task open while both step headers stay available", async ({ page }) => {
+  await page.goto("/");
+  await page.evaluate(() => localStorage.setItem("marlen-setup-dismissed", ""));
+  await page.reload();
+
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(t("setup.title"));
+  const aiStep = page.getByRole("button", { name: t("setup.stepAiTitle"), exact: false });
+  const emailStep = page.getByRole("button", { name: t("setup.stepEmailTitle"), exact: false });
+
+  await expect(aiStep).toHaveAttribute("aria-expanded", "true");
+  await expect(emailStep).toHaveAttribute("aria-expanded", "false");
+
+  await emailStep.click();
+  await expect(aiStep).toHaveAttribute("aria-expanded", "false");
+  await expect(emailStep).toHaveAttribute("aria-expanded", "true");
+});
+
 test("an unknown address says so instead of quietly landing on Home", async ({ page }) => {
   await openApp(page, "/gibt-es-nicht");
 
@@ -52,6 +69,45 @@ test("the theme preference survives a reload", async ({ page }) => {
 
   await page.reload();
   await expect(html).toHaveClass(/dark/);
+});
+
+test("saving a profile preference confirms the save", async ({ page, request }) => {
+  await openApp(page, "/settings");
+
+  const readTimezone = async () => {
+    const response = await request.get("/api/settings/timezone");
+    return (await response.json()) as { timezone: string | null };
+  };
+  await expect.poll(async () => (await readTimezone()).timezone).not.toBeNull();
+  const initialTimezone = (await readTimezone()).timezone;
+  if (!initialTimezone) throw new Error("the app did not initialize its timezone");
+
+  const timezone = initialTimezone === "Pacific/Honolulu" ? "Europe/London" : "Pacific/Honolulu";
+  try {
+    const field = page.getByRole("combobox", { name: t("settings.timezone.label") });
+    await field.fill(timezone);
+    await page.getByRole("option").filter({ hasText: timezone }).click();
+
+    await expect(
+      page.locator("[data-sonner-toast][data-type='success']").filter({
+        hasText: t("common.saved"),
+      }),
+    ).toBeVisible();
+    await expect.poll(async () => (await readTimezone()).timezone).toBe(timezone);
+  } finally {
+    await request.put("/api/settings/timezone", { data: { timezone: initialTimezone } });
+  }
+});
+
+test("the complete support export downloads from one settings button", async ({ page }) => {
+  await openApp(page, "/settings");
+
+  const downloadStarted = page.waitForEvent("download");
+  await page.getByRole("button", { name: t("settings.export.cta") }).click();
+  const download = await downloadStarted;
+
+  expect(download.suggestedFilename()).toMatch(/^marlen-export-.*\.zip$/);
+  expect(await download.failure()).toBeNull();
 });
 
 test("@mobile the navigation is a drawer on a phone", async ({ page }) => {

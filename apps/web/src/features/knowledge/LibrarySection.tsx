@@ -1,9 +1,10 @@
-import type {
-  ConnectedAccount,
-  LibraryDocument,
-  LibrarySearchHit,
-  LibraryStatus,
-  WikiPage,
+import {
+  type ConnectedAccount,
+  type LibraryDocument,
+  type LibrarySearchHit,
+  type LibraryStatus,
+  splitPage,
+  type WikiPage,
 } from "@marlen/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { FolderOpen, Plus, Upload } from "lucide-react";
@@ -35,6 +36,13 @@ const KNOWLEDGE_DIR = "dir:knowledge";
 /** md/txt open in the in-app editor; every other format opens as a raw file. */
 const EDITABLE_EXTENSIONS = new Set(["md", "markdown", "txt"]);
 
+interface WikiLabels {
+  groups: Record<string, string>;
+  pinned: string;
+  unused: string;
+  used: (count: number) => string;
+}
+
 function folder(id: string, parentId: string | null, name: string, deletable = true): StorageNode {
   return {
     id,
@@ -49,11 +57,18 @@ function folder(id: string, parentId: string | null, name: string, deletable = t
 }
 
 /** A page's row tag: its type, else the account's name or @contact, none for general. */
-function pageTag(page: WikiPage, accounts: ConnectedAccount[]): string | null {
-  if (page.type !== null) return page.type;
-  if (page.contactId !== null) return `@${page.contactId}`;
-  if (page.accountId === null) return null;
-  return accounts.find((a) => a.id === page.accountId)?.name ?? page.accountId;
+function pageTag(page: WikiPage, accounts: ConnectedAccount[], labels: WikiLabels): string | null {
+  const tags = [page.pinned ? labels.pinned : null];
+  if (page.contactId !== null) tags.push(`@${page.contactId}`);
+  else if (page.accountId !== null) {
+    tags.push(accounts.find((a) => a.id === page.accountId)?.name ?? page.accountId);
+  }
+  return tags.filter(Boolean).join(" · ") || null;
+}
+
+function wikiGroup(page: WikiPage, labels: WikiLabels): { id: string; name: string } {
+  const key = page.type ?? (page.contactId ? "contact" : page.accountId ? "account" : "general");
+  return { id: `${WIKI_DIR}/group:${key}`, name: labels.groups[key] ?? key };
 }
 
 function toNodes(
@@ -61,24 +76,38 @@ function toNodes(
   documents: LibraryDocument[],
   folders: string[],
   accounts: ConnectedAccount[],
+  labels: WikiLabels,
 ): StorageNode[] {
   const nodes: StorageNode[] = [
     folder(WIKI_DIR, null, "wiki", false),
     folder(KNOWLEDGE_DIR, null, "knowledge", false),
   ];
+  const groups = new Map<string, string>();
   for (const page of pages) {
+    const group = wikiGroup(page, labels);
+    groups.set(group.id, group.name);
+    const { summary, body } = splitPage(page.content);
+    const title = summary.split("\n", 1)[0]?.trim() || page.id;
+    const detail = [
+      page.id,
+      page.usedCount > 0 ? labels.used(page.usedCount) : labels.unused,
+      body.split("\n", 1)[0]?.trim(),
+    ]
+      .filter(Boolean)
+      .join(" · ");
     nodes.push({
       id: page.id,
-      parentId: WIKI_DIR,
+      parentId: group.id,
       kind: "file",
-      name: `${page.id}.md`,
+      name: title,
       ext: "md",
       sizeBytes: null,
       updatedAt: page.updatedAt,
-      snippet: page.content,
-      tag: pageTag(page, accounts),
+      snippet: detail,
+      tag: pageTag(page, accounts, labels),
     });
   }
+  for (const [id, name] of groups) nodes.push(folder(id, WIKI_DIR, name, false));
   // The server's folder list is authoritative (it includes empty folders);
   // document paths only fill in anything the list happens to miss.
   const subfolders = new Set<string>();
@@ -124,6 +153,25 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
   const loadError = libraryQuery.error ? errorMessage(libraryQuery.error) : null;
   const setStatus = (next: LibraryStatus) => queryClient.setQueryData(["library", "status"], next);
   const { accounts } = useAccountColors();
+  const wikiLabels = React.useMemo<WikiLabels>(
+    () => ({
+      groups: {
+        person: t("storage.wikiGroups.person"),
+        contact: t("storage.wikiGroups.contact"),
+        company: t("storage.wikiGroups.company"),
+        deal: t("storage.wikiGroups.deal"),
+        style: t("storage.wikiGroups.style"),
+        skill: t("storage.wikiGroups.skill"),
+        triage: t("storage.wikiGroups.triage"),
+        account: t("storage.wikiGroups.account"),
+        general: t("storage.wikiGroups.general"),
+      },
+      pinned: t("storage.wikiPinned"),
+      unused: t("storage.wikiUnused"),
+      used: (count) => t("storage.wikiUsed", { count }),
+    }),
+    [t],
+  );
   const [uploading, setUploading] = React.useState(false);
   const [dragging, setDragging] = React.useState(false);
   const [query, setQuery] = React.useState("");
@@ -171,14 +219,25 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
   }, [contentHits]);
 
   const nodes = React.useMemo(
-    () => toNodes(wikiQuery.data ?? [], status?.documents ?? [], status?.folders ?? [], accounts),
-    [wikiQuery.data, status, accounts],
+    () =>
+      toNodes(
+        wikiQuery.data ?? [],
+        status?.documents ?? [],
+        status?.folders ?? [],
+        accounts,
+        wikiLabels,
+      ),
+    [wikiQuery.data, status, accounts, wikiLabels],
+  );
+  const wikiPageIds = React.useMemo(
+    () => new Set((wikiQuery.data ?? []).map((page) => page.id)),
+    [wikiQuery.data],
   );
 
   /** Wiki pages open the md editor; documents do too when they are editable
    *  text, otherwise the raw file opens in a new tab. */
   const openFile = (node: StorageNode) => {
-    if (node.parentId === WIKI_DIR) {
+    if (wikiPageIds.has(node.id)) {
       const page = wikiQuery.data?.find((p) => p.id === node.id);
       if (page) setEditing({ kind: "page", page });
       return;
@@ -211,8 +270,9 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
 
   const confirmRemove = async () => {
     const nodes = nodesToDelete;
-    if (!nodes || nodes.length === 0) return;
+    if (!nodes || nodes.length === 0) return false;
     setDeleting(true);
+    let succeeded = false;
     try {
       // Deleting a selected folder may also remove selected files inside it,
       // per-kind deletes tolerate already-gone targets (404s toast, but only
@@ -220,21 +280,22 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
       for (const node of nodes) {
         if (node.kind === "folder") {
           setStatus(await api.deleteLibraryFolder(node.id.slice(KNOWLEDGE_DIR.length + 1)));
-        } else if (node.parentId === WIKI_DIR) {
+        } else if (wikiPageIds.has(node.id)) {
           await api.deletePage(node.id);
         } else {
           setStatus(await api.deleteLibraryDocument(node.id));
         }
       }
+      succeeded = true;
     } catch (err) {
       toast.error(err);
     } finally {
-      if (nodes.some((node) => node.parentId === WIKI_DIR)) {
+      if (nodes.some((node) => wikiPageIds.has(node.id))) {
         await queryClient.invalidateQueries({ queryKey: ["wiki"] });
       }
       setDeleting(false);
-      setNodesToDelete(null);
     }
+    return succeeded;
   };
 
   const dragHasFiles = (e: React.DragEvent) => e.dataTransfer.types.includes("Files");
@@ -254,7 +315,7 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
 
   // The current browser location as a home-relative path for the OS file manager.
   const revealPath =
-    currentFolderId === WIKI_DIR
+    currentFolderId?.startsWith(WIKI_DIR) === true
       ? "wiki"
       : currentFolderId?.startsWith(KNOWLEDGE_DIR)
         ? `knowledge${currentDir ? `/${currentDir}` : ""}`
@@ -387,7 +448,7 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
         }
         confirmLabel={t("library.delete")}
         busy={deleting}
-        onConfirm={() => void confirmRemove()}
+        onConfirm={confirmRemove}
       />
     </section>
   );

@@ -1,4 +1,4 @@
-import { mkdtemp, writeFile } from "node:fs/promises";
+import { access, mkdir, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
@@ -17,6 +17,7 @@ beforeAll(async () => {
   home = await mkdtemp(join(tmpdir(), "marlen-filetools-home-"));
   process.env.AGENT_HOME_PATH = home;
   ({ fileToolsFor } = await import("../../src/agent/fileTools.js"));
+  await mkdir(join(home, "wiki"), { recursive: true });
   await writeFile(join(home, "notiz.md"), "Der Inhalt der Notiz.\n", "utf8");
 });
 
@@ -58,5 +59,16 @@ describe("confined file tools", () => {
     await writeFile(join(outside, "extern.txt"), "Draußen.\n", "utf8");
     const result = await read.execute("t4", { path: join(outside, "extern.txt") });
     expect(resultText(result)).toContain("Draußen.");
+  });
+
+  it("routes wiki writes through the page store even with filesystem write access", async () => {
+    const tools = await fileToolsFor(ALL_GRANTS, true, home);
+    const write = tools.find((tool) => tool.name === "file_write");
+    if (!write) throw new Error("file_write not mounted");
+
+    const path = join(home, "wiki", "raw-bypass.md");
+    const result = await write.execute("t5", { path, content: "unmanaged memory" });
+    expect(resultText(result)).toContain("write and change pages with page_write and page_update");
+    await expect(access(path)).rejects.toThrow();
   });
 });

@@ -95,6 +95,8 @@ clean call sites; when you add one, add it to this list.
   save on Enter/blur. The Pipedream credentials form is the one verify exception.
 - **Menu/picker rows:** `OptionRow`, with a leading mark, truncated label, optional
   detail and trailing slot.
+- **Scrollable pickers:** `ScrollEdges`, which keeps the native scrollbar and adds
+  a tonal fade only at an edge with more content.
 - **Row actions:** `HoverActions` (always visible below `sm`); external links use
   `OpenExternalButton`.
 - **Filter chips:** `Chip`, with ink fill when active and `surface-2` otherwise.
@@ -268,7 +270,10 @@ read as one idea.
 - Lead with macro-whitespace; sections separate by `gap-8`/`gap-10`, not rules.
 - Content column is constrained: `max-w-3xl` for settings-style pages, stepping to
   `max-w-4xl`/`max-w-5xl` via container queries. The canvas decides, not the
-  viewport, since the sidebar and chat panel eat variable width.
+  viewport, since the sidebar and chat panel eat variable width. Home is the one
+  two-column page (what waits on you, what the agent does itself): it steps up
+  from `@3xl` instead, so the second column appears as soon as the canvas can
+  hold two rows rather than only on a wide display.
 - Chrome frames the canvas: the nav rail, chat column, and the frame behind the
   working canvas are `sidebar`. On desktop the grey canvas is inset and rounded
   (`rounded-2xl`); on mobile it runs edge to edge.

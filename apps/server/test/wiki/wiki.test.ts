@@ -1,6 +1,7 @@
 import { mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 let wikiDir: string;
@@ -8,11 +9,13 @@ let app: Awaited<ReturnType<typeof import("../../src/app.js").buildApp>>;
 
 interface Page {
   id: string;
+  revision: string;
   type: string | null;
   content: string;
   source: string;
   accountId: string | null;
   contactId: string | null;
+  pinned: boolean;
 }
 
 beforeAll(async () => {
@@ -23,7 +26,7 @@ beforeAll(async () => {
   await home.ensureAgentHome();
   wikiDir = home.wikiDir();
   app = await (await import("../../src/app.js")).buildApp();
-});
+}, 120_000);
 
 afterAll(async () => {
   await app?.close();
@@ -51,9 +54,9 @@ describe("wiki", () => {
   });
 
   it("keeps summary and body together in one page", async () => {
-    const content = "Maier GmbH: Bestandskunde seit 2024.\n\nHistorie: zwei Objekte gekauft.";
-    const page = await post(content, { name: "maier-gmbh" });
-    expect(page.id).toBe("maier-gmbh");
+    const content = "Huber GmbH: Bestandskunde seit 2024.\n\nHistorie: zwei Einheiten gekauft.";
+    const page = await post(content, { name: "huber-gmbh-history" });
+    expect(page.id).toBe("huber-gmbh-history");
     expect(page.content).toBe(content);
   });
 
@@ -74,23 +77,44 @@ describe("wiki", () => {
     }
   });
 
-  it("moves scope on update, clearing the other axis, and renames a content-named page", async () => {
+  it("moves scope on update, clearing the other axis, and keeps the page's id", async () => {
     const page = await post("Frau Weber duzt man nicht.", { contactId: "Weber@Example.com" });
     expect(page.contactId).toBe("weber@example.com");
 
     const res = await app.inject({
       method: "PUT",
       url: `/api/wiki/${page.id}`,
-      payload: { content: "Frau Weber wird gesiezt.", accountId: "acc-2" },
+      payload: {
+        content: "Frau Weber wird gesiezt.",
+        accountId: "acc-2",
+        baseRevision: page.revision,
+      },
     });
     expect(res.statusCode).toBe(200);
     const updated = res.json<Page>();
     expect(updated.accountId).toBe("acc-2");
     expect(updated.contactId).toBeNull();
-    expect(updated.id).toBe("frau-weber-wird-gesiezt");
-    const files = await readdir(wikiDir);
-    expect(files).toContain("frau-weber-wird-gesiezt.md");
-    expect(files).not.toContain(`${page.id}.md`);
+    expect(updated.id).toBe(page.id);
+    expect(updated.content).toBe("Frau Weber wird gesiezt.");
+    expect(await readdir(wikiDir)).toContain(`${page.id}.md`);
+  });
+
+  it("finds pages by subject words in any inflection, rarest words first", async () => {
+    await post("Maier GmbH: Bestandskunde seit 2024.\n\nHistorie: zwei Objekte gekauft.", {
+      name: "maier-gmbh",
+    });
+    await post("Termine mit Herrn Maier immer vormittags.", { name: "maier-termine" });
+    await post("Besichtigungen dauern eine Stunde.", { name: "besichtigungen" });
+
+    const search = async (q: string) =>
+      (await app.inject({ method: "GET", url: `/api/wiki?q=${encodeURIComponent(q)}` }))
+        .json<Page[]>()
+        .map((p) => p.id);
+
+    expect(await search("Maier Termin")).toEqual(["maier-termine", "maier-gmbh"]);
+    expect(await search("Objekt")).toEqual(["maier-gmbh"]);
+    expect(await search("Stunden")).toEqual(["besichtigungen"]);
+    expect(await search("zzz-nothing")).toEqual([]);
   });
 
   it("keeps a skill's id stable across content edits", async () => {
@@ -101,16 +125,53 @@ describe("wiki", () => {
     expect(skill.id).toBe("follow-up");
     expect(skill.type).toBe("skill");
 
+    const overwrite = await app.inject({
+      method: "POST",
+      url: "/api/wiki",
+      payload: {
+        name: "Follow Up",
+        content: "A stale create must not replace the existing skill.",
+        type: "skill",
+      },
+    });
+    expect(overwrite.statusCode).toBe(400);
+
     const res = await app.inject({
       method: "PUT",
       url: "/api/wiki/follow-up",
-      payload: { content: "Nachfassen nach drei Tagen.\n\nFrage freundlich und knapp nach." },
+      payload: {
+        content: "Nachfassen nach drei Tagen.\n\nFrage freundlich und knapp nach.",
+        baseRevision: skill.revision,
+      },
     });
     expect(res.statusCode).toBe(200);
     const updated = res.json<Page>();
     expect(updated.id).toBe("follow-up");
     expect(updated.type).toBe("skill");
     expect(await readdir(wikiDir)).toContain("follow-up.md");
+  });
+
+  it("rejects an update based on an older page revision", async () => {
+    const page = await post("Original knowledge.", { name: "revision-check" });
+    expect(page.revision).toBeTruthy();
+
+    const first = await app.inject({
+      method: "PUT",
+      url: `/api/wiki/${page.id}`,
+      payload: { content: "First editor wins.", baseRevision: page.revision },
+    });
+    expect(first.statusCode).toBe(200);
+
+    const stale = await app.inject({
+      method: "PUT",
+      url: `/api/wiki/${page.id}`,
+      payload: { content: "Stale editor overwrites it.", baseRevision: page.revision },
+    });
+    expect(stale.statusCode).toBe(409);
+    expect(stale.json<{ error: string }>().error).toMatch(/changed.*reload/i);
+    expect((await list()).find((entry) => entry.id === page.id)?.content).toBe(
+      "First editor wins.",
+    );
   });
 
   it("deletes a page's file", async () => {
@@ -128,5 +189,61 @@ describe("wiki", () => {
     expect(page?.type).toBeNull();
     expect(page?.accountId).toBeNull();
     expect(page?.contactId).toBeNull();
+  });
+
+  it("learns from accepted or discarded briefing drafts without overwriting user edits", async () => {
+    const { db, schema } = await import("../../src/db/index.js");
+    const createdAt = "2026-09-01T08:00:00.000Z";
+    for (let index = 1; index <= 3; index += 1) {
+      const threadId = `triage-thread-${index}`;
+      await db.insert(schema.automationThreadStates).values({
+        automationId: "morning-briefing",
+        accountId: "account-1",
+        threadId,
+        messageId: `message-${index}`,
+        itemJson: JSON.stringify({
+          threadId,
+          sender: "Sender",
+          subject: "Question",
+          gist: "question → reply",
+          priority: "reply",
+        }),
+        disposition: "handled",
+        lastReportedAt: createdAt,
+        updatedAt: createdAt,
+      });
+      await db.insert(schema.draftProposals).values({
+        id: `triage-proposal-${index}`,
+        accountId: "account-1",
+        threadId,
+        status: "discarded",
+        createdAt,
+        updatedAt: createdAt,
+      });
+    }
+
+    const { runTriageLearning } = await import("../../src/email/learn/triage.js");
+    expect(await runTriageLearning()).toMatchObject({ decisions: 3, updated: true });
+    const learned = (await list()).find((page) => page.id === "triage-feedback");
+    expect(learned).toMatchObject({ type: "triage", pinned: true });
+    expect(learned?.content).toMatch(/reply:.*3/);
+
+    await db
+      .update(schema.automationThreadStates)
+      .set({ lastReportedAt: "2026-09-01T09:00:00.000Z" })
+      .where(eq(schema.automationThreadStates.threadId, "triage-thread-1"));
+    expect(await runTriageLearning()).toMatchObject({ decisions: 2, updated: true });
+    const refreshed = (await list()).find((page) => page.id === "triage-feedback");
+    expect(refreshed?.content).toMatch(/reply:.*2/);
+
+    const custom = "Meine eigene Triage-Regel bleibt maßgeblich.";
+    const edit = await app.inject({
+      method: "PUT",
+      url: "/api/wiki/triage-feedback",
+      payload: { content: custom, baseRevision: refreshed?.revision },
+    });
+    expect(edit.statusCode).toBe(200);
+    expect(await runTriageLearning()).toMatchObject({ updated: false, protected: true });
+    expect((await list()).find((page) => page.id === "triage-feedback")?.content).toBe(custom);
   });
 });

@@ -75,6 +75,7 @@ const SUPERSEDED_INSTRUCTION_HASHES: Record<string, readonly string[]> = {
     "4c31b690979bff36728ab4a71ea1353a74853bb2cece4c05421d8fdfc5748c22",
     "da4ec24ac0fb5f1f944a39a6324ce44648c4513bfb182dfb1a7523013aa54d05",
     "29a781ab5b91979f37e1874fb411114414a3e07b3cd393b2aa9a2c0ac559dd82",
+    "05f49448bea59c5c590d032ed72f022ae6dbb3b34f487d1fef0ee3a49c0a0718",
   ],
 };
 

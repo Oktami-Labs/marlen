@@ -7,21 +7,22 @@ import { type EnsureConversationInput, ensureConversation } from "../db/conversa
 import { linkDraftProposalConversation } from "../db/draftProposalStore.js";
 import { linkDraftConversation } from "../db/draftStore.js";
 import { db, schema, sqlite } from "../db/index.js";
+import { forgetSeenMail } from "../email/read/seenMail.js";
+import { titleNewConversation } from "../services/conversations/title.js";
+import { readPage } from "../storage/wiki/store.js";
 import { serializeRefs } from "./emailRefs.js";
 import { applyConversationFocus, focusFromCard, focusFromRefs } from "./focus.js";
 import { buildTurnPrompt } from "./prompt.js";
 import { ContextOverflowError, isRateLimitFailure, type RunHandlers } from "./run.js";
-import { type AgentSession, createEphemeralSession, getOrCreateSession } from "./sessionCache.js";
+import {
+  type AgentSession,
+  createEphemeralSession,
+  type EphemeralSessionOptions,
+  getOrCreateSession,
+} from "./sessionCache.js";
+import { consumeRelevantPageIds } from "./wikiTools.js";
 
 const log = moduleLogger("turnRecorder");
-
-/** Preserve numeric ranges and bullets while removing prose dashes. */
-function stripDashes(text: string): string {
-  return text
-    .replace(/(\d)[—–―](\d)/g, "$1-$2")
-    .replace(/^[ \t]*[—–―][ \t]*/gm, "- ")
-    .replace(/[ \t]*[—–―][ \t]*/g, ", ");
-}
 
 function failureRow(error: unknown, failure: string): string {
   if (isRateLimitFailure(failure)) {
@@ -51,6 +52,9 @@ function collectTurnActivity(conversationId: string): {
   const cards: MessageCard[] = [];
   const toolCalls: ChatToolCall[] = [];
   let streamed = "";
+  let toolBatch = 0;
+  let openToolCalls = 0;
+  let sawToolBatch = false;
 
   const onCard = (toolCallId: string, card: AgentCard) => {
     const existing = cards.findIndex((c) => c.toolCallId === toolCallId);
@@ -81,11 +85,13 @@ function collectTurnActivity(conversationId: string): {
   const wrap = (caller: RunHandlers = {}): RunHandlers => ({
     ...caller,
     onTextDelta: (delta) => {
-      const clean = stripDashes(delta);
-      streamed += clean;
-      caller.onTextDelta?.(clean);
+      streamed += delta;
+      caller.onTextDelta?.(delta);
     },
     onToolStart: (toolCallId, toolName, toolLabel, parameters) => {
+      if (sawToolBatch && openToolCalls === 0) toolBatch += 1;
+      sawToolBatch = true;
+      openToolCalls += 1;
       const call: ChatToolCall = {
         id: toolCallId,
         name: toolName,
@@ -94,6 +100,7 @@ function collectTurnActivity(conversationId: string): {
         done: false,
         parameters,
         contentOffset: streamed.length,
+        batch: toolBatch,
       };
       const existing = toolCalls.findIndex((c) => c.id === toolCallId);
       if (existing >= 0) toolCalls[existing] = call;
@@ -107,6 +114,7 @@ function collectTurnActivity(conversationId: string): {
         call.isError = isError;
         call.result = result;
       }
+      openToolCalls = Math.max(0, openToolCalls - 1);
       caller.onToolEnd?.(toolCallId, toolName, isError, result);
     },
     onCard: (toolCallId, card) => {
@@ -138,7 +146,7 @@ export class TurnStoppedError extends Error {
 
 export interface TurnSessions {
   pooled(conversationId: string): Promise<AgentSession>;
-  ephemeral(conversationId: string): Promise<AgentSession>;
+  ephemeral(conversationId: string, options?: EphemeralSessionOptions): Promise<AgentSession>;
 }
 
 const realSessions: TurnSessions = {
@@ -156,11 +164,50 @@ interface TurnRunOptions {
   prompt: string;
   refs?: EmailRef[];
   session: "pooled" | "ephemeral";
+  ephemeral?: EphemeralSessionOptions;
   conversation: EnsureConversationInput;
   focusAccountId?: string | null;
   handlers?: RunHandlers;
   signal?: AbortSignal;
   log: TurnLogger;
+  /**
+   * Nobody watches this turn as it runs, so text is its only visible outcome:
+   * a turn that ends with no text after its last tool call is prompted once
+   * more, on the same session, to report what it did.
+   */
+  requireReport?: boolean;
+}
+
+/**
+ * Steering, not conversation: it is never written to the transcript, and the
+ * report it draws out is recorded as the tail of the turn's own reply.
+ */
+const REPORT_REMINDER =
+  "Your turn ended without a report, and nothing you did is visible to the user unless you " +
+  "report it here. Reply with one or two sentences on what you did and the outcome, or that " +
+  "there was nothing to do. Don't repeat content already in a card, and don't call tools.";
+
+/** No text after the last tool call started (or none at all) reads as silence. */
+function endedSilent(streamed: string, toolCalls: ChatToolCall[]): boolean {
+  const lastToolAt = toolCalls.reduce((at, call) => Math.max(at, call.contentOffset ?? 0), 0);
+  return streamed.slice(lastToolAt).trim() === "";
+}
+
+async function memoryIdsForTurn(
+  conversationId: string,
+  toolCalls: ChatToolCall[],
+): Promise<string[]> {
+  const ids = new Set(consumeRelevantPageIds(conversationId));
+  for (const call of toolCalls) {
+    if (call.isError) continue;
+    const params = call.parameters as Record<string, unknown> | null | undefined;
+    if (call.name === "page_read" && typeof params?.id === "string") ids.add(params.id);
+    if (call.name === "page_used" && Array.isArray(params?.ids)) {
+      for (const id of params.ids) if (typeof id === "string") ids.add(id);
+    }
+  }
+  const pages = await Promise.all([...ids].map((id) => readPage(id)));
+  return [...new Set(pages.flatMap((page) => (page ? [page.id] : [])))];
 }
 
 export interface Turn {
@@ -207,12 +254,13 @@ export function beginTurn(conversationId: string): Turn {
       used = true;
 
       let session: AgentSession;
+      let conversationCreated = false;
       try {
-        await ensureConversation(conversationId, opts.conversation);
+        conversationCreated = await ensureConversation(conversationId, opts.conversation);
         session =
           opts.session === "pooled"
             ? await sessions.pooled(conversationId)
-            : await sessions.ephemeral(conversationId);
+            : await sessions.ephemeral(conversationId, opts.ephemeral);
       } catch (error) {
         endTurn(conversationId);
         throw error;
@@ -248,13 +296,15 @@ export function beginTurn(conversationId: string): Turn {
         const handlers = collector.wrap(opts.handlers);
 
         const recordOutcome = async (content: string): Promise<void> => {
+          const memoryIds = await memoryIdsForTurn(conversationId, collector.toolCalls);
           await db.insert(schema.messages).values({
             id: randomUUID(),
             conversationId,
             role: "assistant",
-            content: stripDashes(content),
+            content,
             cards: serializeTurnCards(collector.cards),
             toolCalls: collector.toolCalls.length > 0 ? JSON.stringify(collector.toolCalls) : null,
+            memoryIds: memoryIds.length > 0 ? JSON.stringify(memoryIds) : null,
             createdAt: new Date().toISOString(),
           });
           emitServerEvent("conversations");
@@ -273,14 +323,24 @@ export function beginTurn(conversationId: string): Turn {
 
         let text: string;
         try {
-          text = stripDashes(
-            await session.runTurn(
-              await buildTurnPrompt(opts.prompt, opts.refs, conversationId),
-              handlers,
-              signal,
-              opts.log,
-            ),
+          text = await session.runTurn(
+            await buildTurnPrompt(opts.prompt, opts.refs, conversationId),
+            handlers,
+            signal,
+            opts.log,
           );
+          if (
+            opts.requireReport &&
+            !signal.aborted &&
+            endedSilent(collector.text(), collector.toolCalls)
+          ) {
+            opts.log.info(
+              { toolCalls: collector.toolCalls.length },
+              "silent turn, asking for its report",
+            );
+            const report = await session.runTurn(REPORT_REMINDER, handlers, signal, opts.log);
+            text = [text, report].filter(Boolean).join("\n\n");
+          }
         } catch (error) {
           if (stopper.signal.aborted) {
             const stopped = stoppedOutcome();
@@ -308,9 +368,13 @@ export function beginTurn(conversationId: string): Turn {
         }
 
         await recordOutcome(text);
+        if (conversationCreated && opts.conversation.type === "chat") {
+          void titleNewConversation(conversationId, opts.conversation.title, opts.prompt, text);
+        }
         return { text, cards: collector.cards };
       } finally {
         if (opts.session === "ephemeral") {
+          forgetSeenMail(opts.ephemeral?.toolSessionId ?? conversationId);
           await session.toolset.close().catch((error: unknown) => {
             opts.log.warn({ err: error }, "closing the run's MCP sessions failed");
           });

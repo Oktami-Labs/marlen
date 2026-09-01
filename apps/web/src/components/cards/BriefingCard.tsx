@@ -7,7 +7,15 @@ import type {
   CardAccount,
 } from "@marlen/shared";
 import { BRIEFING_PRIORITIES } from "@marlen/shared";
-import { AlertTriangle, Clock, Eye, MessageCircleQuestion, PenLine, Sunrise } from "lucide-react";
+import {
+  AlertTriangle,
+  Check,
+  Clock,
+  Eye,
+  MessageCircleQuestion,
+  PenLine,
+  Sunrise,
+} from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -19,7 +27,9 @@ import { GroupLabel } from "@/components/ui/group-label";
 import { HoverActions } from "@/components/ui/hover-actions";
 import { OpenExternalButton } from "@/components/ui/open-external-button";
 import { accountColor } from "@/lib/accounts";
+import { api } from "@/lib/api";
 import { dispatchQuickAction } from "@/lib/quickActions";
+import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 import { CardShell } from "./CardShell";
 
@@ -49,26 +59,51 @@ function AccountMarker({
 
 type BriefingData = Extract<AgentCard, { kind: "briefing" }>;
 
+function briefingItemKey(item: BriefingItem): string {
+  return `${item.accountId ?? ""}\n${item.threadId}`;
+}
+
 /**
  * The structured Morning-briefing card, flat and cross-account by design
  * (see apps/web/DESIGN.md and the `kind: "briefing"` doc comment on
  * AgentCard). Priority is the grouping axis, not the inbox: an account only
  * ever shows up as a colour dot on a row. A run whose turn produced no card
- * renders as plain markdown instead (see BriefingHero's degrade).
+ * renders as plain markdown instead (see the work column's degrade).
  */
 export function BriefingCard({
   card,
   colors,
+  runId,
   bare,
 }: {
   card: BriefingData;
   colors?: AccountColor[];
-  /** Skip the CardShell frame, for embedding in an already-elevated panel (BriefingHero), never nest surfaces. */
+  /** Enables durable "done" feedback for a briefing produced by this run. */
+  runId?: string;
+  /** Skip the CardShell frame, for embedding in an already-elevated panel, never nest surfaces. */
   bare?: boolean;
 }) {
   const { t } = useTranslation();
   const { headline, periodLabel, accounts, items, rollups, scanned } = card;
   const [fyiOpen, setFyiOpen] = React.useState(false);
+  const [handled, setHandled] = React.useState(
+    () => new Set(items.filter((item) => item.handled).map(briefingItemKey)),
+  );
+  const [handling, setHandling] = React.useState<string | null>(null);
+
+  const handleItem = async (item: BriefingItem) => {
+    const key = briefingItemKey(item);
+    if (!runId || !item.accountId || handled.has(key)) return;
+    setHandling(key);
+    try {
+      await api.handleBriefingItem(runId, item.accountId, item.threadId);
+      setHandled((current) => new Set(current).add(key));
+    } catch (error) {
+      toast.error(error);
+    } finally {
+      setHandling(null);
+    }
+  };
 
   const grouped = React.useMemo(() => {
     const map = new Map<BriefingPriority, BriefingItem[]>(BRIEFING_PRIORITIES.map((p) => [p, []]));
@@ -158,6 +193,9 @@ export function BriefingCard({
                       item={item}
                       accounts={accounts}
                       colors={colors}
+                      handled={item.handled === true || handled.has(briefingItemKey(item))}
+                      handling={handling === briefingItemKey(item)}
+                      onHandle={runId && item.accountId ? () => void handleItem(item) : undefined}
                     />
                   ))}
                 </div>
@@ -203,10 +241,16 @@ function BriefingRow({
   item,
   accounts,
   colors,
+  handled,
+  handling,
+  onHandle,
 }: {
   item: BriefingItem;
   accounts?: CardAccount[];
   colors?: AccountColor[];
+  handled: boolean;
+  handling: boolean;
+  onHandle?: () => void;
 }) {
   const { t } = useTranslation();
   const navigate = useNavigate();
@@ -263,7 +307,12 @@ function BriefingRow({
   };
 
   return (
-    <div className="group -mx-2 flex items-start gap-2 rounded-lg px-2 py-1.5">
+    <div
+      className={cn(
+        "group -mx-2 flex items-start gap-2 rounded-lg px-2 py-1.5",
+        handled && "opacity-55",
+      )}
+    >
       {/* Keep an accessible account label because colour alone cannot identify an inbox. */}
       <AccountMarker
         accountId={item.accountId}
@@ -273,7 +322,7 @@ function BriefingRow({
         dotClassName="block"
       />
       <div className="min-w-0 flex-1">
-        <p className="text-sm leading-relaxed">
+        <p className={cn("text-sm leading-relaxed", handled && "line-through")}>
           {/* Urgency is a mark on the row, never a fill behind it (DESIGN.md). */}
           {urgent && (
             <AlertTriangle
@@ -309,6 +358,19 @@ function BriefingRow({
         )}
       </div>
       <HoverActions>
+        {onHandle && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            loading={handling}
+            disabled={handled}
+            onClick={onHandle}
+            data-tooltip={t("chat.cards.briefing.markHandled")}
+            aria-label={t("chat.cards.briefing.markHandled")}
+          >
+            <Check />
+          </Button>
+        )}
         {webUrl && <OpenExternalButton url={webUrl} label={t("chat.cards.draft.open")} />}
         {item.draftId ? (
           <Button

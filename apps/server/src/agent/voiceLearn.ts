@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import {
   type AccountVoice,
@@ -20,7 +21,13 @@ import {
 import { normalizeAddressSet } from "../email/learn/addressSubject.js";
 import { getMailReadProvider, type SentMessage } from "../email/read/readProviders.js";
 import { listAccounts } from "../integrations/pipedream/connect.js";
-import { createPage, deletePage, listPages, updatePage } from "../storage/wiki/store.js";
+import {
+  createPage,
+  deletePage,
+  listPages,
+  updatePage,
+  WikiPageConflictError,
+} from "../storage/wiki/store.js";
 import { activeModelConfigured } from "./llm/registry.js";
 import { type ReportToolSpec, runReportPrompt } from "./oneShot.js";
 import { appLanguageName } from "./prompt.js";
@@ -38,6 +45,10 @@ const inFlight = new Set<string>();
 class NoSentMailError extends Error {}
 
 const NO_MODEL_ERROR = "no LLM configured — sign in under Settings → AI";
+
+function styleHash(content: string): string {
+  return createHash("sha256").update(content).digest("hex");
+}
 
 async function recordedLearn<T>(accountId: string, learn: () => Promise<T>): Promise<T> {
   if (inFlight.has(accountId)) {
@@ -205,30 +216,61 @@ async function learnVoiceCore(
     missingReportError: "the style analysis finished without calling report_style — try again",
   });
 
-  // Persist the replacement and its pointer before deleting prior generated pages.
-  const styleMemoryIds: string[] = [];
-  const body = learned.style.map((directive) => `- ${directive}`).join("\n");
-  if (body) {
-    const { page } = await createPage(body, "agent", { accountId, type: "style" });
-    styleMemoryIds.push(page.id);
+  const previous = (await getAccountVoices()).find((voice) => voice.accountId === accountId);
+  const previousPages = new Map((await listPages()).map((page) => [page.id, page]));
+  const protectedIds: string[] = [];
+  const replaceableIds = new Map<string, string>();
+  for (const id of previous?.styleMemoryIds ?? []) {
+    const page = previousPages.get(id);
+    if (!page) continue;
+    const generatedHash = previous?.generatedStyleHashes?.[id];
+    if (generatedHash && generatedHash === styleHash(page.content)) {
+      replaceableIds.set(id, page.revision);
+    } else protectedIds.push(id);
   }
 
-  let previous: AccountVoice | undefined;
-  const next = await patchAccountVoice(accountId, (existing) => {
-    previous = existing;
+  // Persist the replacement and its pointer before deleting prior generated pages.
+  const styleMemoryIds: string[] = [];
+  const generatedStyleHashes: Record<string, string> = {};
+  const body = learned.style.map((directive) => `- ${directive}`).join("\n");
+  if (body) {
+    const { page, created } = await createPage(body, "agent", { accountId, type: "style" });
+    styleMemoryIds.push(page.id);
+    // Exact-content dedup can return a user-owned page. Claim ownership only
+    // for a page created here or one already tracked as generated.
+    if (created || replaceableIds.has(page.id)) {
+      generatedStyleHashes[page.id] = styleHash(page.content);
+    }
+  }
+  for (const id of protectedIds) if (!styleMemoryIds.includes(id)) styleMemoryIds.push(id);
+
+  const next = await patchAccountVoice(accountId, () => {
     return {
       accountId,
       learnedAt: new Date().toISOString(),
       styleMemoryIds,
+      generatedStyleHashes,
     };
   });
 
-  // Delete only superseded generated pages after the new voice is durable.
-  for (const id of previous?.styleMemoryIds ?? []) {
+  // Delete only unchanged machine-generated pages after the new voice is durable.
+  for (const [id, revision] of replaceableIds) {
     if (styleMemoryIds.includes(id)) continue;
     try {
-      await deletePage(id);
+      await deletePage(id, { baseRevision: revision });
     } catch (error) {
+      if (error instanceof WikiPageConflictError) {
+        await patchAccountVoice(accountId, (existing) => {
+          const hashes = { ...existing?.generatedStyleHashes };
+          delete hashes[id];
+          return {
+            ...existing,
+            accountId,
+            styleMemoryIds: [...new Set([...(existing?.styleMemoryIds ?? []), id])],
+            generatedStyleHashes: hashes,
+          };
+        });
+      }
       log.warn({ err: error, accountId, memoryId: id }, "failed to delete old style memory");
     }
   }
@@ -236,10 +278,14 @@ async function learnVoiceCore(
   return next;
 }
 
+export type StyleDirectiveMergeResult =
+  | { status: "updated"; added: number }
+  | { status: "unchanged" | "protected"; added: 0 };
+
 export async function mergeStyleDirectives(
   accountId: string,
   directives: string[],
-): Promise<number> {
+): Promise<StyleDirectiveMergeResult> {
   const dedupKey = (line: string) =>
     line
       .replace(/^[-*]\s*/, "")
@@ -255,6 +301,11 @@ export async function mergeStyleDirectives(
     .map((id) => byId.get(id))
     .find((m) => m !== undefined);
 
+  const generatedHash = target ? voice?.generatedStyleHashes?.[target.id] : undefined;
+  if (target && (!generatedHash || generatedHash !== styleHash(target.content))) {
+    return { status: "protected", added: 0 };
+  }
+
   let content = target?.content ?? "";
   const seen = new Set(content.split("\n").map(dedupKey));
   let added = 0;
@@ -262,34 +313,43 @@ export async function mergeStyleDirectives(
     const key = dedupKey(directive);
     if (!key || seen.has(key)) continue;
     const next = content ? `${content}\n- ${directive}` : `- ${directive}`;
-    if (next.length > WIKI_SUMMARY_MAX_LENGTH) break;
+    if (next.length > WIKI_SUMMARY_MAX_LENGTH) {
+      throw new Error(
+        `style memory is full (${WIKI_SUMMARY_MAX_LENGTH} characters); shorten it before learning more`,
+      );
+    }
     seen.add(key);
     content = next;
     added++;
   }
-  if (added === 0) return 0;
+  if (added === 0) {
+    return { status: "unchanged", added: 0 };
+  }
 
   if (target) {
-    // Keep the voice pointer aligned with content-addressed page renames.
-    const entry = await updatePage(target.id, content);
-    if (entry && entry.id !== target.id) {
-      await patchAccountVoice(accountId, (existing) => ({
-        ...existing,
-        accountId,
-        styleMemoryIds: (existing?.styleMemoryIds ?? []).map((id) =>
-          id === target.id ? entry.id : id,
-        ),
-      }));
-    }
+    const updated = await updatePage(target.id, content, {}, { baseRevision: target.revision });
+    if (!updated) throw new Error(`style memory ${target.id} no longer exists`);
+    await patchAccountVoice(accountId, (existing) => ({
+      ...existing,
+      accountId,
+      generatedStyleHashes: {
+        ...existing?.generatedStyleHashes,
+        [updated.id]: styleHash(updated.content),
+      },
+    }));
   } else {
     const { page } = await createPage(content, "agent", { accountId, type: "style" });
     await patchAccountVoice(accountId, (existing) => ({
       ...existing,
       accountId,
       styleMemoryIds: [...(existing?.styleMemoryIds ?? []), page.id],
+      generatedStyleHashes: {
+        ...existing?.generatedStyleHashes,
+        [page.id]: styleHash(page.content),
+      },
     }));
   }
-  return added;
+  return { status: "updated", added };
 }
 
 export async function listAccountVoiceInfos(): Promise<AccountVoiceInfo[]> {

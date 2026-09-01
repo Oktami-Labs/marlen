@@ -13,7 +13,7 @@ import {
   patchAccountVoice,
   repointVoiceStyleMemory,
 } from "../../db/settings.js";
-import { allocatePageId, writeWikiPageFile } from "../wiki/store.js";
+import { allocatePageId, wikiPageRevision, writeWikiPageFile } from "../wiki/store.js";
 import { getAgentHomeDir, knowledgeDir, resolveFolder, wikiDir } from "./agentHome.js";
 import { parseFrontmatter, serializeFrontmatter } from "./frontmatter.js";
 
@@ -84,17 +84,22 @@ export async function migrateMemoriesTable(): Promise<void> {
   for (const row of rows) {
     const content = row.content.trim();
     if (!content) continue;
-    const page: WikiPage = {
+    const pageWithoutRevision: Omit<WikiPage, "revision"> = {
       id: allocatePageId(content, taken),
       type: null,
       content,
       source: row.source === "agent" ? "agent" : "user",
       accountId: row.account_id,
       contactId: row.contact_id,
+      pinned: false,
       usedCount: row.used_count,
       lastUsedAt: row.last_used_at,
       createdAt: row.created_at,
       updatedAt: row.updated_at,
+    };
+    const page: WikiPage = {
+      ...pageWithoutRevision,
+      revision: wikiPageRevision(pageWithoutRevision),
     };
     taken.add(page.id);
     idMap.set(row.id, page.id);

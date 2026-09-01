@@ -10,6 +10,15 @@ export interface EmailRef {
   date?: string;
 }
 
+export interface MailSearchHit extends EmailRef {
+  snippet: string;
+}
+
+export interface MailSearchResponse {
+  items: MailSearchHit[];
+  partial: boolean;
+}
+
 export interface CardAccount {
   accountId: string;
   name: string;
@@ -66,6 +75,8 @@ export interface BriefingItem {
   receivedAt?: string;
   draftId?: string;
   webUrl?: string;
+  /** Set after the user explicitly clears this item from a run. */
+  handled?: boolean;
 }
 
 export interface BriefingRollup {
@@ -181,6 +192,7 @@ export type AgentCard =
       options: ChoiceOption[];
     }
   | { kind: "sources"; query: string; items: SourceItem[] }
+  | { kind: "mail_sources"; query: string; items: MailSearchHit[] }
   | { kind: "form"; title: string; fields: FormField[] }
   | {
       kind: "wiki_note";

@@ -439,7 +439,7 @@ export function OpenRunInChatDemo() {
           toast.info("Would open this run's conversation in chat.");
         }}
       >
-        <OpenRunInChatButton runId="demo-run" onNavigateToChat={() => {}} />
+        <OpenRunInChatButton conversationId="demo-run" onNavigateToChat={() => {}} />
       </div>
       <span className="text-xs text-muted-foreground">
         OpenRunInChatButton — the icon action every activity feed row carries

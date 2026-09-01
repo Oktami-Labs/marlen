@@ -9,7 +9,7 @@ type Translate = (key: ParseKeys, options?: Record<string, string>) => string;
  * Plain-language schedule presets over cron. The server keeps storing cron
  * (node-cron is the authority); these helpers only translate between the
  * picker and the cron strings it can express. Anything the picker can't
- * express stays raw cron behind the "Advanced" toggle.
+ * express is preserved unchanged until the user chooses a visual preset.
  */
 
 type ScheduleFrequency = "daily" | "weekdays" | "custom" | "date" | "manual";

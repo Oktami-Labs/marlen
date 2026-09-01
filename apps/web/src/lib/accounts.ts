@@ -1,7 +1,7 @@
-import type { AccountColor, ConnectedAccount } from "@marlen/shared";
+import type { AccountColor, AccountPermissions, ConnectedAccount } from "@marlen/shared";
 import { EMAIL_APPS } from "@marlen/shared";
-import { useQuery } from "@tanstack/react-query";
-import { api } from "@/lib/api";
+import { queryOptions, useQuery } from "@tanstack/react-query";
+import { api, isPipedreamMissing } from "@/lib/api";
 
 /** Whether a Pipedream app slug is one of the supported mail providers. */
 export const isEmailApp = (app: string) => (EMAIL_APPS as readonly string[]).includes(app);
@@ -10,26 +10,40 @@ export const isEmailApp = (app: string) => (EMAIL_APPS as readonly string[]).inc
 export const accountColor = (colors: AccountColor[] | undefined, accountId?: string | null) =>
   colors?.find((c) => c.accountId === accountId)?.hex;
 
+export const accountListQuery = queryOptions({
+  queryKey: ["accounts", "list"],
+  queryFn: async (): Promise<ConnectedAccount[]> => {
+    try {
+      return await api.pipedreamAccounts();
+    } catch (error) {
+      if (isPipedreamMissing(error)) return [];
+      throw error;
+    }
+  },
+});
+
+export const accountColorsQuery = queryOptions({
+  queryKey: ["accounts", "colors"],
+  queryFn: () => api.accountColors().then(({ colors }) => colors),
+});
+
+export const accountPermissionsQuery = queryOptions({
+  queryKey: ["accounts", "permissions"],
+  queryFn: (): Promise<AccountPermissions[]> =>
+    api.accountPermissions().then(({ permissions }) => permissions),
+});
+
 /**
  * Connected accounts and their color assignments. Every account dot, chip,
  * and scope picker resolves from this pair. One shared query per list means
  * every consumer sees the same data and an "accounts" event (connect,
- * removal, recolor, regrant) refreshes them all. Cosmetic data: failures
- * resolve to empty lists, never an error state.
+ * removal, recolor, regrant) refreshes them all.
  */
 export function useAccountColors({ withAccounts = true, enabled = true } = {}): {
   accounts: ConnectedAccount[];
   colors: AccountColor[];
 } {
-  const { data: accounts } = useQuery({
-    queryKey: ["accounts", "list"],
-    queryFn: () => api.pipedreamAccounts().catch(() => []),
-    enabled: enabled && withAccounts,
-  });
-  const { data: colors } = useQuery({
-    queryKey: ["accounts", "colors"],
-    queryFn: () => api.accountColors().then((r) => r.colors),
-    enabled,
-  });
+  const { data: accounts } = useQuery({ ...accountListQuery, enabled: enabled && withAccounts });
+  const { data: colors } = useQuery({ ...accountColorsQuery, enabled });
   return { accounts: accounts ?? [], colors: colors ?? [] };
 }

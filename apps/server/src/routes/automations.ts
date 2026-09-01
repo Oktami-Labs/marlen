@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
-import type { RunTrigger } from "@marlen/shared";
+import type { RunStep, RunTrigger } from "@marlen/shared";
 import { Type } from "@sinclair/typebox";
 import { and, asc, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { parseStoredCards } from "../agent/cards.js";
@@ -12,12 +12,14 @@ import {
   deleteAutomation,
   updateAutomation,
 } from "../services/automations/manage.js";
+import { runSteps } from "../services/automations/runProgress.js";
 import {
   findMissedAutomations,
   getNextRunAt,
   runAutomation,
   runMissedAutomations,
 } from "../services/automations/scheduler.js";
+import { handleBriefingItem } from "../services/automations/threadState.js";
 
 const runsQuery = Type.Object({
   q: Type.Optional(Type.String()),
@@ -26,6 +28,11 @@ const runsQuery = Type.Object({
 });
 
 const idParams = Type.Object({ id: Type.String() });
+
+const briefingItemBody = Type.Object({
+  accountId: Type.String({ minLength: 1 }),
+  threadId: Type.String({ minLength: 1 }),
+});
 
 const automationBody = Type.Object({
   name: Type.String(),
@@ -60,6 +67,7 @@ function runsSelectBase() {
     .select({
       id: schema.automationRuns.id,
       automationId: schema.automationRuns.automationId,
+      conversationId: schema.automationRuns.conversationId,
       status: schema.automationRuns.status,
       result: schema.automationRuns.result,
       cards: schema.automationRuns.cards,
@@ -72,17 +80,22 @@ function runsSelectBase() {
     .leftJoin(schema.automations, runToAutomation);
 }
 
-function toRunDto<T extends { cards: string | null; trigger: string | null }>(
+function toRunDto<
+  T extends { id: string; status: string; cards: string | null; trigger: string | null },
+>(
   row: T,
 ): Omit<T, "cards" | "trigger"> & {
   cards: ReturnType<typeof parseStoredCards>;
   trigger: RunTrigger | null;
+  steps?: RunStep[];
 } {
   const { cards, trigger, ...rest } = row;
   return {
     ...rest,
     cards: parseStoredCards(cards),
     trigger: trigger ? (JSON.parse(trigger) as RunTrigger) : null,
+    // Only a run in flight has a trail; a finished one is described by its result.
+    steps: row.status === "running" ? runSteps(row.id) : undefined,
   };
 }
 
@@ -167,6 +180,20 @@ export const automationRoutes: FastifyPluginAsyncTypebox = async (app) => {
     const started = await runMissedAutomations();
     return { started };
   });
+
+  app.post(
+    "/api/runs/:id/briefing-items/handled",
+    { schema: { params: idParams, body: briefingItemBody } },
+    async (req) => {
+      const handled = await handleBriefingItem(
+        req.params.id,
+        req.body.accountId,
+        req.body.threadId,
+      );
+      if (!handled) throw notFound("no briefing item with this account and thread");
+      return { ok: true };
+    },
+  );
 
   app.get("/api/automations/suggestions", async () => listPendingSuggestions());
 

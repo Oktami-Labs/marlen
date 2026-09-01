@@ -5,6 +5,7 @@ import { moduleLogger } from "../core/logger.js";
 import { getAccountPermissions, getAccountSignatures } from "../db/settings.js";
 import { getAttachmentProvider } from "../email/attachmentProviders.js";
 import { getDraftProvider } from "../email/providers.js";
+import { getMailReadProvider } from "../email/read/readProviders.js";
 import {
   type ConnectConfig,
   getConnectConfig,
@@ -88,6 +89,15 @@ interface AccountTools {
   readTools: AgentTool[];
 }
 
+/** Message/thread reads replaced by the normalized local mail_search/mail_thread pair. */
+const SUBSTITUTED_MAIL_READ_ACTION =
+  /^(?:find|get|list|search|fetch|retrieve)-(?:email|emails|message|messages|thread|threads)(?:-|$)/;
+
+function isSubstitutedMailReadAction(mcpToolName: string): boolean {
+  const action = mcpToolName.replace(/^[a-z0-9_]+-/, "");
+  return SUBSTITUTED_MAIL_READ_ACTION.test(action);
+}
+
 function buildAccountTools(
   mcpTools: McpToolInfo[],
   box: McpSessionBox,
@@ -96,6 +106,7 @@ function buildAccountTools(
   needsSuffix: boolean,
   seenNames: Set<string>,
   granted: ActionGrants,
+  substituteMailReads: boolean,
 ): AccountTools {
   const tools: AgentTool[] = [];
   const readTools: AgentTool[] = [];
@@ -104,6 +115,10 @@ function buildAccountTools(
 
   const draftProvider = getDraftProvider(account.app);
   for (const mcpTool of mcpTools) {
+    if (substituteMailReads && isSubstitutedMailReadAction(mcpTool.name)) {
+      skipped.push(mcpTool.name);
+      continue;
+    }
     // Use the provider-generic local draft path when the account supports it.
     if (draftProvider && mcpTool.name === `${account.app}-create-draft`) continue;
     // Direct send actions bypass signatures and draft composition.
@@ -258,6 +273,7 @@ export async function loadEmailTools(options: LoadEmailToolsOptions = {}): Promi
           needsSuffix,
           seenNames,
           grantsFor(account.id),
+          Boolean(getMailReadProvider(account.app)),
         );
         tools.push(...accountTools.tools);
         readTools.push(...accountTools.readTools);

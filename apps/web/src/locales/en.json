@@ -89,6 +89,7 @@
     "noConversations": "No conversations yet.",
     "untitled": "(untitled)",
     "thinking": "Thinking...",
+    "memoryUsed": "Memory in context",
     "working": "Agent is working",
     "emptyTitle": "Ask your inbox anything",
     "emptyBody": "The agent can search, label, and draft across your connected accounts.",
@@ -139,6 +140,12 @@
       "regenerateWith": "Answer again with"
     },
     "refs": {
+      "add": "Add email context",
+      "picker": "Email context",
+      "searching": "Searching mail…",
+      "noResults": "No matching emails.",
+      "partial": "Some accounts could not be searched.",
+      "noSubject": "(no subject)",
       "remove": "Remove {{label}}"
     },
     "voice": {
@@ -224,6 +231,7 @@
         "draftReply": "Draft reply",
         "reviewDraft": "Review draft",
         "askAbout": "Ask about this",
+        "markHandled": "Mark as done",
         "showMore_one": "Show {{count}} more",
         "showMore_other": "Show {{count}} more",
         "draftReplyPrompt": "Draft a reply to {{sender}}'s email \"{{subject}}\" in {{account}} (thread {{threadId}}). The briefing summarized it as: {{gist}}",
@@ -250,6 +258,9 @@
       "sources": {
         "badge": "Sources",
         "open": "Open source"
+      },
+      "mailSources": {
+        "badge": "Mail sources"
       },
       "wikiNote": {
         "saved": "Noted",
@@ -325,6 +336,8 @@
       "automation": "Automation",
       "builtin": "Command",
       "skillPrompt": "Follow the skill “{{name}}”: ",
+      "saveSkill": "Save this as a skill",
+      "saveSkillPrompt": "Save what we just did in this conversation as a skill, so you can repeat it next time.",
       "automationStarted": "“{{name}}” is running.",
       "new": "New conversation",
       "systemPrompt": "Show the system prompt"
@@ -562,8 +575,6 @@
     "todosDone_one": "1 done",
     "todosDone_other": "{{count}} done",
     "todosRestore": "Reopen",
-    "resultsTitle": "New results",
-    "activityTitle": "Activity",
     "activityEmptyTitle": "Nothing here yet",
     "activityEmptyBody": "Put your inbox on autopilot: a standing instruction runs on a schedule and reports here.",
     "activityNoRunsBody": "Your automations haven't produced results yet, run one now or wait for its schedule.",
@@ -573,12 +584,26 @@
     "createAutomation": "Create an automation",
     "viewAutomations": "View automations",
     "deletedAutomation": "Deleted automation",
-    "briefingToday": "Today at {{time}}",
     "briefingUrgent_one": "{{count}} urgent",
     "briefingUrgent_other": "{{count}} urgent",
-    "briefingRefresh": "Update briefing",
-    "briefingNext": "Next briefing: {{when}}",
-    "openInChat": "Open in chat"
+    "openInChat": "Open in chat",
+    "greetingMorning": "Good morning.",
+    "greetingDay": "Hello.",
+    "greetingEvening": "Good evening.",
+    "statusClear": "Nothing waits on you",
+    "statusNeeds_one": "One thing waits on you",
+    "statusNeeds_other": "{{count}} things wait on you",
+    "statusMine_one": "one I handle myself",
+    "statusMine_other": "{{count}} I handle myself",
+    "statusBriefing": "{{name}}, {{when}}: {{headline}}",
+    "statusOpenBriefing": "Open briefing",
+    "workTitle": "Marlene is working",
+    "workNow": "now",
+    "workStarting": "Starting…",
+    "workStepRunning": "running",
+    "workUpNext": "Up next",
+    "workScheduled": "Scheduled",
+    "workFailed": "Failed."
   },
   "drafts": {
     "noSubject": "(no subject)",
@@ -630,9 +655,13 @@
     "save": "Save",
     "create": "Create",
     "formTitle": "New automation",
-    "formHint": "Give the agent a standing instruction and choose when it runs.",
+    "editTitle": "Edit automation",
+    "taskSection": "Task",
+    "timingSection": "When it runs",
+    "runSettings": "Run settings",
     "name": "Name",
     "namePlaceholder": "Morning digest",
+    "instructionHint": "Write the complete standing instruction Marlene should follow each time.",
     "schedule": "Schedule",
     "frequency": {
       "daily": "Every day",
@@ -642,14 +671,14 @@
       "manual": "On demand only"
     },
     "time": "Time",
+    "days": "Days",
     "month": "Month",
     "day": "Day",
     "customDaysRequired": "Pick at least one day.",
     "dateOnceHint": "Runs once on this date, then turns off automatically.",
     "manualHint": "Never runs on its own, only when you press “Run now”.",
-    "advancedToggle": "Advanced: edit as cron",
-    "simpleToggle": "Back to the simple schedule",
-    "advancedLossNote": "The custom cron expression was replaced by the schedule above.",
+    "customSchedule": "Custom schedule",
+    "customScheduleHint": "This automation has a custom schedule. Choose an option to replace it, or leave it unchanged.",
     "scheduleLabel": {
       "daily": "Every day · {{time}}",
       "weekdays": "Weekdays · {{time}}",
@@ -657,8 +686,6 @@
       "date": "{{date}} · {{time}}",
       "manual": "On demand"
     },
-    "cronInvalid": "Doesn’t look like a standard 5-field cron, checked on create.",
-    "cronHint": "<c>0 8 * * 1-5</c> runs at 08:00 on weekdays.",
     "instruction": "Instruction for the agent",
     "instructionPlaceholder": "Summarize all unread emails from the last 24 hours…",
     "showInActivity": "Show in agent activity",
@@ -754,6 +781,21 @@
     "deleteManyConfirm_other": "{{count}} entries will be deleted, folders with everything inside them."
   },
   "storage": {
+    "wikiGroups": {
+      "person": "People",
+      "contact": "Contacts",
+      "company": "Companies",
+      "deal": "Deals",
+      "style": "Writing style",
+      "skill": "Skills",
+      "triage": "Triage learning",
+      "account": "Account knowledge",
+      "general": "General"
+    },
+    "wikiPinned": "Pinned",
+    "wikiUnused": "Not used yet",
+    "wikiUsed_one": "Used once",
+    "wikiUsed_other": "Used {{count}} times",
     "nav": {
       "folder": "All files",
       "recent": "Recent"
@@ -799,7 +841,11 @@
       "save": "Save",
       "scope": "Applies to",
       "general": "General",
-      "pageHint": "Pages are the assistant's memory: the first paragraph is the summary it carries in every conversation, everything after a blank line stays on disk and is read when needed.",
+      "pinned": "Always keep in context",
+      "used_one": "used {{count}} time",
+      "used_other": "used {{count}} times",
+      "lastUsed": "last {{date}}",
+      "pageHint": "Pages are the assistant's memory: the first paragraph is the searchable summary. Matching and pinned summaries enter context; everything after a blank line stays on disk until needed.",
       "new": "New",
       "newTitle": "New file",
       "namePlaceholder": "File name",
@@ -822,6 +868,8 @@
     "aiDone": "Signed in, using {{model}}.",
     "stepEmailTitle": "Connect an email account",
     "stepEmailDescription": "Link Gmail or Outlook so the agent can see your mail. You can add more accounts later.",
+    "emailDone_one": "One email account connected.",
+    "emailDone_other": "{{count}} email accounts connected.",
     "pipedreamMissingBody": "This build has no built-in email bridge, Marlene connects through your own free Pipedream project instead. Set it up once right here, then link your accounts:",
     "advancedLink": "Advanced: use my own Pipedream project",
     "allSetTitle": "You're all set",
@@ -882,10 +930,10 @@
       "label": "Start with the computer",
       "description": "Marlene starts in the background when you log in, so scheduled automations run without you opening it first."
     },
-    "backup": {
-      "label": "Backup",
-      "description": "A snapshot of the local database, chats, drafts, wiki pages, and automations, but not your connected accounts' credentials.",
-      "cta": "Download"
+    "export": {
+      "label": "Full export",
+      "description": "Downloads the database, chats, drafts, automations, wiki, knowledge files, and diagnostic logs in one ZIP. Sign-ins, API keys, and connected-account credentials are excluded.",
+      "cta": "Export all"
     },
     "about": {
       "tagline": "Local-first AI assistant for your email and leads",

@@ -93,6 +93,11 @@ export async function getTimezoneSetting(): Promise<string | null> {
   return isValidTimezone(value) ? value : null;
 }
 
+/** The user's timezone: the setting, else the machine's. */
+export async function userTimezone(): Promise<string> {
+  return (await getTimezoneSetting()) ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
 /**
  * A settings value stored as a JSON array under one key. Read parses it back
  * (missing or unparseable reads as [], never throws); write serializes the
@@ -173,9 +178,16 @@ export async function repointVoiceStyleMemory(oldId: string, newId: string): Pro
     if (!voice.styleMemoryIds?.includes(oldId)) continue;
     await patchAccountVoice(voice.accountId, (existing) => {
       const base = existing ?? voice;
+      const generatedHash = base.generatedStyleHashes?.[oldId];
+      const generatedStyleHashes = { ...base.generatedStyleHashes };
+      if (generatedHash) {
+        delete generatedStyleHashes[oldId];
+        generatedStyleHashes[newId] = generatedHash;
+      }
       return {
         ...base,
         styleMemoryIds: (base.styleMemoryIds ?? []).map((id) => (id === oldId ? newId : id)),
+        ...(generatedHash ? { generatedStyleHashes } : {}),
       };
     });
     changed = true;

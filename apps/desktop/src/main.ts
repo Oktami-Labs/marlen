@@ -107,6 +107,7 @@ function serverEnv(port: number): Record<string, string> {
     SKILLS_PATH: path.join(dataRoot, "skills"),
     WHATSAPP_AUTH_PATH: path.join(dataRoot, "data", "whatsapp-auth"),
     LOG_FILE: path.join(dataRoot, "logs", "marlen.log"),
+    DESKTOP_LOG_PATH: log.transports.file.getFile().path,
     WEB_DIST_PATH: path.join(__dirname, "web"),
   };
 }

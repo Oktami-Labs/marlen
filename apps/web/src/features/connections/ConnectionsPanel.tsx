@@ -1,4 +1,5 @@
 import type { PipedreamStatus } from "@marlen/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Check, ExternalLink, Pencil, X } from "lucide-react";
 import * as React from "react";
 import { Trans, useTranslation } from "react-i18next";
@@ -17,30 +18,23 @@ import { Switch } from "@/components/ui/switch";
 import { Accounts } from "@/features/connections/Accounts";
 import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";
-import { errorMessage, openExternal } from "@/lib/utils";
+import { openExternal, stagger } from "@/lib/utils";
 
 export function ConnectionsPanel({ onStatusChanged }: { onStatusChanged?: () => void }) {
   const { t } = useTranslation();
-  const [status, setStatus] = React.useState<PipedreamStatus | null>(null);
+  const queryClient = useQueryClient();
+  const statusQuery = useQuery({
+    queryKey: ["accounts", "pipedream-status"],
+    queryFn: () => api.pipedreamStatus(),
+  });
+  const status = statusQuery.data ?? null;
   const [editing, setEditing] = React.useState(false);
   // Plumbing is collapsed by default once accounts are connected, the toggle
   // and project credentials matter far less often than the account list.
   const [advancedOpen, setAdvancedOpen] = React.useState(false);
-  // Only the initial fetch can block the panel. Later errors appear as toasts.
-  const [loadError, setLoadError] = React.useState<string | null>(null);
-
   const refresh = React.useCallback(async () => {
-    try {
-      setStatus(await api.pipedreamStatus());
-      setLoadError(null);
-    } catch (err) {
-      setLoadError(errorMessage(err));
-    }
-  }, []);
-
-  React.useEffect(() => {
-    void refresh();
-  }, [refresh]);
+    await queryClient.invalidateQueries({ queryKey: ["accounts", "pipedream-status"] });
+  }, [queryClient]);
 
   const afterChange = React.useCallback(async () => {
     setEditing(false);
@@ -50,7 +44,8 @@ export function ConnectionsPanel({ onStatusChanged }: { onStatusChanged?: () => 
 
   const toggleMode = async (useCustom: boolean) => {
     try {
-      setStatus(await api.setPipedreamMode(useCustom));
+      const next = await api.setPipedreamMode(useCustom);
+      queryClient.setQueryData(["accounts", "pipedream-status"], next);
       onStatusChanged?.();
     } catch (err) {
       toast.error(err);
@@ -58,8 +53,10 @@ export function ConnectionsPanel({ onStatusChanged }: { onStatusChanged?: () => 
   };
 
   if (!status) {
-    return loadError ? (
-      <RetryableError onRetry={() => void refresh()}>{loadError}</RetryableError>
+    return statusQuery.error ? (
+      <RetryableError onRetry={() => void statusQuery.refetch()}>
+        {statusQuery.error.message}
+      </RetryableError>
     ) : (
       <LoadingRow />
     );
@@ -92,7 +89,7 @@ export function ConnectionsPanel({ onStatusChanged }: { onStatusChanged?: () => 
   );
 
   const projectPanel = custom && (
-    <div className="animate-in-up" style={{ animationDelay: "25ms" }}>
+    <div className="animate-in-up" style={stagger(1)}>
       {!status.configured || editing ? (
         <PipedreamWizard
           status={status}
@@ -130,7 +127,7 @@ export function ConnectionsPanel({ onStatusChanged }: { onStatusChanged?: () => 
   // Pipedream plumbing sits moves: front and centre until a project exists,
   // tucked under "Advanced" once one does.
   const accountsList = (
-    <div className="animate-in-up" style={{ animationDelay: "0ms" }}>
+    <div className="animate-in-up" style={stagger(0)}>
       <Accounts onChanged={onStatusChanged} />
     </div>
   );
@@ -140,7 +137,7 @@ export function ConnectionsPanel({ onStatusChanged }: { onStatusChanged?: () => 
       {status.configured ? (
         <>
           {accountsList}
-          <div className="animate-in-up" style={{ animationDelay: "50ms" }}>
+          <div className="animate-in-up" style={stagger(1)}>
             <DisclosureToggle
               open={advancedOpen}
               onToggle={() => setAdvancedOpen((open) => !open)}
@@ -227,11 +224,12 @@ export function PipedreamWizard({
     try {
       await api.clearPipedream();
       await onSaved();
+      return true;
     } catch (err) {
       toast.error(err);
+      return false;
     } finally {
       setBusy(null);
-      setConfirmRemove(false);
     }
   };
 
@@ -348,7 +346,7 @@ export function PipedreamWizard({
         description={t("connections.removeSavedConfirm")}
         confirmLabel={t("connections.removeSaved")}
         busy={busy === "remove"}
-        onConfirm={() => void removeSaved()}
+        onConfirm={removeSaved}
       />
     </Card>
   );

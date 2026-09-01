@@ -589,4 +589,34 @@ export const SCHEMA_STEPS: readonly string[] = [
       updated_at TEXT NOT NULL
     );
   `,
+  // 34: repeating automations remember the latest provider message and its
+  // disposition per thread. This makes an open briefing item durable and an
+  // informational/handled item deduplicable without deleting any run history.
+  `
+    CREATE TABLE automation_thread_states (
+      automation_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      thread_id TEXT NOT NULL,
+      message_id TEXT NOT NULL DEFAULT '',
+      item_json TEXT NOT NULL,
+      disposition TEXT NOT NULL,
+      last_reported_at TEXT NOT NULL,
+      handled_at TEXT,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (automation_id, account_id, thread_id)
+    );
+    CREATE INDEX idx_automation_thread_states_disposition
+      ON automation_thread_states(automation_id, disposition, updated_at);
+  `,
+  // 35: assistant rows name the wiki pages that shaped them. The page ids are
+  // display/audit metadata; the model transcript remains in content/tool calls.
+  `
+    ALTER TABLE messages ADD COLUMN memory_ids TEXT;
+  `,
+  // 36: new automation runs share one durable model transcript per automation,
+  // while existing runs keep opening their original per-run conversations.
+  `
+    ALTER TABLE automation_runs ADD COLUMN conversation_id TEXT NOT NULL DEFAULT '';
+    UPDATE automation_runs SET conversation_id = id;
+  `,
 ];

@@ -69,7 +69,7 @@ export function htmlBodyWithSignature(
   if (!signatureHtml) return { html: prose, images: [] };
   const { html: signature, images } = withCidImages(signatureHtml);
   return {
-    html: prose + `<div style="${styleAttribute(EMAIL_SIGNATURE_STYLE)}">${signature}</div>`,
+    html: `${prose}<div style="${styleAttribute(EMAIL_SIGNATURE_STYLE)}">${signature}</div>`,
     images,
   };
 }
@@ -182,4 +182,58 @@ export function splitAddressList(value: string): string[] {
   return parsed
     .flatMap((entry) => (entry.type === "group" ? entry.addresses : [entry]))
     .map((mailbox) => (mailbox.name ? `${mailbox.name} <${mailbox.address}>` : mailbox.address));
+}
+
+/** Display name and address of one `"Name <addr>"` entry; a bare address names itself. */
+export function parseMailbox(value: string): { name: string; address: string } | undefined {
+  const trimmed = value.trim();
+  if (!trimmed) return undefined;
+  const parsed = addrs.parseOneAddress({ input: trimmed, rfc6532: true });
+  if (!parsed || parsed.type === "group") return { name: trimmed, address: "" };
+  return { name: parsed.name || parsed.address, address: parsed.address };
+}
+
+const QUOTE_SEPARATOR =
+  /^-{2,}\s*(Original Message|Ursprüngliche Nachricht|Forwarded message|Weitergeleitete Nachricht)\s*-{2,}$/i;
+const QUOTE_INTRO_START = /^(On|Am)\b/;
+const QUOTE_INTRO_END = /\b(wrote|schrieb)\s*:$/i;
+const CLIENT_HEADER_FROM = /^(From|Von):\s/i;
+const CLIENT_HEADER_SENT = /^(Sent|Gesendet|Date|Datum):\s/i;
+
+/**
+ * A reply's body without the earlier messages quoted under it, recognised by
+ * the reply intro ("On … wrote:", "Am … schrieb:"), a client's separator or
+ * header block, or a trailing block of `>` lines. Quoted text above a reply
+ * stays, so a bottom-posted answer is never cut off.
+ */
+export function trimQuotedReply(body: string): string {
+  const lines = body.split("\n");
+  let cut = lines.length;
+  for (let i = 0; i < lines.length; i++) {
+    const line = lines[i]?.trim() ?? "";
+    if (QUOTE_SEPARATOR.test(line)) {
+      cut = i;
+    } else if (QUOTE_INTRO_END.test(line)) {
+      // The intro may wrap: "On Mon … Anna <anna@x.de>" then "wrote:".
+      if (QUOTE_INTRO_START.test(line)) cut = i;
+      else if (i > 0 && QUOTE_INTRO_START.test(lines[i - 1]?.trim() ?? "")) cut = i - 1;
+      else continue;
+    } else if (
+      CLIENT_HEADER_FROM.test(line) &&
+      lines.slice(i + 1, i + 4).some((next) => CLIENT_HEADER_SENT.test(next.trim()))
+    ) {
+      cut = i;
+    } else if (
+      line.startsWith(">") &&
+      lines.slice(i).every((rest) => rest.trim() === "" || rest.trim().startsWith(">"))
+    ) {
+      cut = i;
+    } else {
+      continue;
+    }
+    break;
+  }
+  const kept = lines.slice(0, cut).join("\n").trimEnd();
+  if (cut === lines.length) return kept;
+  return kept ? `${kept}\n[quoted earlier messages trimmed]` : body.trim();
 }

@@ -1,8 +1,14 @@
 import { homedir } from "node:os";
+import { resolve } from "node:path";
 import type { AgentTool } from "@earendil-works/pi-agent-core";
 import type { FileAccessSettings } from "@marlen/shared";
 import { getFileAccessSettings } from "../db/settings.js";
-import { getAgentHomeDir, resolveWithin } from "../storage/home/agentHome.js";
+import {
+  getAgentHomeDir,
+  resolveFolder,
+  resolveWithin,
+  wikiDir,
+} from "../storage/home/agentHome.js";
 import { textResult } from "./toolkit.js";
 
 /**
@@ -53,6 +59,29 @@ function confine(tool: AgentTool, home: string): AgentTool {
 }
 
 /**
+ * Wiki pages are written only through the page tools, whose store keeps the
+ * frontmatter, the one-scope rule and the duplicate check; a raw write into
+ * wiki/ (with any grant) answers with the steer instead.
+ */
+function keepOutOfWiki(tool: AgentTool, cwd: string): AgentTool {
+  return {
+    ...tool,
+    execute: async (toolCallId, params, signal, onUpdate) => {
+      const raw = (params as { path?: unknown }).path;
+      const path = typeof raw === "string" ? raw.trim() : "";
+      const abs = path.startsWith("~") ? resolveFolder(path) : resolve(cwd, path);
+      if (path !== "" && resolveWithin(wikiDir(), abs)) {
+        return textResult(
+          "That file is a wiki page: write and change pages with page_write and page_update " +
+            "(page_search finds the page), never with the file tools.",
+        );
+      }
+      return tool.execute(toolCallId, params, signal, onUpdate);
+    },
+  };
+}
+
+/**
  * The mounted tool list for one session. Exported seam for tests, callers
  * go through buildFileTools. Loads pi-coding-agent lazily: it drags in TUI
  * and image deps most sessions never need.
@@ -83,7 +112,7 @@ export async function fileToolsFor(
     const writeTools = [
       fileTool(pi.createWriteTool(writeCwd), "file_write", writeNote),
       fileTool(pi.createEditTool(writeCwd), "file_edit", writeNote),
-    ];
+    ].map((tool) => keepOutOfWiki(tool, writeCwd));
     tools.push(...(wholeFsWrite ? writeTools : writeTools.map((tool) => confine(tool, home))));
 
     if (settings.bash) {

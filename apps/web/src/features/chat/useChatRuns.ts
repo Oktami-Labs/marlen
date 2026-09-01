@@ -4,10 +4,10 @@ import { useTranslation } from "react-i18next";
 import {
   createInitialRunState,
   type DisplayMessage,
-  isIdleStale,
   type RunAction,
   reduceRunEvent,
   toDisplayMessage,
+  toLiveDisplayMessage,
 } from "@/features/chat/runState";
 import { api, streamChat } from "@/lib/api";
 import { subscribeServerEvents } from "@/lib/serverEvents";
@@ -37,7 +37,6 @@ export interface UseChatRunsResult {
   messages: DisplayMessage[];
   busy: boolean;
   restoring: boolean;
-  idleStale: boolean;
   conversationId: string | undefined;
   send: (message: string, refs?: EmailRef[]) => Promise<boolean>;
   stop: () => Promise<void>;
@@ -56,9 +55,12 @@ export function useChatRuns({
   const { t } = useTranslation();
   const pendingFocusRef = React.useRef(pendingFocusAccountId);
   pendingFocusRef.current = pendingFocusAccountId;
+  const [state, setState] = React.useState(() =>
+    createInitialRunState(localStorage.getItem(LAST_CONVERSATION_KEY) ?? undefined),
+  );
   // Commands in the same tick must see state before React renders again.
-  const stateRef = React.useRef(createInitialRunState());
-  const [state, setState] = React.useState(stateRef.current);
+  const stateRef = React.useRef(state);
+  stateRef.current = state;
 
   const dispatch = React.useCallback((action: RunAction) => {
     const next = reduceRunEvent(stateRef.current, action);
@@ -67,22 +69,18 @@ export function useChatRuns({
   }, []);
 
   React.useEffect(() => {
-    const savedId = localStorage.getItem(LAST_CONVERSATION_KEY);
+    const savedId = stateRef.current.activeConversationId;
     if (!savedId) {
       dispatch({ type: "restore", result: null });
       return;
     }
     let cancelled = false;
     let restored: { conversationId: string; messages: DisplayMessage[] } | null = null;
-    api
-      .conversationMessages(savedId)
-      .then((msgs) => {
-        if (msgs.length === 0) return;
+    Promise.all([api.conversationMessages(savedId), api.liveChat(savedId)])
+      .then(([msgs, live]) => {
+        if (msgs.length === 0 && !live.turn) return;
         const messages = msgs.map(toDisplayMessage);
-        if (isIdleStale(messages, Date.now())) {
-          localStorage.removeItem(LAST_CONVERSATION_KEY);
-          return;
-        }
+        if (live.turn) messages.push(toLiveDisplayMessage(live.turn));
         restored = { conversationId: savedId, messages };
       })
       .catch((err) => {
@@ -96,40 +94,32 @@ export function useChatRuns({
     };
   }, [dispatch]);
 
-  // Server turns outlive this client, so reload an unfinished transcript on updates.
+  // Server turns outlive this client, so attach to their live snapshot after
+  // reload/navigation and replace it with the durable row when the turn ends.
+  const lastMessage = state.messages[state.messages.length - 1];
+  const restoredLive =
+    !state.activeRunId && lastMessage?.role === "assistant" && lastMessage.streaming;
   const awaitingReply = state.messages[state.messages.length - 1]?.role === "user";
-  const awaitingId = awaitingReply ? state.activeConversationId : undefined;
-
-  const [now, setNow] = React.useState(() => Date.now());
-  React.useEffect(() => {
-    const tick = () => setNow(Date.now());
-    const id = window.setInterval(tick, 60_000);
-    window.addEventListener("focus", tick);
-    document.addEventListener("visibilitychange", tick);
-    return () => {
-      window.clearInterval(id);
-      window.removeEventListener("focus", tick);
-      document.removeEventListener("visibilitychange", tick);
-    };
-  }, []);
-  const idleStale = !state.busy && !state.resumed && isIdleStale(state.messages, now);
+  const awaitingId =
+    (awaitingReply || restoredLive) && !state.activeRunId ? state.activeConversationId : undefined;
   React.useEffect(() => {
     if (!awaitingId) return;
     let cancelled = false;
     const refresh = () => {
-      void api
-        .conversationMessages(awaitingId)
-        .then((msgs) => {
-          if (cancelled || msgs[msgs.length - 1]?.role !== "assistant") return;
+      void Promise.all([api.conversationMessages(awaitingId), api.liveChat(awaitingId)])
+        .then(([msgs, live]) => {
+          if (cancelled) return;
+          const messages = msgs.map(toDisplayMessage);
+          if (live.turn) messages.push(toLiveDisplayMessage(live.turn));
           dispatch({
             type: "open-conversation-loaded",
             conversationId: awaitingId,
-            messages: msgs.map(toDisplayMessage),
+            messages,
           });
         })
         .catch(() => {}); // The next topic event retries this transient failure.
     };
-    const unsubscribe = subscribeServerEvents(["conversations"], refresh);
+    const unsubscribe = subscribeServerEvents(["chat", "conversations"], refresh);
     refresh();
     return () => {
       cancelled = true;
@@ -213,12 +203,14 @@ export function useChatRuns({
         return;
       }
       try {
-        const msgs = await api.conversationMessages(id);
+        const [msgs, live] = await Promise.all([api.conversationMessages(id), api.liveChat(id)]);
         if (stateRef.current.activeConversationId !== id) return;
+        const messages = msgs.map(toDisplayMessage);
+        if (live.turn) messages.push(toLiveDisplayMessage(live.turn));
         dispatch({
           type: "open-conversation-loaded",
           conversationId: id,
-          messages: msgs.map(toDisplayMessage),
+          messages,
         });
         onFocusComposer();
       } catch (err) {
@@ -266,9 +258,8 @@ export function useChatRuns({
 
   return {
     messages,
-    busy: state.busy || awaitingReply,
+    busy: state.busy || awaitingReply || restoredLive,
     restoring: state.restoring,
-    idleStale,
     conversationId: state.activeConversationId,
     send,
     stop,

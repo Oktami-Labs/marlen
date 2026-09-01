@@ -40,6 +40,7 @@ const NEUTRALIZED = [
   "OPENAI_API_KEY",
   "BRAVE_SEARCH_API_KEY",
   "LOG_FILE",
+  "DESKTOP_LOG_PATH",
 ] as const;
 
 function serverEnv(stateDir: string, port: number): NodeJS.ProcessEnv {

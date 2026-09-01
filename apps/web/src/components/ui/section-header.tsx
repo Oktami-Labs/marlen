@@ -3,6 +3,7 @@ import type * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { IconChip } from "@/components/ui/icon-chip";
+import { stagger } from "@/lib/utils";
 
 /** Header shared by top-level sections and setup steps. */
 export function SectionHeader({
@@ -137,7 +138,7 @@ export function Section({
   return (
     <section
       className={`relative flex flex-col gap-4 ${className || ""}`}
-      style={{ animationDelay: `${index * 70}ms`, zIndex: 10 - index }}
+      style={{ ...stagger(index), zIndex: 10 - index }}
     >
       {aside ? (
         <div className="flex items-start justify-between gap-4">

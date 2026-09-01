@@ -1,12 +1,14 @@
 import { type EmailRef, LANGUAGE_ENGLISH_NAMES, type Language } from "@marlen/shared";
-import { getAccountPermissions, getLanguageSetting, getTimezoneSetting } from "../db/settings.js";
+import { getAccountPermissions, getLanguageSetting, userTimezone } from "../db/settings.js";
+import { parseMailbox } from "../email/textUtils.js";
+import { listPages } from "../storage/wiki/store.js";
 import { buildAccountsContext } from "./accounts.js";
 import { type SessionCapabilities, sessionCapabilities } from "./capabilities.js";
 import { decoratePrompt } from "./emailRefs.js";
 import { buildFileAccessContext } from "./fileTools.js";
-import { conversationFocusNote } from "./focus.js";
+import { formatConversationFocusNote, getConversationFocus } from "./focus.js";
 import { prompts } from "./prompts.js";
-import { buildSkillsContext, buildWikiContext } from "./wikiTools.js";
+import { buildSkillsContext, buildWikiContext, relevantPagesNote } from "./wikiTools.js";
 
 const DATE_LOCALE_BY_LANGUAGE: Record<Language, string> = {
   en: "en-US",
@@ -112,7 +114,10 @@ export async function buildSystemPromptParts(
 - When the user describes a repeatable way they want a task done — "always do it like this",
   "from now on when I ask for X…" — save it as a skill (page_write with a name and type "skill"),
   then tell them what you saved. A scheduled skill is an automation whose instruction says to
-  follow it.`;
+  follow it.
+- When the user refers to an earlier chat, decision or answer that is not in the current
+  transcript, use conversation_search for the relevant excerpt instead of guessing or claiming
+  you cannot remember it.`;
   }
 
   // Everything in this block exists only alongside configured onOffice
@@ -206,8 +211,11 @@ export async function buildSystemPromptParts(
   // that grow with use. Skills are measured first so they keep their reserve,
   // and appended after memory to leave the prompt's reading order unchanged.
   const growable = Math.max(0, SYSTEM_PROMPT_MAX_CHARS - prompt.length);
-  const skills = await buildSkillsContext(Math.floor(growable * SKILLS_BUDGET_SHARE));
-  const knowledge = await buildWikiContext(growable - skills.length);
+  // One directory snapshot feeds both sections. Reading them independently
+  // would stat the same growing wiki twice on every refreshed session turn.
+  const pages = await listPages();
+  const skills = await buildSkillsContext(Math.floor(growable * SKILLS_BUDGET_SHARE), pages);
+  const knowledge = await buildWikiContext(growable - skills.length, pages);
   return { instructions: prompt, knowledge, skills };
 }
 
@@ -234,7 +242,7 @@ export async function buildSystemPrompt(caps?: SessionCapabilities): Promise<str
  */
 async function buildTurnTimeNote(): Promise<string> {
   const language = (await getLanguageSetting()) ?? "de";
-  const timezone = (await getTimezoneSetting()) ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timezone = await userTimezone();
   return (
     `\n\n[Current date and time: ${formatNow(timezone, DATE_LOCALE_BY_LANGUAGE[language] ?? "en-US")} ` +
     `(${timezone}). The user lives in this timezone — present times in it and interpret relative ` +
@@ -245,7 +253,8 @@ async function buildTurnTimeNote(): Promise<string> {
 /**
  * The full prompt one turn runs: the user's raw text decorated with its
  * attached-email notes (emailRefs.ts), then the volatile per-turn notes (the
- * clock and the standing focus). Called AFTER the turn's focus writes land
+ * clock, the standing focus, and the wiki pages the message and its attached
+ * emails point at). Called AFTER the turn's focus writes land
  * (turnRecorder.ts), so the focus note reflects this turn's own @-mention.
  * Each note fails soft to "": a broken clock or focus read never sinks the
  * turn.
@@ -255,7 +264,23 @@ export async function buildTurnPrompt(
   refs: EmailRef[] | undefined,
   conversationId: string,
 ): Promise<string> {
-  const timeNote = await buildTurnTimeNote().catch(() => "");
-  const focusNote = await conversationFocusNote(conversationId).catch(() => "");
-  return decoratePrompt(prompt, refs) + timeNote + focusNote;
+  const [timeNote, focus] = await Promise.all([
+    buildTurnTimeNote().catch(() => ""),
+    getConversationFocus(conversationId).catch(() => null),
+  ]);
+  const focusNote = formatConversationFocusNote(focus);
+  const refText = (refs ?? []).map((ref) => `${ref.from ?? ""} ${ref.subject ?? ""}`).join(" ");
+  const accountIds = [
+    ...(focus ? [focus.accountId] : []),
+    ...(refs ?? []).map((ref) => ref.accountId),
+  ];
+  const contactIds = (refs ?? []).flatMap((ref) => {
+    const address = parseMailbox(ref.from ?? "")?.address;
+    return address ? [address] : [];
+  });
+  const pagesNote = await relevantPagesNote(`${prompt} ${refText}`, conversationId, {
+    accountIds,
+    contactIds,
+  }).catch(() => "");
+  return decoratePrompt(prompt, refs) + timeNote + focusNote + pagesNote;
 }

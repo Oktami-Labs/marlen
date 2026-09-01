@@ -76,9 +76,12 @@ before touching `apps/web`.
 - **No decorative header subtitles.** Page and settings-section headers contain
   only the title plus relevant status or actions. Put necessary guidance next
   to the control or state it explains, not in copy under the title.
-- **Comments** describe what the code does and the invariants it protects, as
-  the code is today. Never document development history ("used to", "now",
-  "after the split") or the instruction that prompted the change.
+- **Comments are exceptional.** Prefer names and structure that make the code
+  explain itself; never restate the code in prose. Add a comment only when it
+  captures a non-obvious invariant, constraint, or reason an apparent
+  alternative is wrong. Describe the code as it is today. Never document
+  development history ("used to", "now", "after the split") or the instruction
+  that prompted the change.
 - **Agent tools** go through the validating `tool()` factory
   (`agent/toolkit.ts`): TypeBox params, validated on every call. Failures
   meant to steer the model return as result text (`catchToText` /

@@ -1,7 +1,8 @@
 import type { AccountColor, ChatToolCall } from "@marlen/shared";
-import { Check, Copy, Pencil, Play, RotateCcw, X } from "lucide-react";
+import { Check, Copy, Database, Pencil, Play, RotateCcw, X } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { Link } from "react-router-dom";
 import { AgentCardView } from "@/components/cards";
 import { EditSaveActions } from "@/components/draftActions";
 import { Button } from "@/components/ui/button";
@@ -190,6 +191,21 @@ export function Transcript({
                       )}
                     >
                       {m.errorKind === "rate_limit" ? <RateLimitNotice /> : m.error}
+                    </div>
+                  )}
+                  {m.role === "assistant" && m.memoryIds && m.memoryIds.length > 0 && (
+                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-2xs text-muted-foreground">
+                      <Database className="h-3 w-3" aria-hidden />
+                      <span>{t("chat.memoryUsed")}</span>
+                      {m.memoryIds.map((id) => (
+                        <Link
+                          key={id}
+                          to={`/knowledge?focus=wiki:${encodeURIComponent(id)}`}
+                          className="rounded-md bg-surface-2 px-1.5 py-0.5 font-mono hover:text-foreground"
+                        >
+                          {id}
+                        </Link>
+                      ))}
                     </div>
                   )}
                   {m.role === "assistant" && !m.streaming && !m.systemPrompt && (

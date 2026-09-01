@@ -4,7 +4,7 @@ import {
   estimateTokens,
   serializeConversation,
 } from "@earendil-works/pi-agent-core";
-import type { Message } from "@earendil-works/pi-ai";
+import type { Api, Message, Model } from "@earendil-works/pi-ai";
 import type { LlmContextUsage } from "@marlen/shared";
 import { moduleLogger, type TurnLogger } from "../core/logger.js";
 import { loadHistory } from "./history.js";
@@ -26,15 +26,11 @@ const MAX_SERIALIZED_CHARS = 120_000;
 /** Prevent one message from surviving every compaction pass unchanged. */
 const KEEP_MESSAGE_MAX_CHARS = 40_000;
 
-const DROPPED_NOTE =
-  "[Note: earlier content in this range was dropped to fit the summarizer's input limit.]";
-
 const TRUNCATED_NOTE =
   "\n\n[This content was truncated here to keep the conversation inside the model's context window. " +
   "Run the tool again for a narrower slice if you still need the rest.]";
 
-const SUMMARY_PREFIX =
-  "[Summary of the earlier conversation — older turns were compacted to fit the context window:]";
+const SUMMARY_PREFIX = "[Assistant-maintained memory of the earlier conversation:]";
 
 /** Prefer provider usage; rebuilt histories fall back to a character estimate. */
 function estimateStateTokens(systemPrompt: string, messages: AgentMessage[]): number {
@@ -125,14 +121,55 @@ function isCoreMessage(message: AgentMessage): message is Message {
   return message.role === "user" || message.role === "assistant" || message.role === "toolResult";
 }
 
-async function summarizePrefix(prefix: AgentMessage[], signal?: AbortSignal): Promise<string> {
-  let serialized = serializeConversation(prefix.filter(isCoreMessage));
-  if (serialized.length > MAX_SERIALIZED_CHARS) {
-    serialized = `${DROPPED_NOTE}\n\n${serialized.slice(serialized.length - MAX_SERIALIZED_CHARS)}`;
+function chunksOf(text: string): string[] {
+  const chunks: string[] = [];
+  let offset = 0;
+  while (offset < text.length) {
+    const hardEnd = Math.min(text.length, offset + MAX_SERIALIZED_CHARS);
+    const newline = text.lastIndexOf("\n", hardEnd);
+    const end = newline > offset + MAX_SERIALIZED_CHARS / 2 ? newline : hardEnd;
+    chunks.push(text.slice(offset, end));
+    offset = end;
   }
+  return chunks;
+}
 
-  const raw = await runOneShot({ systemPrompt: prompts.compaction, prompt: serialized, signal });
-  return raw.trim();
+async function summarizeSerialized(serialized: string, signal?: AbortSignal): Promise<string> {
+  let parts = chunksOf(serialized);
+  for (;;) {
+    const summaries: string[] = [];
+    for (const part of parts) {
+      const summary = await runOneShot({
+        systemPrompt: prompts.compaction,
+        prompt: part,
+        signal,
+      });
+      if (summary.trim()) summaries.push(summary.trim());
+    }
+    const merged = summaries.join("\n\n");
+    if (!merged) return "";
+    if (merged.length <= MAX_SERIALIZED_CHARS) return merged;
+    // Summarize every partial summary again. If a model expands instead of
+    // compressing, fail open rather than silently discarding transcript data.
+    if (merged.length >= parts.join("").length) {
+      throw new Error("compaction summaries did not reduce the source");
+    }
+    parts = chunksOf(merged);
+  }
+}
+
+async function summarizePrefix(
+  prefix: AgentMessage[],
+  kept: AgentMessage[],
+  signal?: AbortSignal,
+): Promise<string> {
+  const serialized = serializeConversation(prefix.filter(isCoreMessage));
+  const recent = serializeConversation(kept.filter(isCoreMessage)).slice(-20_000);
+  const taskContext = recent
+    ? `The following recent context remains verbatim after this summary. Use it only to decide ` +
+      `which older facts and open threads matter:\n\n${recent}\n\nEarlier transcript to summarize:\n\n`
+    : "";
+  return summarizeSerialized(taskContext + serialized, signal);
 }
 
 export interface CompactOptions {
@@ -142,7 +179,7 @@ export interface CompactOptions {
 
 export interface CompactionState {
   systemPrompt: string;
-  model: { contextWindow: number };
+  model: Pick<Model<Api>, "api" | "provider" | "id" | "contextWindow">;
   messages: AgentMessage[];
 }
 
@@ -182,7 +219,7 @@ export async function compactedMessages(
       return [...prefix, ...kept];
     }
 
-    const summary = await summarizePrefix(prefix, options.signal);
+    const summary = await summarizePrefix(prefix, kept, options.signal);
     if (!summary) {
       log.warn(
         { prefixMessages: prefix.length },
@@ -192,8 +229,20 @@ export async function compactedMessages(
     }
 
     const summaryMessage: AgentMessage = {
-      role: "user",
-      content: `${SUMMARY_PREFIX}\n\n${summary}`,
+      role: "assistant",
+      content: [{ type: "text", text: `${SUMMARY_PREFIX}\n\n${summary}` }],
+      api: model.api,
+      provider: model.provider,
+      model: model.id,
+      usage: {
+        input: 0,
+        output: 0,
+        cacheRead: 0,
+        cacheWrite: 0,
+        totalTokens: 0,
+        cost: { input: 0, output: 0, cacheRead: 0, cacheWrite: 0, total: 0 },
+      },
+      stopReason: "stop",
       timestamp: kept[0]?.timestamp ?? Date.now(),
     };
 

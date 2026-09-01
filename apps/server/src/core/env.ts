@@ -38,8 +38,9 @@ export const env = {
   logLevel: optional("LOG_LEVEL") ?? "info",
   // Opt-in file sink for logs (rotated daily / at 10MB, 14 kept); unset = stdout only.
   logFile: optional("LOG_FILE"),
+  desktopLogPath: optional("DESKTOP_LOG_PATH"),
   // Hard deadline for one automation run, so a stuck model/MCP call can't wedge a schedule forever.
-  automationRunTimeoutMs: num("AUTOMATION_RUN_TIMEOUT_MS", 300_000),
+  automationRunTimeoutMs: num("AUTOMATION_RUN_TIMEOUT_MS", 600_000),
   databasePath: optional("DATABASE_PATH") ?? "./data/marlen.db",
   /** Plain-file agent home; the desktop shell points this into userData. */
   agentHomePath: optional("AGENT_HOME_PATH") ?? "./agent-home",

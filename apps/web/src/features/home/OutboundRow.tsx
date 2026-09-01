@@ -86,9 +86,14 @@ export function OutboundRow({
         withViewTransition(() => setSent(true));
         toast.success(t("home.outboundSentToast"));
         onChanged();
+        return true;
       } catch (err) {
-        if (isNotFound(err)) onChanged();
-        else onError(errorMessage(err));
+        if (isNotFound(err)) {
+          onChanged();
+          return true;
+        }
+        onError(errorMessage(err));
+        return false;
       }
     },
     discard: async () => {
@@ -97,9 +102,14 @@ export function OutboundRow({
         await api.discardOutbound(draft.id);
         withViewTransition(() => setDiscarded(true));
         onChanged();
+        return true;
       } catch (err) {
-        if (isNotFound(err)) onChanged();
-        else onError(errorMessage(err));
+        if (isNotFound(err)) {
+          onChanged();
+          return true;
+        }
+        onError(errorMessage(err));
+        return false;
       }
     },
   });
@@ -132,23 +142,25 @@ export function OutboundRow({
             <MessageSquare />
           </IconChip>
           <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+            <p className="flex items-center gap-1.5 text-sm font-medium">
               {isNew && <NewDot />}
-              {title}
+              <span className="truncate">{title}</span>
             </p>
-            <p className="truncate text-xs text-muted-foreground">
-              {channelLabel}
-              {!open && <span className="text-muted-foreground/70"> · {draft.body}</span>}
-            </p>
+            {/* The waiting-since time sits where the email rows carry theirs, so
+                one approval list reads as one list. */}
+            <div className="flex items-baseline gap-2">
+              <p className="truncate text-xs text-muted-foreground">
+                {channelLabel}
+                {!open && <span className="text-muted-foreground/70"> · {draft.body}</span>}
+              </p>
+              <time
+                dateTime={draft.createdAt}
+                className="ml-auto shrink-0 font-mono text-2xs tabular-nums text-muted-foreground"
+              >
+                {dateLabel(draft.createdAt)}
+              </time>
+            </div>
           </div>
-          {/* The waiting-since time sits where the email rows carry theirs, so
-              one approval list reads as one list. */}
-          <time
-            dateTime={draft.createdAt}
-            className="shrink-0 self-start pt-0.5 font-mono text-2xs tabular-nums text-muted-foreground"
-          >
-            {dateLabel(draft.createdAt)}
-          </time>
         </button>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {/* Keep the secondary refine action hidden until hover. */}
@@ -208,7 +220,7 @@ export function OutboundRow({
         pending={actions.pending}
         busy={actions.busy}
         onClose={actions.close}
-        onConfirm={() => void actions.confirm()}
+        onConfirm={actions.confirm}
         labels={{
           send: {
             title: t("chat.cards.draft.send"),

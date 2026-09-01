@@ -1,4 +1,12 @@
-import { integer, primaryKey, real, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import {
+  index,
+  integer,
+  primaryKey,
+  real,
+  sqliteTable,
+  text,
+  uniqueIndex,
+} from "drizzle-orm/sqlite-core";
 
 export const conversations = sqliteTable("conversations", {
   id: text("id").primaryKey(),
@@ -23,6 +31,8 @@ export const messages = sqliteTable("messages", {
   compactionCutoff: integer("compaction_cutoff"),
   error: text("error"),
   refs: text("refs"),
+  /** JSON page ids whose memory shaped this assistant row. */
+  memoryIds: text("memory_ids"),
   createdAt: text("created_at").notNull(),
 });
 
@@ -155,6 +165,8 @@ export const automationSuggestions = sqliteTable("automation_suggestions", {
 export const automationRuns = sqliteTable("automation_runs", {
   id: text("id").primaryKey(),
   automationId: text("automation_id").notNull(),
+  /** Stable durable transcript shared by this automation's runs. */
+  conversationId: text("conversation_id").notNull().default(""),
   status: text("status", { enum: ["running", "success", "error"] }).notNull(),
   result: text("result").notNull().default(""),
   cards: text("cards"),
@@ -162,6 +174,34 @@ export const automationRuns = sqliteTable("automation_runs", {
   startedAt: text("started_at").notNull(),
   finishedAt: text("finished_at"),
 });
+
+/**
+ * Durable outcome of one thread in a repeating automation. Open work carries
+ * into later briefings until the user handles it; informational rows remain as
+ * dedup evidence so an unchanged provider message is not announced again.
+ */
+export const automationThreadStates = sqliteTable(
+  "automation_thread_states",
+  {
+    automationId: text("automation_id").notNull(),
+    accountId: text("account_id").notNull(),
+    threadId: text("thread_id").notNull(),
+    messageId: text("message_id").notNull().default(""),
+    itemJson: text("item_json").notNull(),
+    disposition: text("disposition", { enum: ["open", "reported", "handled"] }).notNull(),
+    lastReportedAt: text("last_reported_at").notNull(),
+    handledAt: text("handled_at"),
+    updatedAt: text("updated_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.automationId, table.accountId, table.threadId] }),
+    index("idx_automation_thread_states_disposition").on(
+      table.automationId,
+      table.disposition,
+      table.updatedAt,
+    ),
+  ],
+);
 
 /** Per-item "user has seen this" marks for Home ("todo:<id>", "run:<id>", …);
  *  the __floor__ row pins install time so pre-existing items never read as new. */

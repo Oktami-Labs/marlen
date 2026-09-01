@@ -24,7 +24,6 @@ import { LoadingRow, LoadingSweep } from "@/components/ui/feedback";
 import { Kbd } from "@/components/ui/kbd";
 import { SearchField } from "@/components/ui/search-field";
 import { Toaster } from "@/components/ui/toaster";
-import { AutomationsPanel } from "@/features/automations/AutomationsPanel";
 import { AttachmentViewer } from "@/features/chat/AttachmentViewer";
 import { ChatPanel } from "@/features/chat/ChatPanel";
 import { ChatSearchBar } from "@/features/chat/ChatSearchBar";
@@ -32,11 +31,7 @@ import { onRevealChat, sendChatCommand } from "@/features/chat/controller";
 import { FocusChip } from "@/features/chat/FocusChip";
 import { HistoryList } from "@/features/chat/HistoryList";
 import { HomePanel } from "@/features/home/HomePanel";
-import { KnowledgePanel } from "@/features/knowledge/KnowledgePanel";
-import { LeadsPanel } from "@/features/leads/LeadsPanel";
-import { SettingsPanel } from "@/features/settings/SettingsPanel";
 import { SetupGate } from "@/features/setup/SetupGate";
-import { ShowcasePanel } from "@/features/showcase/ShowcasePanel";
 import { api } from "@/lib/api";
 import { rememberLanguage } from "@/lib/i18n";
 import {
@@ -57,6 +52,32 @@ const SETUP_DISMISSED_KEY = "marlen-setup-dismissed";
 
 const CHAT_WIDTH_MIN = 320;
 const CHAT_WIDTH_MAX = 960;
+
+const AutomationsPanel = React.lazy(() =>
+  import("@/features/automations/AutomationsPanel").then(({ AutomationsPanel }) => ({
+    default: AutomationsPanel,
+  })),
+);
+const KnowledgePanel = React.lazy(() =>
+  import("@/features/knowledge/KnowledgePanel").then(({ KnowledgePanel }) => ({
+    default: KnowledgePanel,
+  })),
+);
+const LeadsPanel = React.lazy(() =>
+  import("@/features/leads/LeadsPanel").then(({ LeadsPanel }) => ({ default: LeadsPanel })),
+);
+const SettingsPanel = React.lazy(() =>
+  import("@/features/settings/SettingsPanel").then(({ SettingsPanel }) => ({
+    default: SettingsPanel,
+  })),
+);
+const ShowcasePanel = import.meta.env.DEV
+  ? React.lazy(() =>
+      import("@/features/showcase/ShowcasePanel").then(({ ShowcasePanel }) => ({
+        default: ShowcasePanel,
+      })),
+    )
+  : null;
 
 function isNavView(path: string): path is View {
   return (NAV_VIEWS as readonly string[]).includes(path);
@@ -169,6 +190,7 @@ export default function App() {
     width: chatWidth,
     dragging: chatResizing,
     onPointerDown: onChatResizeStart,
+    onKeyDown: onChatResizeKeyDown,
   } = useResizableWidth({
     storageKey: "marlen-chat-width",
     cssVar: "--chat-width",
@@ -406,41 +428,50 @@ export default function App() {
             className={cn(
               currentPath === "knowledge"
                 ? "min-h-0 w-full flex-1"
-                : "mx-auto max-w-3xl @6xl:max-w-4xl @7xl:max-w-5xl",
+                : // Home is the one two-column page, so its cap steps out of the
+                  // way as soon as the canvas can hold two columns.
+                  currentPath === "home"
+                  ? "mx-auto max-w-3xl @3xl:max-w-4xl @5xl:max-w-5xl"
+                  : "mx-auto max-w-3xl @6xl:max-w-4xl @7xl:max-w-5xl",
               import.meta.env.DEV && currentPath === "showcase" && "max-w-none",
             )}
           >
-            <Routes>
-              <Route path="/chat" element={null} />
-              <Route path="/settings" element={<SettingsPanel onStatusChanged={refreshStatus} />} />
-              {/* Leads exist only alongside a connected onOffice CRM. While status
-                  is still loading nothing renders — redirecting then would kick a
-                  direct /leads visit home on every reload. */}
-              <Route
-                path="/leads"
-                element={
-                  status === null ? null : status.onofficeConfigured ? (
-                    <LeadsPanel />
-                  ) : (
-                    <Navigate to="/" replace />
-                  )
-                }
-              />
-              <Route path="/automations" element={<AutomationsPanel />} />
-              <Route path="/knowledge" element={<KnowledgePanel />} />
-              {import.meta.env.DEV && <Route path="/showcase" element={<ShowcasePanel />} />}
-              <Route
-                path="/"
-                element={
-                  <HomePanel
-                    setupIncomplete={status !== null && !isSetupComplete(status)}
-                    offline={Boolean(status?.pipedreamConfigured) && !status?.emailAccountsKnown}
-                    onNavigate={select}
-                  />
-                }
-              />
-              <Route path="*" element={<NotFound />} />
-            </Routes>
+            <React.Suspense fallback={<LoadingRow />}>
+              <Routes>
+                <Route path="/chat" element={null} />
+                <Route
+                  path="/settings"
+                  element={<SettingsPanel status={status} onStatusChanged={refreshStatus} />}
+                />
+                {/* Leads exist only alongside a connected onOffice CRM. While status
+                    is still loading nothing renders — redirecting then would kick a
+                    direct /leads visit home on every reload. */}
+                <Route
+                  path="/leads"
+                  element={
+                    status === null ? null : status.onofficeConfigured ? (
+                      <LeadsPanel />
+                    ) : (
+                      <Navigate to="/" replace />
+                    )
+                  }
+                />
+                <Route path="/automations" element={<AutomationsPanel />} />
+                <Route path="/knowledge" element={<KnowledgePanel />} />
+                {ShowcasePanel && <Route path="/showcase" element={<ShowcasePanel />} />}
+                <Route
+                  path="/"
+                  element={
+                    <HomePanel
+                      setupIncomplete={status !== null && !isSetupComplete(status)}
+                      offline={Boolean(status?.pipedreamConfigured) && !status?.emailAccountsKnown}
+                      onNavigate={select}
+                    />
+                  }
+                />
+                <Route path="*" element={<NotFound />} />
+              </Routes>
+            </React.Suspense>
           </div>
         </div>
       </main>
@@ -456,6 +487,7 @@ export default function App() {
       {/* biome-ignore lint/a11y/useSemanticElements: interactive splitter; <hr> cannot receive focus or contain the grip */}
       <div
         onPointerDown={onChatResizeStart}
+        onKeyDown={onChatResizeKeyDown}
         role="separator"
         aria-orientation="vertical"
         aria-label={t("chat.resize")}

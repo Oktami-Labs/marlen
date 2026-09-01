@@ -107,14 +107,19 @@ export function EmailDraftCard({ card, color }: { card: EmailDraftData; color?: 
           const result = await api.keepProposal(proposalId, { send: true });
           if (result.webUrl) setKeptWebUrl(result.webUrl);
           setLocalStatus(result.sent ? "sent" : "kept");
-          return;
+          return true;
         }
-        if (!accountId || !draft.draftId) return;
+        if (!accountId || !draft.draftId) return false;
         await api.sendDraft(accountId, draft.draftId);
         setLocalStatus("sent");
+        return true;
       } catch (err) {
-        if (isNotFound(err)) setLocalStatus("gone");
-        else toast.error(err);
+        if (isNotFound(err)) {
+          setLocalStatus("gone");
+          return true;
+        }
+        toast.error(err);
+        return false;
       }
     },
     discard: async () => {
@@ -122,14 +127,19 @@ export function EmailDraftCard({ card, color }: { card: EmailDraftData; color?: 
         if (proposalId) {
           await api.discardProposal(proposalId);
           setLocalStatus("discarded");
-          return;
+          return true;
         }
-        if (!accountId || !draft.draftId) return;
+        if (!accountId || !draft.draftId) return false;
         await api.deleteDraft(accountId, draft.draftId);
         setLocalStatus("discarded");
+        return true;
       } catch (err) {
-        if (isNotFound(err)) setLocalStatus("gone");
-        else toast.error(err);
+        if (isNotFound(err)) {
+          setLocalStatus("gone");
+          return true;
+        }
+        toast.error(err);
+        return false;
       }
     },
   });
@@ -274,7 +284,7 @@ export function EmailDraftCard({ card, color }: { card: EmailDraftData; color?: 
         pending={actions.pending}
         busy={actions.busy}
         onClose={actions.close}
-        onConfirm={() => void actions.confirm()}
+        onConfirm={actions.confirm}
         labels={{
           send: {
             title: t("chat.cards.draft.send"),

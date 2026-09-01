@@ -26,6 +26,7 @@ const OVERDRAG_PX = 64;
  *  of `max`. It must leave most of the screen to the
  *  content it sits beside. */
 const MAX_VIEWPORT_FRACTION = 0.45;
+const KEYBOARD_STEP_PX = 24;
 
 /** Stored values are window-width fractions in (0, 1); anything else is ignored. */
 function readStoredFraction(key: string): number | null {
@@ -118,9 +119,23 @@ export function useResizableWidth({
     window.addEventListener("pointercancel", stop);
   };
 
+  const onKeyDown = (event: React.KeyboardEvent) => {
+    let next: number | undefined;
+    if (event.key === "Home") next = min;
+    else if (event.key === "End") next = maxPx;
+    else if (event.key === "ArrowLeft") {
+      next = width + (edge === "right" ? KEYBOARD_STEP_PX : -KEYBOARD_STEP_PX);
+    } else if (event.key === "ArrowRight") {
+      next = width + (edge === "right" ? -KEYBOARD_STEP_PX : KEYBOARD_STEP_PX);
+    }
+    if (next === undefined) return;
+    event.preventDefault();
+    setFraction(Math.min(maxPx, Math.max(min, next)) / window.innerWidth);
+  };
+
   React.useEffect(() => {
     if (fraction > 0) window.localStorage.setItem(storageKey, String(fraction));
   }, [storageKey, fraction]);
 
-  return { ref, width, dragging, onPointerDown };
+  return { ref, width, dragging, onPointerDown, onKeyDown };
 }

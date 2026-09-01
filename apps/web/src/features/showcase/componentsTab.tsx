@@ -294,7 +294,7 @@ function ConfirmDialogRow() {
         title="Delete this thing?"
         description="This can't be undone."
         confirmLabel="Delete"
-        onConfirm={() => setOpen(false)}
+        onConfirm={() => true}
       />
     </div>
   );

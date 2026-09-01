@@ -20,6 +20,70 @@ function formatToolValue(value: unknown, unavailable: string): string {
   }
 }
 
+function toolFieldLabel(key: string): string {
+  const words = key
+    .replace(/([a-z0-9])([A-Z])/g, "$1 $2")
+    .replace(/[_-]+/g, " ")
+    .trim();
+  return words ? words[0]?.toUpperCase() + words.slice(1) : key;
+}
+
+/** Provider values as readable fields instead of an undifferentiated JSON blob. */
+function toolValueNode(
+  value: unknown,
+  unavailable: string,
+  depth: number,
+  seen: WeakSet<object>,
+): React.ReactNode {
+  if (value === undefined || value === null) {
+    return <span className="text-muted-foreground">{unavailable}</span>;
+  }
+  if (typeof value === "string") {
+    return <div className="whitespace-pre-wrap break-words leading-relaxed">{value}</div>;
+  }
+  if (typeof value !== "object") {
+    return <span className="font-mono text-2xs">{String(value)}</span>;
+  }
+  if (seen.has(value)) return <span className="text-muted-foreground">…</span>;
+  if (depth >= 5) return <span className="text-muted-foreground">…</span>;
+  seen.add(value);
+
+  if (Array.isArray(value)) {
+    if (value.length === 0) return <span className="text-muted-foreground">{unavailable}</span>;
+    return (
+      <ol className="space-y-1.5">
+        {value.map((entry, index) => (
+          // A tool result has no stable item identity beyond its position.
+          // biome-ignore lint/suspicious/noArrayIndexKey: immutable diagnostic data
+          <li key={index} className="grid grid-cols-[1.5rem_minmax(0,1fr)] gap-1.5">
+            <span className="font-mono text-2xs text-muted-foreground">{index + 1}.</span>
+            <div className="min-w-0">{toolValueNode(entry, unavailable, depth + 1, seen)}</div>
+          </li>
+        ))}
+      </ol>
+    );
+  }
+
+  const entries = Object.entries(value);
+  if (entries.length === 0) return <span className="text-muted-foreground">{unavailable}</span>;
+  return (
+    <dl className="space-y-1.5">
+      {entries.map(([key, entry]) => (
+        <div key={key} className="grid grid-cols-[minmax(6rem,0.35fr)_minmax(0,1fr)] gap-2">
+          <dt className="truncate text-muted-foreground" title={key}>
+            {toolFieldLabel(key)}
+          </dt>
+          <dd className="min-w-0">{toolValueNode(entry, unavailable, depth + 1, seen)}</dd>
+        </div>
+      ))}
+    </dl>
+  );
+}
+
+function ToolValue({ value, unavailable }: { value: unknown; unavailable: string }) {
+  return <>{toolValueNode(value, unavailable, 0, new WeakSet())}</>;
+}
+
 /** First line of a failed call's result, short enough to sit on the row. */
 function errorExcerpt(result: unknown): string {
   if (result === undefined || result === null) return "";
@@ -114,17 +178,19 @@ function ToolActivity({
       <div className="mt-1 space-y-2 border-l border-border pl-3">
         <div>
           <div className="mb-0.5 font-medium">{t("chat.tool.parameters")}</div>
-          <pre className="max-h-64 overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-2 p-2 font-mono text-2xs text-foreground">
-            {formatToolValue(call.parameters, t("chat.tool.noValue"))}
-          </pre>
+          <div className="max-h-64 overflow-auto rounded-md bg-surface-2 p-2 text-xs text-foreground">
+            <ToolValue value={call.parameters} unavailable={t("chat.tool.noValue")} />
+          </div>
         </div>
         <div>
           <div className="mb-0.5 font-medium">{t("chat.tool.result")}</div>
-          <pre className="max-h-80 overflow-auto whitespace-pre-wrap break-words rounded-md bg-surface-2 p-2 font-mono text-2xs text-foreground">
-            {call.done
-              ? formatToolValue(call.result, t("chat.tool.noValue"))
-              : t("chat.tool.running")}
-          </pre>
+          <div className="max-h-80 overflow-auto rounded-md bg-surface-2 p-2 text-xs text-foreground">
+            {call.done ? (
+              <ToolValue value={call.result} unavailable={t("chat.tool.noValue")} />
+            ) : (
+              t("chat.tool.running")
+            )}
+          </div>
         </div>
       </div>
     </details>

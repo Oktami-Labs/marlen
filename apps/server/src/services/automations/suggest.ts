@@ -11,7 +11,7 @@ import {
   listPendingSuggestions,
 } from "../../db/automationSuggestions.js";
 import { db, schema } from "../../db/index.js";
-import { getSetting, getTimezoneSetting, setSetting } from "../../db/settings.js";
+import { getSetting, getTimezoneSetting, setSetting, userTimezone } from "../../db/settings.js";
 import { isValidCron } from "./scheduler.js";
 
 const log = moduleLogger("suggest");
@@ -231,7 +231,7 @@ export async function runSuggestSweep(deps: SuggestSweepDeps = {}): Promise<Sugg
     return { ran: true, proposed: 0, stored: 0 };
   }
 
-  const timezone = (await getTimezoneSetting()) ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+  const timezone = await userTimezone();
   const prompt = await renderPrompt(messages, timezone);
   const proposals = await (deps.propose ?? defaultPropose)(prompt);
 

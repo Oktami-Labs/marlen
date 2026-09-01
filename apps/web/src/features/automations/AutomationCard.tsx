@@ -1,4 +1,5 @@
 import type { Automation, AutomationRun } from "@marlen/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronUp, Pin, Play } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -9,13 +10,12 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import { DisclosureToggle } from "@/components/ui/disclosure-toggle";
-import { LoadingRow } from "@/components/ui/feedback";
+import { LoadingRow, RetryableError } from "@/components/ui/feedback";
 import { Markdown } from "@/components/ui/markdown";
 import { Switch } from "@/components/ui/switch";
 import { scheduleLabel } from "@/features/automations/schedule";
 import { api } from "@/lib/api";
 import { dateTimeLabel } from "@/lib/dates";
-import { useServerEvents } from "@/lib/serverEvents";
 import { toast } from "@/lib/toast";
 import { cn, toggleRowProps, withViewTransition } from "@/lib/utils";
 
@@ -37,31 +37,22 @@ export function AutomationCard({
   onEdit: () => void;
 }) {
   const { t, i18n } = useTranslation();
-  const [runs, setRuns] = React.useState<AutomationRun[] | null>(null);
+  const queryClient = useQueryClient();
   const [expanded, setExpanded] = React.useState(false);
   const [busy, setBusy] = React.useState(false);
 
   const label = scheduleLabel(automation.schedule, t, i18n.language);
+  const scheduleText = label ?? t("automations.customSchedule");
 
-  const loadRuns = React.useCallback(async () => {
-    setRuns(await api.automationRuns(automation.id).catch(() => []));
-  }, [automation.id]);
-
-  React.useEffect(() => {
-    if (expanded) void loadRuns();
-  }, [expanded, loadRuns]);
-
-  // Keep polling while a run is in flight so "running" resolves on screen.
-  React.useEffect(() => {
-    if (!expanded || !runs?.some((r) => r.status === "running")) return;
-    const timer = setInterval(() => void loadRuns(), 2000);
-    return () => clearInterval(timer);
-  }, [expanded, runs, loadRuns]);
-
-  // Complements the polling: run started/finished elsewhere (schedule, chat).
-  useServerEvents(["runs"], () => {
-    if (expanded) void loadRuns();
+  const runsQuery = useQuery({
+    queryKey: ["runs", "automation", automation.id],
+    queryFn: () => api.automationRuns(automation.id),
+    enabled: expanded,
+    refetchInterval: (query) =>
+      query.state.data?.some((run) => run.status === "running") ? 2000 : false,
+    meta: { suppressErrorToast: true },
   });
+  const runs = runsQuery.data ?? null;
 
   const toggle = async (enabled: boolean) => {
     setBusy(true);
@@ -94,8 +85,7 @@ export function AutomationCard({
     try {
       await api.runAutomation(automation.id);
       setExpanded(true);
-      // Give the run a moment to be recorded before the first poll.
-      setTimeout(() => void loadRuns(), 800);
+      await queryClient.invalidateQueries({ queryKey: ["runs", "automation", automation.id] });
     } catch (err) {
       toast.error(err);
     } finally {
@@ -113,12 +103,8 @@ export function AutomationCard({
         >
           <div className="flex flex-wrap items-center gap-2 text-base font-semibold tracking-tight">
             {automation.name}
-            <Badge
-              variant="muted"
-              className={cn("text-2xs", !label && "font-mono")}
-              title={automation.schedule}
-            >
-              {label ?? automation.schedule}
+            <Badge variant="muted" className="text-2xs" title={scheduleText}>
+              {scheduleText}
             </Badge>
             {!automation.enabled && <Badge variant="warning">{t("automations.paused")}</Badge>}
             {!automation.showInActivity && (
@@ -171,7 +157,13 @@ export function AutomationCard({
       {expanded && (
         <div className="mt-2 flex flex-col gap-2">
           {!runs ? (
-            <LoadingRow />
+            runsQuery.isError ? (
+              <RetryableError onRetry={() => void runsQuery.refetch()}>
+                {runsQuery.error.message}
+              </RetryableError>
+            ) : (
+              <LoadingRow />
+            )
           ) : runs.length === 0 ? (
             <p className="text-xs text-muted-foreground">{t("automations.noRuns")}</p>
           ) : (
@@ -208,7 +200,10 @@ function RunItem({ run }: { run: AutomationRun }) {
           <time dateTime={run.startedAt} className="text-xs text-muted-foreground">
             {dateTimeLabel(run.startedAt, i18n.language)}
           </time>
-          <OpenRunInChatButton runId={run.id} onNavigateToChat={() => navigate("/chat")} />
+          <OpenRunInChatButton
+            conversationId={run.conversationId}
+            onNavigateToChat={() => navigate("/chat")}
+          />
         </div>
       </div>
       {expanded && hasResult && <Markdown content={run.result} className="mt-2 text-xs" />}

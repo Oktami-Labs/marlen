@@ -1,4 +1,5 @@
 import type { OnOfficeStatus } from "@marlen/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Building2, Check, ExternalLink, LogOut, Plus, Settings, X } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -27,18 +28,15 @@ export function useOnOfficeStatus(): {
   status: OnOfficeStatus | null;
   refresh: () => Promise<void>;
 } {
-  const [status, setStatus] = React.useState<OnOfficeStatus | null>(null);
+  const queryClient = useQueryClient();
+  const { data: status } = useQuery({
+    queryKey: ["accounts", "onoffice"],
+    queryFn: api.onOfficeStatus,
+  });
   const refresh = React.useCallback(async () => {
-    try {
-      setStatus(await api.onOfficeStatus());
-    } catch {
-      // Best-effort: a failed status just keeps onOffice out of the picker.
-    }
-  }, []);
-  React.useEffect(() => {
-    void refresh();
-  }, [refresh]);
-  return { status, refresh };
+    await queryClient.invalidateQueries({ queryKey: ["accounts", "onoffice"] });
+  }, [queryClient]);
+  return { status: status ?? null, refresh };
 }
 
 /** The onOffice row in the "add account" picker, a PickerRow branded with a CRM glyph. */
@@ -76,11 +74,12 @@ export function OnOfficeAccountRow({
     try {
       await api.clearOnOffice();
       await onDisconnected();
+      return true;
     } catch (err) {
       toast.error(err);
+      return false;
     } finally {
       setRemoving(false);
-      setConfirm(false);
     }
   };
 
@@ -119,7 +118,7 @@ export function OnOfficeAccountRow({
         description={t("onoffice.removeSavedConfirm")}
         confirmLabel={t("onoffice.removeSaved")}
         busy={removing}
-        onConfirm={() => void disconnect()}
+        onConfirm={disconnect}
       />
     </ListRow>
   );

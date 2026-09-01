@@ -11,7 +11,7 @@ function refLabel(ref: EmailRef): string {
 }
 
 function refKey(ref: EmailRef): string {
-  return `${ref.threadId}:${ref.messageId ?? ""}`;
+  return `${ref.accountId}:${ref.threadId}:${ref.messageId ?? ""}`;
 }
 
 /**

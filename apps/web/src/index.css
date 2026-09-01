@@ -233,6 +233,14 @@
     background: var(--surface);
     border-radius: var(--radius);
     border: 1px solid var(--border);
+    --scroll-edge-fill: var(--surface);
+  }
+  .scroll-edge {
+    background: linear-gradient(to bottom, var(--scroll-edge-fill, var(--surface)), transparent);
+    transition: opacity 0.15s cubic-bezier(0.22, 1, 0.36, 1);
+  }
+  .scroll-edge-bottom {
+    transform: rotate(180deg);
   }
   /* The cursor tooltip carries no border and no scrim, so its fill steps far
      enough from both a white panel and the grey canvas to read over either. */
@@ -254,6 +262,7 @@
   }
   .dark .surface-pop {
     background: color-mix(in oklch, var(--surface) 90%, var(--foreground));
+    --scroll-edge-fill: color-mix(in oklch, var(--surface) 90%, var(--foreground));
     --surface-2-fill: color-mix(in oklch, var(--surface-2) 84%, var(--foreground));
     --secondary-fill: color-mix(in oklch, var(--secondary) 84%, var(--foreground));
   }
@@ -378,6 +387,10 @@
 }
 
 /* Named rows transition independently; the rest of the page cross-fades. */
+.sidebar-active-indicator {
+  view-transition-name: sidebar-active-indicator;
+}
+
 ::view-transition-group(*) {
   animation-duration: 0.3s;
   animation-timing-function: cubic-bezier(0.22, 1, 0.36, 1);
@@ -911,6 +924,9 @@
   }
   .surface-hover:hover {
     transform: none;
+  }
+  .scroll-edge {
+    transition: none;
   }
   /* Finish transitions started before reduced motion was detected. */
   ::view-transition-group(*),

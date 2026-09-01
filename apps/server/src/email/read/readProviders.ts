@@ -21,6 +21,35 @@ export interface ThreadDetail {
   messages: EmailThreadMessage[];
 }
 
+/** One search over one account; every field but `folder` and `limit` narrows it. */
+export interface MailSearch {
+  /** Free text over sender, subject and body, in the provider's own search syntax. */
+  text?: string;
+  /** Sender address or name. */
+  from?: string;
+  /** ISO timestamps bounding the received time, both inclusive. */
+  since?: string;
+  until?: string;
+  unreadOnly?: boolean;
+  folder: "inbox" | "sent" | "all";
+  limit: number;
+}
+
+/** One message as a search hit. */
+export interface MailMessageSummary {
+  messageId: string;
+  threadId: string;
+  /** `"Name <addr>"`. */
+  from: string;
+  to: string[];
+  subject: string;
+  /** ISO timestamp, orderable. */
+  date: string;
+  /** The provider's short body preview. */
+  snippet: string;
+  unread: boolean;
+}
+
 export interface MailReadProvider {
   /**
    * The account's newest inbox message as `{ id, date }` (ISO), or null for an
@@ -49,16 +78,21 @@ export interface MailReadProvider {
     signal?: AbortSignal,
   ): Promise<string | null>;
   /**
-   * Optional: one thread's messages, oldest first, drafts excluded (a reply
-   * draft sits in the thread it answers). Null when the thread is gone (404) or
-   * has no non-draft message. Absent means "not supported for this account" and
-   * the route replies 400, provider-neutral.
+   * One thread's messages, oldest first, drafts excluded (a reply draft sits
+   * in the thread it answers). Null when the thread is gone (404) or has no
+   * non-draft message.
    */
-  getThread?(
+  getThread(
     account: ConnectedAccount,
     providerThreadId: string,
     signal?: AbortSignal,
   ): Promise<ThreadDetail | null>;
+  /** Messages matching `search`, newest first, at most `search.limit`. */
+  searchMessages(
+    account: ConnectedAccount,
+    search: MailSearch,
+    signal?: AbortSignal,
+  ): Promise<MailMessageSummary[]>;
 }
 
 const registry = createProviderRegistry<MailReadProvider>();

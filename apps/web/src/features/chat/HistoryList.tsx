@@ -1,4 +1,5 @@
 import type { Conversation } from "@marlen/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { MessagesSquare, Pencil, Plus, Trash2 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -6,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DisclosureToggle } from "@/components/ui/disclosure-toggle";
 import { EmptyState } from "@/components/ui/empty-state";
-import { LoadingRow } from "@/components/ui/feedback";
+import { LoadingRow, RetryableError } from "@/components/ui/feedback";
 import { GroupLabel } from "@/components/ui/group-label";
 import { HoverActions } from "@/components/ui/hover-actions";
 import { Input } from "@/components/ui/input";
@@ -14,7 +15,6 @@ import { Spinner } from "@/components/ui/spinner";
 import { sendChatCommand } from "@/features/chat/controller";
 import { api } from "@/lib/api";
 import { dateTimeLabel } from "@/lib/dates";
-import { useServerEvents } from "@/lib/serverEvents";
 import { toast } from "@/lib/toast";
 import { cn } from "@/lib/utils";
 
@@ -98,9 +98,8 @@ export function HistoryList({
   query?: string;
 }) {
   const { t, i18n } = useTranslation();
-  const [items, setItems] = React.useState<Conversation[] | null>(null);
-  const [total, setTotal] = React.useState(0);
-  const [loadingMore, setLoadingMore] = React.useState(false);
+  const queryClient = useQueryClient();
+  const [limit, setLimit] = React.useState(CONVERSATIONS_PAGE_SIZE);
   const [debouncedQuery, setDebouncedQuery] = React.useState(query.trim());
   const [renamingId, setRenamingId] = React.useState<string | null>(null);
   const [renameDraft, setRenameDraft] = React.useState("");
@@ -111,49 +110,33 @@ export function HistoryList({
   // Server-backed search: wait ~250ms after typing stops before hitting the endpoint.
   React.useEffect(() => {
     const trimmed = query.trim();
-    const timer = setTimeout(() => setDebouncedQuery(trimmed), 250);
+    const timer = setTimeout(() => {
+      setDebouncedQuery(trimmed);
+      setLimit(CONVERSATIONS_PAGE_SIZE);
+    }, 250);
     return () => clearTimeout(timer);
   }, [query]);
 
-  const load = React.useCallback(() => {
-    api
-      .conversations({ q: debouncedQuery || undefined, limit: CONVERSATIONS_PAGE_SIZE, offset: 0 })
-      .then((res) => {
-        setItems(res.items);
-        setTotal(res.total);
-      })
-      .catch((err) => {
-        toast.error(err);
-        setItems([]);
-        setTotal(0);
-      });
-  }, [debouncedQuery]);
+  const historyQuery = useQuery({
+    queryKey: ["conversations", "history", debouncedQuery, limit],
+    queryFn: () => api.conversations({ q: debouncedQuery || undefined, limit, offset: 0 }),
+    placeholderData: (previous, previousQuery) =>
+      previousQuery?.queryKey[2] === debouncedQuery ? previous : undefined,
+    meta: { suppressErrorToast: true },
+  });
+  const items = historyQuery.data?.items ?? null;
+  const total = historyQuery.data?.total ?? 0;
 
-  React.useEffect(() => {
-    setItems(null);
-    load();
-  }, [load]);
-
-  // New chats and automation runs appear in the list as they happen. Simplest
-  // correct behavior for an invalidation: refetch and reset to the first page.
-  useServerEvents(["conversations"], load);
-
-  const loadMore = async () => {
-    if (!items) return;
-    setLoadingMore(true);
-    try {
-      const res = await api.conversations({
-        q: debouncedQuery || undefined,
-        limit: CONVERSATIONS_PAGE_SIZE,
-        offset: items.length,
-      });
-      setItems([...items, ...res.items]);
-      setTotal(res.total);
-    } catch (err) {
-      toast.error(err);
-    } finally {
-      setLoadingMore(false);
-    }
+  const updateHistory = (
+    update: (current: { items: Conversation[]; total: number }) => {
+      items: Conversation[];
+      total: number;
+    },
+  ) => {
+    queryClient.setQueriesData<{ items: Conversation[]; total: number }>(
+      { queryKey: ["conversations", "history"] },
+      (current) => (current ? update(current) : current),
+    );
   };
 
   const startRename = (c: Conversation) => {
@@ -169,17 +152,20 @@ export function HistoryList({
     setRenamingId(null);
     const title = renameDraft.trim();
     if (!title) return; // Cancel an empty edit instead of sending an invalid request.
-    setItems((prev) => prev?.map((c) => (c.id === id ? { ...c, title } : c)) ?? prev);
+    updateHistory((current) => ({
+      ...current,
+      items: current.items.map((c) => (c.id === id ? { ...c, title } : c)),
+    }));
     try {
       await api.renameConversation(id, title);
     } catch (err) {
       toast.error(err);
-      load();
+      void queryClient.invalidateQueries({ queryKey: ["conversations"] });
     }
   };
 
   const confirmDelete = async () => {
-    if (!deleteId) return;
+    if (!deleteId) return false;
     setDeleting(true);
     try {
       await api.deleteConversation(deleteId);
@@ -188,13 +174,16 @@ export function HistoryList({
         // conversation id, and the last-open-conversation localStorage key.
         sendChatCommand({ kind: "new" });
       }
-      setItems((prev) => prev?.filter((c) => c.id !== deleteId) ?? prev);
-      setTotal((n) => Math.max(0, n - 1));
+      updateHistory((current) => ({
+        items: current.items.filter((c) => c.id !== deleteId),
+        total: Math.max(0, current.total - 1),
+      }));
+      return true;
     } catch (err) {
       toast.error(err);
+      return false;
     } finally {
       setDeleting(false);
-      setDeleteId(null);
     }
   };
 
@@ -299,14 +288,20 @@ export function HistoryList({
       description={t("chat.deleteConfirmBody")}
       confirmLabel={t("chat.delete")}
       busy={deleting}
-      onConfirm={() => void confirmDelete()}
+      onConfirm={confirmDelete}
     />
   );
 
   if (!items) {
     return (
       <>
-        <LoadingRow />
+        {historyQuery.error ? (
+          <RetryableError onRetry={() => void historyQuery.refetch()}>
+            {historyQuery.error.message}
+          </RetryableError>
+        ) : (
+          <LoadingRow />
+        )}
         {dialog}
       </>
     );
@@ -316,8 +311,8 @@ export function HistoryList({
     <Button
       variant="ghost"
       size="sm"
-      onClick={() => void loadMore()}
-      loading={loadingMore}
+      onClick={() => setLimit((current) => current + CONVERSATIONS_PAGE_SIZE)}
+      loading={historyQuery.isPlaceholderData}
       className="w-full text-muted-foreground"
     >
       {t("chat.loadMore")}

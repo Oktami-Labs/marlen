@@ -26,10 +26,12 @@ import type {
   LibraryDocumentContent,
   LibrarySearchHit,
   LibraryStatus,
+  LiveChatTurn,
   LlmContextResponse,
   LlmProviderInfo,
   LlmUsageResponse,
   LoginFlowStatus,
+  MailSearchResponse,
   MissedAutomation,
   ModelSettings,
   OnOfficeConfigInput,
@@ -242,6 +244,11 @@ export const api = {
     get<{ run: RunFeedItem | null; automation: Automation | null }>("/api/runs/pinned"),
   missedRuns: () => get<{ items: MissedAutomation[] }>("/api/runs/missed"),
   runMissed: () => http<{ started: MissedAutomation[] }>("POST", "/api/runs/catch-up"),
+  handleBriefingItem: (runId: string, accountId: string, threadId: string) =>
+    http<{ ok: boolean }>("POST", `/api/runs/${encodeURIComponent(runId)}/briefing-items/handled`, {
+      accountId,
+      threadId,
+    }),
   drafts: (opts?: { refresh?: boolean }) =>
     get<AccountDrafts[]>(`/api/drafts${opts?.refresh ? "?refresh=1" : ""}`),
   draftDetail: (accountId: string, draftId: string) =>
@@ -290,11 +297,14 @@ export const api = {
     const qs = search.toString();
     return get<{ items: Conversation[]; total: number }>(`/api/conversations${qs ? `?${qs}` : ""}`);
   },
+  conversation: (id: string) => get<Conversation>(`/api/conversations/${encodeURIComponent(id)}`),
   conversationMessages: (id: string) =>
     get<ChatMessage[]>(`/api/conversations/${encodeURIComponent(id)}/messages`),
   systemPrompt: () => get<{ prompt: string }>("/api/chat/system-prompt"),
   stopChat: (id: string) =>
     http<{ stopped: boolean }>("POST", `/api/chat/${encodeURIComponent(id)}/stop`),
+  liveChat: (id: string) =>
+    get<{ turn: LiveChatTurn | null }>(`/api/chat/${encodeURIComponent(id)}/live`),
 
   sttStatus: () => get<SttStatus>("/api/stt"),
   transcribe: (audio: string, mimeType: string, language: string) =>
@@ -373,13 +383,27 @@ export const api = {
   wiki: () => get<WikiPage[]>("/api/wiki"),
   addPage: (
     content: string,
-    opts: { name?: string; type?: string | null; accountId?: string | null } = {},
+    opts: {
+      name?: string;
+      type?: string | null;
+      accountId?: string | null;
+      pinned?: boolean;
+    } = {},
   ) => http<WikiPage>("POST", "/api/wiki", { content, ...opts }),
-  updatePage: (id: string, content: string, accountId?: string | null, contactId?: string | null) =>
+  updatePage: (
+    id: string,
+    content: string,
+    baseRevision: string,
+    opts: {
+      accountId?: string | null;
+      contactId?: string | null;
+      pinned?: boolean;
+    } = {},
+  ) =>
     http<WikiPage>("PUT", `/api/wiki/${encodeURIComponent(id)}`, {
       content,
-      ...(accountId !== undefined ? { accountId } : {}),
-      ...(contactId !== undefined ? { contactId } : {}),
+      baseRevision,
+      ...opts,
     }),
   deletePage: (id: string) =>
     http<{ ok: boolean }>("DELETE", `/api/wiki/${encodeURIComponent(id)}`),
@@ -426,6 +450,13 @@ export const api = {
       `/api/mail/threads?accountId=${encodeURIComponent(accountId)}` +
         `&threadId=${encodeURIComponent(threadId)}`,
     ),
+  searchMail: (q: string, signal?: AbortSignal) => {
+    const params = new URLSearchParams({ q, limit: "12" });
+    return guardedFetch(`/api/mail/search?${params.toString()}`, { signal }).then(async (res) => {
+      await throwOnError(res);
+      return res.json() as Promise<MailSearchResponse>;
+    });
+  },
   mailAttachmentUrl: (accountId: string, messageId: string, filename: string): string =>
     `/api/mail/attachments/open?accountId=${encodeURIComponent(accountId)}` +
     `&messageId=${encodeURIComponent(messageId)}&filename=${encodeURIComponent(filename)}`,
@@ -435,7 +466,7 @@ export const api = {
       messageId,
       filename,
     }),
-  downloadBackup: (): void => {
+  downloadDataExport: (): void => {
     openExternal("/api/backup");
   },
 };

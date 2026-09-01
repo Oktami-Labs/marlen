@@ -326,7 +326,7 @@ function RecordingOverlay({
       {analyser ? (
         <>
           <span className="flex shrink-0 items-center gap-2">
-            <span className="h-2 w-2 animate-pulse rounded-full bg-destructive" />
+            <span className="dot-breathe h-2 w-2 rounded-full bg-destructive" />
             <span className="font-mono text-xs tabular-nums text-muted-foreground">
               {elapsedLabel(elapsedMs)}
             </span>

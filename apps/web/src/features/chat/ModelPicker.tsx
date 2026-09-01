@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { OptionRow } from "@/components/ui/option-row";
+import { ScrollEdges } from "@/components/ui/scroll-edges";
 import { api } from "@/lib/api";
 
 /**
@@ -33,7 +34,7 @@ export function ModelPicker({
   }
 
   return (
-    <div className="flex max-h-48 flex-col overflow-y-auto">
+    <ScrollEdges viewportClassName="flex max-h-48 flex-col">
       {usable.map((catalog) => (
         <React.Fragment key={catalog.id}>
           {usable.length > 1 && (
@@ -51,6 +52,6 @@ export function ModelPicker({
           ))}
         </React.Fragment>
       ))}
-    </div>
+    </ScrollEdges>
   );
 }

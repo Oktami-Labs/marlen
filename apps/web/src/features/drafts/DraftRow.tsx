@@ -55,8 +55,10 @@ export function DraftRow({
         await api.sendDraft(accountId, draft.id);
         withViewTransition(() => setSent(true));
         toast.success(t("drafts.sentToast"));
+        return true;
       } catch (err) {
         onError(errorMessage(err));
+        return false;
       }
     },
     discard: async () => {
@@ -65,8 +67,10 @@ export function DraftRow({
         await api.deleteDraft(accountId, draft.id);
         withViewTransition(() => setDiscarded(true));
         onDeleted();
+        return true;
       } catch (err) {
         onError(errorMessage(err));
+        return false;
       }
     },
   });
@@ -107,22 +111,26 @@ export function DraftRow({
           )}
           <AvatarMark name={recipients[0] ?? ""} tone="tint-accent" size="sm" />
           <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-1.5 truncate text-sm font-medium">
+            <p className="flex items-center gap-1.5 text-sm font-medium">
               {isNew && <NewDot />}
-              {draft.subject || t("drafts.noSubject")}
+              <span className="truncate">{draft.subject || t("drafts.noSubject")}</span>
             </p>
-            <RecipientLine kind="to" addresses={to} self={account.name}>
-              {draft.snippet && (
-                <span className="text-muted-foreground/70"> · {draft.snippet}</span>
-              )}
-            </RecipientLine>
+            {/* The time shares the meta line, not the subject's: the subject is
+                why the row exists and gets the whole width. */}
+            <div className="flex items-baseline gap-2">
+              <RecipientLine kind="to" addresses={to} self={account.name}>
+                {draft.snippet && (
+                  <span className="text-muted-foreground/70"> · {draft.snippet}</span>
+                )}
+              </RecipientLine>
+              <time
+                dateTime={draft.date}
+                className="ml-auto shrink-0 font-mono text-2xs tabular-nums text-muted-foreground"
+              >
+                {dateLabel(draft.date)}
+              </time>
+            </div>
           </div>
-          <time
-            dateTime={draft.date}
-            className="shrink-0 self-start pt-0.5 font-mono text-2xs tabular-nums text-muted-foreground"
-          >
-            {dateLabel(draft.date)}
-          </time>
         </button>
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {/* Refining is secondary to the row's own decision, so it stays out
@@ -170,7 +178,7 @@ export function DraftRow({
         pending={actions.pending}
         busy={actions.busy}
         onClose={actions.close}
-        onConfirm={() => void actions.confirm()}
+        onConfirm={actions.confirm}
         labels={{
           send: { title: t("drafts.send"), description: t("drafts.sendConfirm") },
           discard: { title: t("drafts.discard"), description: t("drafts.discardConfirm") },

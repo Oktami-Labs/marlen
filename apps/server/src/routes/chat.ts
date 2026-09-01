@@ -1,17 +1,19 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
-import type { ChatStreamEvent } from "@marlen/shared";
+import type { ChatStreamEvent, Conversation } from "@marlen/shared";
 import { Type } from "@sinclair/typebox";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { parseStoredCards } from "../agent/cards.js";
 import { parseStoredRefs } from "../agent/emailRefs.js";
 import { applyConversationFocus, clearConversationFocus } from "../agent/focus.js";
 import { parseStoredToolCalls } from "../agent/history.js";
+import { liveTurn, startLiveTurn } from "../agent/liveTurns.js";
 import { buildSystemPrompt } from "../agent/prompt.js";
 import { isRateLimitFailure } from "../agent/run.js";
 import { disposeSession } from "../agent/sessionCache.js";
 import {
   beginTurn,
+  isTurnInFlight,
   stopTurn,
   type Turn,
   TurnInFlightError,
@@ -59,9 +61,6 @@ const chatBody = Type.Object({
   ),
 });
 
-// UI state only; beginTurn owns the concurrency guard.
-const runningConversations = new Set<string>();
-
 const messageMatchStmt = lazyStatement(`
   SELECT DISTINCT m.conversation_id AS conversationId
   FROM messages_fts
@@ -102,10 +101,22 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
     const [totalRow] = await (where ? totalQuery.where(where) : totalQuery);
 
     return {
-      items: items.map((item) => ({ ...item, running: runningConversations.has(item.id) })),
+      items: items.map((item) => ({ ...item, running: isTurnInFlight(item.id) })),
       total: Number(totalRow?.count ?? 0),
     };
   });
+
+  app.get(
+    "/api/conversations/:id",
+    { schema: { params: idParams } },
+    async (req): Promise<Conversation> => {
+      const conversation = await requireRow(
+        db.select().from(schema.conversations).where(eq(schema.conversations.id, req.params.id)),
+        "not found",
+      );
+      return { ...conversation, running: isTurnInFlight(conversation.id) };
+    },
+  );
 
   app.patch(
     "/api/conversations/:id",
@@ -154,7 +165,7 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
       "not found",
     );
     // Do not delete while the turn can still append its assistant row.
-    if (runningConversations.has(req.params.id)) {
+    if (isTurnInFlight(req.params.id)) {
       throw conflict("a reply is in progress for this conversation");
     }
     // Remove the cached session before deleting its transcript.
@@ -164,6 +175,10 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
   });
 
   app.get("/api/chat/system-prompt", async () => ({ prompt: await buildSystemPrompt() }));
+
+  app.get("/api/chat/:id/live", { schema: { params: idParams } }, async (req) => ({
+    turn: liveTurn(req.params.id),
+  }));
 
   app.get("/api/conversations/:id/messages", { schema: { params: idParams } }, async (req) => {
     const rows = await db
@@ -177,11 +192,12 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
       )
       .orderBy(schema.messages.createdAt);
 
-    return rows.map(({ cards, toolCalls, refs, compactionCutoff: _, ...row }) => ({
+    return rows.map(({ cards, toolCalls, refs, memoryIds, compactionCutoff: _, ...row }) => ({
       ...row,
       cards: parseStoredCards(cards),
       toolCalls: parseStoredToolCalls(toolCalls),
       refs: parseStoredRefs(refs),
+      memoryIds: memoryIds ? (JSON.parse(memoryIds) as string[]) : undefined,
     }));
   });
 
@@ -206,8 +222,8 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
     const send = (event: ChatStreamEvent) => stream.send(event);
 
     let streamedText = "";
+    const live = startLiveTurn(conversationId);
     try {
-      runningConversations.add(conversationId);
       emitServerEvent("conversations");
 
       send({ type: "conversation", conversationId });
@@ -222,15 +238,26 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
         handlers: {
           onTextDelta: (delta) => {
             streamedText += delta;
+            live.text(delta);
             send({ type: "text_delta", delta });
           },
           onThinking: () => {
             if (!thinkingSent) {
               thinkingSent = true;
+              live.thinking();
               send({ type: "thinking" });
             }
           },
           onToolStart: (toolCallId, toolName, toolLabel, parameters) => {
+            live.toolStart({
+              id: toolCallId,
+              name: toolName,
+              label: toolLabel,
+              isError: false,
+              done: false,
+              parameters,
+              contentOffset: streamedText.length,
+            });
             send({
               type: "tool_start",
               toolCallId,
@@ -241,12 +268,15 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
             });
           },
           onToolUpdate: (toolCallId, toolName, detail) => {
+            live.toolUpdate(toolCallId, detail);
             send({ type: "tool_update", toolCallId, toolName, detail });
           },
           onToolEnd: (toolCallId, toolName, isError, result) => {
+            live.toolEnd(toolCallId, isError, result);
             send({ type: "tool_end", toolCallId, toolName, isError, result });
           },
           onCard: (toolCallId, card) => {
+            live.card(toolCallId, card);
             send({ type: "card", toolCallId, card });
           },
         },
@@ -267,7 +297,7 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
           : { type: "error", message },
       );
     } finally {
-      runningConversations.delete(conversationId);
+      live.finish();
       emitServerEvent("conversations");
       stream.end();
     }

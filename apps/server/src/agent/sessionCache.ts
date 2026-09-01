@@ -1,5 +1,6 @@
 import type { Agent } from "@earendil-works/pi-agent-core";
 import { moduleLogger, type TurnLogger } from "../core/logger.js";
+import { forgetSeenMail } from "../email/read/seenMail.js";
 import { buildAgent } from "./assembly.js";
 import { sessionCapabilities } from "./capabilities.js";
 import { compactedMessages } from "./compaction.js";
@@ -22,6 +23,13 @@ export interface AgentSession {
     signal?: AbortSignal,
     log?: TurnLogger,
   ): Promise<string>;
+}
+
+export interface EphemeralSessionOptions {
+  /** Rebuild the durable transcript before creating this one-run agent. */
+  resumeHistory?: boolean;
+  /** Isolates transient provider evidence from the transcript's stable id. */
+  toolSessionId?: string;
 }
 
 function createAgentSession(
@@ -73,6 +81,7 @@ const sessions = new Map<string, AgentSession>();
 const pendingSessions = new Map<string, Promise<AgentSession>>();
 
 function closeToolset(session: AgentSession, conversationId: string): void {
+  forgetSeenMail(conversationId);
   void session.toolset.close().catch((err: unknown) => {
     log.warn({ err, conversationId }, "closing a retired session's MCP sessions failed");
   });
@@ -160,12 +169,24 @@ export function disposeSession(conversationId: string): void {
   if (session) retireSession(conversationId, session);
 }
 
-export async function createEphemeralSession(conversationId: string): Promise<AgentSession> {
-  const caps = await sessionCapabilities(false);
+export async function createEphemeralSession(
+  conversationId: string,
+  options: EphemeralSessionOptions = {},
+): Promise<AgentSession> {
+  const [caps, history] = await Promise.all([
+    sessionCapabilities(false),
+    options.resumeHistory ? loadHistory(conversationId) : Promise.resolve([]),
+  ]);
   const toolset = await loadEmailTools({ interactive: caps.interactive });
   try {
     return createAgentSession(
-      await buildAgent(toolset, [], caps, conversationId),
+      await buildAgent(
+        toolset,
+        history,
+        caps,
+        options.toolSessionId ?? conversationId,
+        conversationId,
+      ),
       toolset,
       conversationId,
     );

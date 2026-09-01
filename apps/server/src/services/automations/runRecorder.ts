@@ -6,6 +6,7 @@ import { emitRunNotification, emitServerEvent } from "../../core/events.js";
 import { moduleLogger } from "../../core/logger.js";
 import { errorMessage } from "../../core/utils/util.js";
 import { db, schema } from "../../db/index.js";
+import { automationThreadContext } from "./threadState.js";
 import { getTurnRunner } from "./turnRunner.js";
 
 const log = moduleLogger("runRecorder");
@@ -13,7 +14,7 @@ const log = moduleLogger("runRecorder");
 const DEFAULT_TIMEOUT_MS =
   Number.isFinite(env.automationRunTimeoutMs) && env.automationRunTimeoutMs > 0
     ? env.automationRunTimeoutMs
-    : 300_000;
+    : 600_000;
 
 const NOTIFICATION_SUMMARY_CHARS = 140;
 
@@ -54,6 +55,7 @@ export async function executeAutomationRun(
   }
 
   const runId = randomUUID();
+  const conversationId = `automation:${automationId}`;
   const runLog = log.child({ runId, automationId, automation: automation.name });
   const startedAt = Date.now();
   runLog.info("automation run started");
@@ -61,6 +63,7 @@ export async function executeAutomationRun(
   await db.insert(schema.automationRuns).values({
     id: runId,
     automationId,
+    conversationId,
     status: "running",
     result: "",
     trigger: opts.trigger ? JSON.stringify(opts.trigger) : null,
@@ -93,7 +96,9 @@ export async function executeAutomationRun(
     const trigger = opts.trigger;
     if (trigger?.kind === "catchUp") {
       context.push(
-        `This is a catch-up run: the scheduled slot due at ${trigger.dueAt} was missed because the app was not running, and earlier slots since the previous successful run may have been skipped too. Cover the entire period since that run, widening any time window in the instruction accordingly.`,
+        `This is a catch-up run for the scheduled slot due at ${trigger.dueAt}. Execute the ` +
+          `instruction once, as if it ran at that slot, and keep its normal time window; do not ` +
+          `turn one catch-up into an unbounded historical sweep.`,
       );
     } else if (trigger?.kind === "todo") {
       context.push(
@@ -104,14 +109,19 @@ export async function executeAutomationRun(
         `This run was triggered by new inbound mail in: ${trigger.accountNames.join(", ")}. Start from that mailbox's newest messages instead of sweeping every account.`,
       );
     }
+    const durableThreadContext = await automationThreadContext(automationId);
     const todoNotes =
       trigger?.kind === "todo" && trigger.body
         ? `\n\nNotes from the completed todo "${trigger.title}":\n${trigger.body}`
         : "";
-    const instructionMessage = `Scheduled automation "${automation.name}". ${context.join(" ")} Execute this instruction now and report the outcome:\n\n${automation.instruction}${todoNotes}`;
+    const instructionMessage =
+      `Scheduled automation "${automation.name}". ${context.join(" ")}` +
+      `${durableThreadContext} Execute this instruction now and report the outcome:\n\n` +
+      `${automation.instruction}${todoNotes}`;
 
     const { text, cardsJson } = await getTurnRunner()({
       runId,
+      conversationId,
       prompt: instructionMessage,
       title: `Run: ${automation.name}`,
       signal,
