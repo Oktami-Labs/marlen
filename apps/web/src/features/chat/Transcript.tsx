@@ -1,4 +1,4 @@
-import type { AccountColor, ChatToolCall } from "@marlen/shared";
+import type { AccountColor, ChatAttachmentUpload, ChatToolCall } from "@marlen/shared";
 import { Check, Copy, Database, Pencil, Play, RotateCcw, X } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -10,6 +10,7 @@ import { Highlight } from "@/components/ui/highlight";
 import { HoverActions } from "@/components/ui/hover-actions";
 import { SearchField } from "@/components/ui/search-field";
 import { AgentAvatar } from "@/features/chat/AgentAvatar";
+import { AttachmentChips } from "@/features/chat/composer/AttachmentChips";
 import { RefChips } from "@/features/chat/composer/RefChips";
 import { RateLimitNotice } from "@/features/chat/RateLimitNotice";
 import { RegenerateButton } from "@/features/chat/RegenerateButton";
@@ -24,6 +25,7 @@ import { cn, rowTransition, withViewTransition } from "@/lib/utils";
 export interface QueuedMessage {
   id: string;
   text: string;
+  attachments?: ChatAttachmentUpload[];
 }
 
 /** What a conversation search is looking for and which hit it sits on. */
@@ -151,6 +153,9 @@ export function Transcript({
             {m.role === "user" && m.refs && m.refs.length > 0 && (
               <RefChips refs={m.refs} colors={accountColors} />
             )}
+            {m.role === "user" && m.attachments && m.attachments.length > 0 && (
+              <AttachmentChips attachments={m.attachments} />
+            )}
             {(m.content || m.streaming || m.toolCalls.length > 0 || m.error || m.systemPrompt) && (
               <div
                 className={cn(
@@ -249,7 +254,7 @@ export function Transcript({
 /**
  * One message waiting its turn. It has not been sent yet, so it stays the
  * user's to change: the bubble morphs into its own editor in place, and
- * saving an empty one is the same as taking it out of the queue.
+ * saving a text-only message empty is the same as taking it out of the queue.
  */
 function QueuedRow({
   item,
@@ -270,13 +275,14 @@ function QueuedRow({
   const save = () => {
     const text = (draft ?? "").trim();
     morph(null);
-    if (!text) onCancel();
+    if (!text && !item.attachments?.length) onCancel();
     else if (text !== item.text) onEdit(text);
   };
 
   if (draft !== null) {
     return (
       <div className="flex flex-col items-end gap-2" style={rowTransition(`queued-${item.id}`)}>
+        {item.attachments && <AttachmentChips attachments={item.attachments} />}
         <textarea
           ref={editRef}
           value={draft}
@@ -303,34 +309,39 @@ function QueuedRow({
 
   return (
     <div
-      className="group animate-in-up flex items-center justify-end gap-1"
+      className="group animate-in-up flex flex-col items-end gap-1"
       style={rowTransition(`queued-${item.id}`)}
     >
-      <HoverActions>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          onClick={() => morph(item.text)}
-          aria-label={t("chat.queue.edit")}
-          title={t("chat.queue.edit")}
-        >
-          <Pencil />
-        </Button>
-        <Button
-          type="button"
-          variant="ghost"
-          size="icon-xs"
-          onClick={onCancel}
-          aria-label={t("chat.queue.cancel")}
-          title={t("chat.queue.cancel")}
-        >
-          <X />
-        </Button>
-      </HoverActions>
-      {/* Recessed, not the accent bubble: this message has not been sent yet. */}
-      <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-surface-2 px-4 py-2.5 text-sm leading-relaxed text-muted-foreground">
-        {item.text}
+      {item.attachments && <AttachmentChips attachments={item.attachments} />}
+      <div className="flex items-center justify-end gap-1">
+        <HoverActions>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            onClick={() => morph(item.text)}
+            aria-label={t("chat.queue.edit")}
+            title={t("chat.queue.edit")}
+          >
+            <Pencil />
+          </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-xs"
+            onClick={onCancel}
+            aria-label={t("chat.queue.cancel")}
+            title={t("chat.queue.cancel")}
+          >
+            <X />
+          </Button>
+        </HoverActions>
+        {/* Recessed, not the accent bubble: this message has not been sent yet. */}
+        {item.text && (
+          <div className="max-w-[85%] whitespace-pre-wrap rounded-2xl rounded-br-md bg-surface-2 px-4 py-2.5 text-sm leading-relaxed text-muted-foreground">
+            {item.text}
+          </div>
+        )}
       </div>
     </div>
   );

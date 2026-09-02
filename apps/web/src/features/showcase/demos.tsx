@@ -32,6 +32,7 @@ import { Input } from "@/components/ui/input";
 import { Kbd } from "@/components/ui/kbd";
 import { LinkButton } from "@/components/ui/link-button";
 import { ListRow } from "@/components/ui/list-row";
+import { ResizeHandle } from "@/components/ui/resize-handle";
 import { SearchField } from "@/components/ui/search-field";
 import { Section, SectionHeader, SectionTitle } from "@/components/ui/section-header";
 import { toast } from "@/lib/toast";
@@ -695,12 +696,12 @@ const RESIZE_MIN = 180;
 const RESIZE_MAX = 380;
 
 /**
- * useResizableWidth on a demo rail, same grip markup as the app's chat
- * splitter. Overdragging past the minimum collapses it, like the real rails.
+ * useResizableWidth on a demo rail, with the same grip as the app's docked
+ * panels. Overdragging past the minimum collapses it, like the chat panel.
  */
 export function ResizableDemo() {
   const [collapsed, setCollapsed] = React.useState(false);
-  const { ref, width, onPointerDown } = useResizableWidth({
+  const { ref, width, onPointerDown, onKeyDown } = useResizableWidth({
     storageKey: "marlen-showcase-resize",
     cssVar: "--rail-width",
     defaultWidth: 260,
@@ -718,20 +719,15 @@ export function ResizableDemo() {
         Drag the grip — the width persists across reloads. Pull well past the minimum to collapse
         the rail, the same overdrag gesture the chat column uses.
       </p>
-      {/* biome-ignore lint/a11y/useSemanticElements: interactive splitter; <hr> cannot receive focus or contain the grip */}
-      <div
-        role="separator"
-        aria-orientation="vertical"
-        aria-label="Resize demo rail"
-        aria-valuenow={width}
-        aria-valuemin={RESIZE_MIN}
-        aria-valuemax={RESIZE_MAX}
-        tabIndex={0}
+      <ResizeHandle
+        label="Resize demo rail"
+        value={width}
+        min={RESIZE_MIN}
+        max={RESIZE_MAX}
         onPointerDown={onPointerDown}
-        className="group flex w-2 shrink-0 cursor-col-resize touch-none items-center justify-center"
-      >
-        <div className="h-8 w-1 rounded-full bg-foreground/10 transition-colors group-hover:bg-foreground/30 group-active:bg-accent/60" />
-      </div>
+        onKeyDown={onKeyDown}
+        className="flex"
+      />
       <div
         ref={ref}
         style={{ width: "var(--rail-width)" }}

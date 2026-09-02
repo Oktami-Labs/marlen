@@ -342,9 +342,9 @@ const pageUsed: AgentTool = tool({
   name: "page_used",
   label: "Note wiki pages used",
   description:
-    `Note which of the wiki summaries listed in your system prompt shaped your reply, draft ` +
-    `or decision this turn, by bracketed id. Pages you page_read are counted already. Skip it ` +
-    `when no listed summary mattered. It has no user-visible effect beyond the "used" marks ` +
+    `Note which of the wiki summaries in your system prompt or attached to this turn shaped ` +
+    `your reply, draft or decision, by bracketed id. Pages you page_read are counted already. ` +
+    `Skip it when no summary mattered. It has no user-visible effect beyond the "used" marks ` +
     `on the Knowledge page and the reply's memory attribution.`,
   params: {
     ids: Type.Array(Type.String(), {
@@ -575,29 +575,22 @@ const TURN_PAGES_LIMIT = 5;
 /** Below this a match is one common word; listing it would only add noise to the turn. */
 const TURN_PAGES_MIN_SCORE = 1;
 
-/**
- * The wiki pages a turn's message points at, appended to the turn prompt so
- * a page represented only by an index line (or one that did not fit) still
- * reaches the agent when its subject comes up. Skills are included:
- * a message that matches one is the cue to follow it. "" when nothing
- * matches well enough to be worth the tokens.
- */
-const relevantByConversation = new Map<string, string[]>();
-
-export function consumeRelevantPageIds(conversationId: string): string[] {
-  const ids = relevantByConversation.get(conversationId) ?? [];
-  relevantByConversation.delete(conversationId);
-  return ids;
-}
-
 export interface RelevantPageScope {
   accountIds?: readonly string[];
   contactIds?: readonly string[];
 }
 
+/**
+ * The wiki pages whose subject a turn's message names, appended to the turn
+ * prompt so a page represented only by an index line (or one that did not
+ * fit) still reaches the agent when its subject comes up. Skills are
+ * included: a message that matches one is the cue to follow it. Only id and
+ * summary are matched: a word a body happens to share with the message is
+ * not its subject. Attaching is not use; attribution comes from page_read
+ * and page_used. "" when nothing matches well enough to be worth the tokens.
+ */
 export async function relevantPagesNote(
   text: string,
-  conversationId?: string,
   scope: RelevantPageScope = {},
 ): Promise<string> {
   const accountIds = new Set(scope.accountIds ?? []);
@@ -607,16 +600,13 @@ export async function relevantPagesNote(
     if (page.contactId !== null && !contactIds.has(page.contactId)) return false;
     return true;
   });
-  const hits = searchPages(pages, text, TURN_PAGES_LIMIT);
+  const hits = searchPages(pages, text, TURN_PAGES_LIMIT, { subjectOnly: true });
   const top = hits[0]?.score ?? 0;
   const strong = hits.filter((hit) => hit.score >= Math.max(top / 2, TURN_PAGES_MIN_SCORE));
   if (strong.length === 0) return "";
-  const ids = strong.map((hit) => hit.page.id);
-  await recordPageUse(ids);
-  if (conversationId) relevantByConversation.set(conversationId, ids);
   const names = await fetchAccountNameMap();
   return (
-    `\n\n[Relevant long-term memory (full bodies remain behind page_read):\n` +
+    `\n\n[Relevant long-term memory (full bodies remain behind page_read; note what you rely on with page_used):\n` +
     `${strong.map((hit) => pageLine(hit.page, names)).join("\n")}]`
   );
 }

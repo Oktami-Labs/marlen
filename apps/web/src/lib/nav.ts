@@ -18,18 +18,25 @@ interface NavItem {
 }
 
 /**
- * Single source of truth for the primary nav. The Sidebar, the
- * command palette's shortcut list, and App.tsx's route-name validation all
- * read from this one array instead of keeping their own copies in sync.
+ * Primary destinations stay in the main rail. Settings belongs to the local
+ * profile menu, while the complete list still drives route validation and the
+ * command palette.
  */
-export const NAV_ITEMS: NavItem[] = [
+export const PRIMARY_NAV_ITEMS: NavItem[] = [
   { id: "home", path: "/", icon: Inbox },
   { id: "chat", path: "/chat", icon: MessagesSquare },
   { id: "leads", path: "/leads", icon: Users },
   { id: "automations", path: "/automations", icon: CalendarClock },
   { id: "knowledge", path: "/knowledge", icon: BookOpen },
-  { id: "settings", path: "/settings", icon: Settings2 },
 ];
+
+export const SETTINGS_NAV_ITEM: NavItem = {
+  id: "settings",
+  path: "/settings",
+  icon: Settings2,
+};
+
+export const NAV_ITEMS: NavItem[] = [...PRIMARY_NAV_ITEMS, SETTINGS_NAV_ITEM];
 
 export const NAV_VIEWS: View[] = NAV_ITEMS.map((item) => item.id);
 

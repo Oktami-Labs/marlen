@@ -3,7 +3,9 @@ import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, Message, Model } from "@earendil-works/pi-ai";
 import type { ChatToolCall } from "@marlen/shared";
 import { eq } from "drizzle-orm";
+import { attachmentFromRow, listConversationAttachments } from "../db/chatAttachmentStore.js";
 import { db, schema } from "../db/index.js";
+import { attachmentModelInput } from "../services/chatAttachments.js";
 import { decoratePrompt, parseStoredRefs } from "./emailRefs.js";
 import { resolveActiveModel } from "./llm/registry.js";
 
@@ -127,12 +129,23 @@ function expandAssistantRow(row: MessageRow, model: Model<Api>, timestamp: numbe
  * (compaction_cutoff), which stays in full.
  */
 export async function loadHistory(conversationId: string): Promise<Message[]> {
-  const rows = await db
-    .select()
-    .from(schema.messages)
-    .where(eq(schema.messages.conversationId, conversationId))
-    .orderBy(schema.messages.createdAt);
+  const [rows, attachmentRows] = await Promise.all([
+    db
+      .select()
+      .from(schema.messages)
+      .where(eq(schema.messages.conversationId, conversationId))
+      .orderBy(schema.messages.createdAt),
+    listConversationAttachments(conversationId),
+  ]);
   if (rows.length === 0) return [];
+
+  const attachmentsByMessage = new Map<string, ReturnType<typeof attachmentFromRow>[]>();
+  for (const row of attachmentRows) {
+    const attachment = attachmentFromRow(row);
+    const existing = attachmentsByMessage.get(row.messageId);
+    if (existing) existing.push(attachment);
+    else attachmentsByMessage.set(row.messageId, [attachment]);
+  }
 
   const model = await resolveActiveModel();
 
@@ -169,10 +182,11 @@ export async function loadHistory(conversationId: string): Promise<Message[]> {
     }
     const content = row.content.trim();
     if (row.role === "user") {
-      if (!content) continue;
-      // The persisted row keeps `content` raw, but the model saw it with its
-      // attached-email notes appended (turnRecorder.ts), so a rebuilt session
-      // sees the same thing. The turn-time and focus notes are not
+      const input = attachmentModelInput(content, attachmentsByMessage.get(row.id) ?? []);
+      if (!input.prompt) continue;
+      // The message row keeps `content` raw; refs and files stay in their own
+      // durable records. Rebuilding combines them into the same model input as
+      // the live turn. The turn-time and focus notes are not
       // reconstructed: they described the moment the turn ran, and the next
       // live turn carries fresh ones.
       expanded.push({
@@ -180,7 +194,13 @@ export async function loadHistory(conversationId: string): Promise<Message[]> {
         messages: [
           {
             role: "user",
-            content: decoratePrompt(content, parseStoredRefs(row.refs)),
+            content:
+              input.images.length > 0
+                ? [
+                    { type: "text", text: decoratePrompt(input.prompt, parseStoredRefs(row.refs)) },
+                    ...input.images,
+                  ]
+                : decoratePrompt(input.prompt, parseStoredRefs(row.refs)),
             timestamp: ms,
           },
         ],

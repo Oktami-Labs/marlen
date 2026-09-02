@@ -1,5 +1,6 @@
 import type {
   AgentCard,
+  ChatAttachment,
   ChatMessage,
   ChatStreamEvent,
   ChatToolCall,
@@ -21,6 +22,7 @@ export interface DisplayMessage {
   errorKind?: "rate_limit";
   systemPrompt?: string;
   refs?: EmailRef[];
+  attachments?: ChatAttachment[];
   memoryIds?: string[];
 }
 
@@ -89,6 +91,7 @@ export function toDisplayMessage(m: ChatMessage): DisplayMessage {
     streaming: false,
     error: m.error,
     refs: m.refs,
+    attachments: m.attachments,
     memoryIds: m.memoryIds,
   };
 }

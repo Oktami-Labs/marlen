@@ -51,9 +51,12 @@
   },
   "sidebar": {
     "closeMenu": "Close menu",
-    "expand": "Expand sidebar",
-    "collapse": "Collapse sidebar",
+    "primaryNavigation": "Primary navigation",
+    "resize": "Resize navigation sidebar",
     "finishSetup": "Finish setup",
+    "localProfile": "Local profile",
+    "openProfileMenu": "Open profile menu",
+    "profileMenu": "Profile menu",
     "lightMode": "Light mode",
     "darkMode": "Dark mode"
   },
@@ -90,7 +93,7 @@
     "noAutomationRuns": "No automation runs yet.",
     "untitled": "(untitled)",
     "thinking": "Thinking...",
-    "memoryUsed": "Memory in context",
+    "memoryUsed": "Memory used",
     "working": "Agent is working",
     "emptyTitle": "Ask your inbox anything",
     "emptyBody": "The agent can search, label, and draft across your connected accounts.",
@@ -148,6 +151,16 @@
       "noSubject": "(no subject)",
       "remove": "Remove {{label}}"
     },
+    "attachments": {
+      "add": "Attach images or files",
+      "remove": "Remove {{name}}",
+      "tooMany": "A message can carry up to {{count}} attachments.",
+      "unsupported": "\"{{name}}\" isn't supported. Use PNG, JPEG, GIF, WebP, PDF, Word, Markdown, text, CSV, or HTML.",
+      "tooLarge": "\"{{name}}\" is larger than 10 MB.",
+      "totalTooLarge": "Attachments can total up to 20 MB per message.",
+      "readFailed": "\"{{name}}\" could not be read.",
+      "retryPrompt": "Try the attached files again."
+    },
     "voice": {
       "start": "Dictate a message",
       "stop": "Transcribe the recording",
@@ -190,6 +203,9 @@
         "pointCount_one": "{{count}} point",
         "pointCount_other": "{{count}} points",
         "alt": "Chart: {{title}}"
+      },
+      "composed": {
+        "badge": "Overview"
       },
       "choices": {
         "title": "Choose one"
@@ -263,6 +279,15 @@
         "badge": "Details",
         "submit": "Send",
         "sent": "Sent"
+      },
+      "connection": {
+        "badge": "Connection",
+        "title": "Connect {{service}}",
+        "titleAny": "Connect a service",
+        "continueMessage": "{{service}} is connected. Continue with my request."
+      },
+      "appSetting": {
+        "badge": "App setting"
       }
     },
     "showcase": {
@@ -397,7 +422,7 @@
     "messagingHeading": "Messaging",
     "anyAppHint": "These are just a few, search above to connect any of 2,000+ apps, from other mail services to your calendar, notes and chat.",
     "setupTitle": "One-time setup: connect Marlene to Pipedream",
-    "setupIntro": "Marlene uses <pd>Pipedream</pd>, a free service, to link your email accounts safely, as many as you like, also several from the same provider. It needs three values from your own Pipedream workspace, copied once:",
+    "setupIntro": "Marlene uses <pd>Pipedream</pd>, a free service, to link your accounts and apps safely, including several accounts from the same provider. It needs three values from your own Pipedream workspace, copied once:",
     "setupStep1": "Create a free Pipedream account.",
     "setupStep2": "Under Settings → API, create an OAuth client and copy its Client ID and Client Secret below.",
     "setupStep3": "Create a project (any name) and paste its URL, or the proj_… id, below.",
@@ -492,6 +517,12 @@
     },
     "noAccounts": "No email accounts connected yet. Use the buttons above, you can connect several accounts per provider.",
     "finishConnecting": "Complete the connection in the browser tab that just opened, the account appears here automatically once it's linked.",
+    "connectTimedOut": "The connection window expired. Try connecting again.",
+    "pipedreamSetupOption": "Set up Pipedream",
+    "pipedreamSetupDetail": "One-time setup for email and 2,000+ other apps.",
+    "connected": "{{service}} is connected.",
+    "connectedHint": "The assistant can use it from your next message.",
+    "continue": "Continue",
     "unhealthy": "Unhealthy",
     "disconnect": "Disconnect",
     "disconnectConfirm": "Disconnect this account?",
@@ -894,6 +925,15 @@
       "dark": "Dark",
       "system": "System"
     },
+    "accentColor": {
+      "label": "Accent color",
+      "description": "Choose the accent color used throughout Marlene.",
+      "violet": "Violet",
+      "blue": "Blue",
+      "teal": "Teal",
+      "rose": "Rose",
+      "amber": "Amber"
+    },
     "timezone": {
       "label": "Timezone",
       "description": "Automations run and times are shown in this timezone",
@@ -901,7 +941,8 @@
     },
     "launchAtLogin": {
       "label": "Start with the computer",
-      "description": "Marlene starts in the background when you log in, so scheduled automations run without you opening it first."
+      "description": "Marlene starts in the background when you log in, so scheduled automations run without you opening it first.",
+      "desktopOnly": "Available in the desktop app"
     },
     "export": {
       "label": "Full export",

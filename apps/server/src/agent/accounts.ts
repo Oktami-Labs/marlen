@@ -1,4 +1,5 @@
 import type { ConnectedAccount } from "@marlen/shared";
+import { AppError } from "../core/errors.js";
 import { getAccountPermissions } from "../db/settings.js";
 import { listAccounts } from "../integrations/pipedream/connect.js";
 import { sessionGrants } from "./toolAccess.js";
@@ -55,27 +56,34 @@ export async function fetchAccountNameMap(): Promise<Map<string, string>> {
   }
 }
 
+function noEmailAccountsContext(interactive: boolean): string {
+  const nextStep = interactive
+    ? `When the user asks for anything that needs mail access, call present_connection so ` +
+      `they can connect one without leaving the conversation.`
+    : `This unattended run cannot ask the user to connect one.`;
+  return `\n\nNo email account is connected yet, so there are no email tools. ${nextStep}`;
+}
+
 /**
  * The connected-account list the system prompt ends with, each account's
  * grants as they hold in THIS session (sessionGrants), so the list never
  * promises a tool the session doesn't have.
  *
- * Fail-open: a failed account listing (a Pipedream outage, not "not set up")
- * returns "".
+ * A known "not set up" response still explains the inline connection path;
+ * other listing failures fail open to "" so an outage does not break chat.
  */
 export async function buildAccountsContext(interactive: boolean): Promise<string> {
   let accounts: ConnectedAccount[];
   try {
     accounts = await listAccounts();
-  } catch {
+  } catch (error) {
+    if (error instanceof AppError && error.code === "pipedream_not_configured") {
+      return noEmailAccountsContext(interactive);
+    }
     return "";
   }
   if (accounts.length === 0) {
-    return (
-      `\n\nNo email account is connected yet, so there are no email tools. When the user asks ` +
-      `for anything that needs mail access, tell them to finish the email setup under ` +
-      `Settings → Connect email.`
-    );
+    return noEmailAccountsContext(interactive);
   }
   const permissions = new Map(
     (await getAccountPermissions()).map((p) => [p.accountId, sessionGrants(p, interactive)]),

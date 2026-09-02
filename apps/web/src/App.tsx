@@ -23,6 +23,7 @@ import { CursorTooltip } from "@/components/ui/cursor-tooltip";
 import { Dialog } from "@/components/ui/dialog";
 import { LoadingRow, LoadingSweep } from "@/components/ui/feedback";
 import { Kbd } from "@/components/ui/kbd";
+import { ResizeHandle } from "@/components/ui/resize-handle";
 import { SearchField } from "@/components/ui/search-field";
 import { Toaster } from "@/components/ui/toaster";
 import { AttachmentViewer } from "@/features/chat/AttachmentViewer";
@@ -51,6 +52,8 @@ import { cn, MOD_LABEL, withViewTransition } from "@/lib/utils";
 
 const SETUP_DISMISSED_KEY = "marlen-setup-dismissed";
 
+const SIDEBAR_WIDTH_MIN = 200;
+const SIDEBAR_WIDTH_MAX = 384;
 const CHAT_WIDTH_MIN = 320;
 const CHAT_WIDTH_MAX = 960;
 
@@ -155,15 +158,15 @@ export default function App() {
     localStorage.getItem(SETUP_DISMISSED_KEY) ? "closed" : "pending",
   );
   const [mobileOpen, setMobileOpen] = React.useState(false);
-  const [sidebarCollapsed, setSidebarCollapsed] = React.useState(
-    () =>
-      typeof window !== "undefined" && localStorage.getItem("marlen-sidebar-collapsed") === "true",
-  );
   const [chatOpen, setChatOpen] = React.useState(false);
   const [agentCollapsed, setAgentCollapsed] = React.useState(
     () =>
       typeof window !== "undefined" &&
       localStorage.getItem("marlen-agent-sidebar-collapsed") === "true",
+  );
+  const [navCollapsed, setNavCollapsed] = React.useState(
+    () =>
+      typeof window !== "undefined" && localStorage.getItem("marlen-sidebar-collapsed") === "true",
   );
   const [shortcutsOpen, setShortcutsOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
@@ -191,20 +194,35 @@ export default function App() {
   const toggleTheme = React.useCallback(() => {
     setThemePref(theme === "dark" ? "light" : "dark");
   }, [theme, setThemePref]);
-  const settingsRoute = currentPath === "settings";
-  const dockedChatCollapsed = agentCollapsed || (settingsRoute && !chatOpen);
   const toggleDockedChat = React.useCallback(() => {
-    if (settingsRoute) {
-      if (dockedChatCollapsed) {
-        setAgentCollapsed(false);
-        setChatOpen(true);
-      } else {
-        setChatOpen(false);
-      }
-      return;
-    }
     setAgentCollapsed((collapsed) => !collapsed);
-  }, [dockedChatCollapsed, settingsRoute]);
+  }, []);
+  const {
+    ref: sidebarWidthRef,
+    width: sidebarWidth,
+    dragging: sidebarResizing,
+    onPointerDown: onSidebarResizeStart,
+    onKeyDown: onSidebarResizeKeyDown,
+  } = useResizableWidth({
+    storageKey: "marlen-sidebar-width",
+    cssVar: "--sidebar-width",
+    defaultWidth: 256,
+    min: SIDEBAR_WIDTH_MIN,
+    max: SIDEBAR_WIDTH_MAX,
+    edge: "left",
+    onOverdrag: () => setNavCollapsed(true),
+  });
+  // Grabbing the collapsed rail's edge reopens it at its last width and the
+  // drag carries on from there; ArrowRight/End on the grip reopen it too.
+  const onCollapsedNavPointerDown = (event: React.PointerEvent) => {
+    setNavCollapsed(false);
+    onSidebarResizeStart(event);
+  };
+  const onCollapsedNavKeyDown = (event: React.KeyboardEvent) => {
+    if (event.key !== "ArrowRight" && event.key !== "End") return;
+    event.preventDefault();
+    setNavCollapsed(false);
+  };
   const {
     ref: chatWidthRef,
     width: chatWidth,
@@ -280,22 +298,21 @@ export default function App() {
   }, [historyCollapsed]);
 
   React.useEffect(() => {
-    localStorage.setItem("marlen-sidebar-collapsed", String(sidebarCollapsed));
-  }, [sidebarCollapsed]);
-
-  React.useEffect(() => {
     localStorage.setItem("marlen-agent-sidebar-collapsed", String(agentCollapsed));
   }, [agentCollapsed]);
+
+  React.useEffect(() => {
+    localStorage.setItem("marlen-sidebar-collapsed", String(navCollapsed));
+  }, [navCollapsed]);
 
   React.useEffect(() => {
     const onKeyDown = (event: KeyboardEvent) => {
       const key = event.key.toLowerCase();
       const mod = event.metaKey || event.ctrlKey;
 
-      if (mod && key === "b") {
+      if (mod && event.shiftKey && key === "b") {
         event.preventDefault();
-        if (event.shiftKey) toggleDockedChat();
-        else setSidebarCollapsed((value) => !value);
+        toggleDockedChat();
         return;
       }
       if (mod && event.shiftKey && event.code === "Digit7") {
@@ -365,19 +382,27 @@ export default function App() {
       {mobileOpen && <Backdrop className="md:hidden" onClick={() => setMobileOpen(false)} />}
 
       <div
+        ref={sidebarWidthRef}
         className={cn(
-          // Keep collapsed-nav tooltips above the isolated main canvas.
-          "fixed inset-y-0 left-0 z-50 transition-transform duration-200 ease-out md:static md:z-10 md:translate-x-0",
+          "fixed inset-y-0 left-0 z-50 duration-200 ease-out md:static md:z-10 md:shrink-0 md:translate-x-0",
+          // Width animation would make the rail trail the pointer during a drag.
+          sidebarResizing ? "transition-none" : "transition-[transform,width]",
+          navCollapsed ? "md:w-16" : "md:w-[var(--sidebar-width)]",
           mobileOpen ? "translate-x-0" : "-translate-x-full",
         )}
       >
-        <Sidebar
-          status={status}
-          onClose={() => setMobileOpen(false)}
-          isCollapsed={sidebarCollapsed}
-          onCollapsedChange={setSidebarCollapsed}
-        />
+        <Sidebar status={status} collapsed={navCollapsed} onClose={() => setMobileOpen(false)} />
       </div>
+
+      <ResizeHandle
+        label={t("sidebar.resize")}
+        value={sidebarWidth}
+        min={SIDEBAR_WIDTH_MIN}
+        max={SIDEBAR_WIDTH_MAX}
+        onPointerDown={navCollapsed ? onCollapsedNavPointerDown : onSidebarResizeStart}
+        onKeyDown={navCollapsed ? onCollapsedNavKeyDown : onSidebarResizeKeyDown}
+        className="z-40 hidden md:flex"
+      />
 
       <main
         id="main-content"
@@ -428,7 +453,7 @@ export default function App() {
             >
               {theme === "dark" ? <Sun /> : <Moon />}
             </HeaderIconButton>
-            {!onChatRoute && dockedChatCollapsed && (
+            {!onChatRoute && agentCollapsed && (
               <HeaderIconButton
                 label={t("app.expandChat")}
                 onClick={toggleDockedChat}
@@ -507,24 +532,15 @@ export default function App() {
         <Backdrop className="lg:hidden" onClick={() => setHistoryOpen(false)} />
       )}
 
-      {/* biome-ignore lint/a11y/useSemanticElements: interactive splitter; <hr> cannot receive focus or contain the grip */}
-      <div
+      <ResizeHandle
+        label={t("chat.resize")}
+        value={chatWidth}
+        min={CHAT_WIDTH_MIN}
+        max={CHAT_WIDTH_MAX}
         onPointerDown={onChatResizeStart}
         onKeyDown={onChatResizeKeyDown}
-        role="separator"
-        aria-orientation="vertical"
-        aria-label={t("chat.resize")}
-        aria-valuenow={chatWidth}
-        aria-valuemin={CHAT_WIDTH_MIN}
-        aria-valuemax={CHAT_WIDTH_MAX}
-        tabIndex={0}
-        className={cn(
-          "group z-40 hidden w-2 shrink-0 cursor-col-resize touch-none items-center justify-center lg:flex",
-          (onChatRoute || dockedChatCollapsed) && "lg:hidden",
-        )}
-      >
-        <div className="h-8 w-1 rounded-full bg-foreground/10 transition-colors group-hover:bg-foreground/30 group-active:bg-accent/60" />
-      </div>
+        className={cn("z-40 hidden lg:flex", (onChatRoute || agentCollapsed) && "lg:hidden")}
+      />
 
       {/* Keep one chat instance mounted so navigation cannot drop an active stream.
           It docks beside the canvas only from `lg`: rail plus a 320px-minimum panel
@@ -540,7 +556,7 @@ export default function App() {
                 chatResizing
                   ? "transition-none"
                   : "transition-[transform,width] duration-200 ease-out",
-                dockedChatCollapsed ? "lg:w-0" : "lg:w-[var(--chat-width)]",
+                agentCollapsed ? "lg:w-0" : "lg:w-[var(--chat-width)]",
                 chatOpen ? "z-50 translate-x-0" : "z-40 translate-x-full lg:translate-x-0",
               ),
         )}
@@ -753,7 +769,6 @@ export default function App() {
           {[
             ["Show keyboard shortcuts", MOD_LABEL, "Shift", "7"],
             ["Swap light / dark theme", MOD_LABEL, "Shift", "L"],
-            ["Toggle navigation sidebar", MOD_LABEL, "B"],
             ["Toggle agent chat sidebar", MOD_LABEL, "Shift", "B"],
             ["Open search", MOD_LABEL, "K"],
           ].map(([label, ...keys]) => (

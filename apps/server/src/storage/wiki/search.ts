@@ -57,18 +57,41 @@ export interface PageHit {
   score: number;
 }
 
+/** Words this short (articles, pronouns, "wird") say nothing about a page's subject. */
+const SUBJECT_TERM_MIN_LENGTH = 4;
+
+function subjectTerms(terms: Set<string>): Set<string> {
+  return new Set([...terms].filter((term) => term.length >= SUBJECT_TERM_MIN_LENGTH));
+}
+
+export interface SearchOptions {
+  /**
+   * Match subject words against id and summary only: what the query is
+   * about, not every word a body happens to mention.
+   */
+  subjectOnly?: boolean;
+}
+
 /** A page whose contact scope appears verbatim in the query is what the query is about. */
 const CONTACT_MATCH_SCORE = 6;
 const SUMMARY_WEIGHT = 2;
 
-export function searchPages(pages: WikiPage[], query: string, limit: number): PageHit[] {
-  const terms = [...new Set(tokenize(query))];
+export function searchPages(
+  pages: WikiPage[],
+  query: string,
+  limit: number,
+  { subjectOnly = false }: SearchOptions = {},
+): PageHit[] {
+  const tokens = new Set(tokenize(query));
+  const terms = [...(subjectOnly ? subjectTerms(tokens) : tokens)];
   const lowered = query.toLowerCase();
   if (terms.length === 0 && !lowered.includes("@")) return [];
   const docs = pages.map((page) => ({ page, terms: termsOf(page) }));
+  const inBody = (pageTerms: PageTerms, term: string): boolean =>
+    !subjectOnly && pageTerms.body.has(term);
   const idf = new Map(
     terms.map((term) => {
-      const df = docs.filter((d) => d.terms.summary.has(term) || d.terms.body.has(term)).length;
+      const df = docs.filter((d) => d.terms.summary.has(term) || inBody(d.terms, term)).length;
       return [term, df === 0 ? 0 : Math.log((docs.length + 1) / df)];
     }),
   );
@@ -79,7 +102,7 @@ export function searchPages(pages: WikiPage[], query: string, limit: number): Pa
       const weight = idf.get(term) ?? 0;
       if (weight === 0) continue;
       if (pageTerms.summary.has(term)) score += weight * SUMMARY_WEIGHT;
-      else if (pageTerms.body.has(term)) score += weight;
+      else if (inBody(pageTerms, term)) score += weight;
     }
     if (page.contactId !== null && lowered.includes(page.contactId)) score += CONTACT_MATCH_SCORE;
     if (score > 0) hits.push({ page, score });
@@ -89,13 +112,7 @@ export function searchPages(pages: WikiPage[], query: string, limit: number): Pa
     .slice(0, limit);
 }
 
-/** Words this short (articles, pronouns, "wird") say nothing about a page's subject. */
-const SUBJECT_TERM_MIN_LENGTH = 4;
 const OVERLAP_THRESHOLD = 0.6;
-
-function subjectTerms(terms: Set<string>): Set<string> {
-  return new Set([...terms].filter((term) => term.length >= SUBJECT_TERM_MIN_LENGTH));
-}
 
 /**
  * The existing page whose summary shares most of its subject words with a

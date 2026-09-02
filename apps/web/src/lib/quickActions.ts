@@ -1,3 +1,4 @@
+import type { QuickActionPreference } from "@marlen/shared";
 import * as React from "react";
 import { revealChat, sendChatCommand } from "@/features/chat/controller";
 
@@ -6,13 +7,20 @@ import { revealChat, sendChatCommand } from "@/features/chat/controller";
  * buttons) do with their composed message: send it right away, or prefill
  * the composer so the user can edit it first.
  */
-export type QuickActionMode = "send" | "prefill";
+export type QuickActionMode = QuickActionPreference;
 
 const STORAGE_KEY = "marlen-quick-action-mode";
+const listeners = new Set<(mode: QuickActionMode) => void>();
 
 function getQuickActionMode(): QuickActionMode {
   if (typeof window === "undefined") return "send";
   return localStorage.getItem(STORAGE_KEY) === "prefill" ? "prefill" : "send";
+}
+
+/** Apply a preference from either a mounted control or a live agent action. */
+export function applyQuickActionMode(mode: QuickActionMode): void {
+  localStorage.setItem(STORAGE_KEY, mode);
+  for (const listener of listeners) listener(mode);
 }
 
 /** Hand a composed message to the chat panel, honoring the Settings preference. */
@@ -25,7 +33,17 @@ export function useQuickActionMode() {
   const [mode, setMode] = React.useState<QuickActionMode>(getQuickActionMode);
 
   React.useEffect(() => {
-    localStorage.setItem(STORAGE_KEY, mode);
+    applyQuickActionMode(mode);
+  }, [mode]);
+
+  React.useEffect(() => {
+    const listener = (next: QuickActionMode) => {
+      if (next !== mode) setMode(next);
+    };
+    listeners.add(listener);
+    return () => {
+      listeners.delete(listener);
+    };
   }, [mode]);
 
   return [mode, setMode] as const;

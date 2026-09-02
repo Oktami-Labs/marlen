@@ -224,6 +224,49 @@ test("a message the server never received returns to the composer", async ({ pag
   await expect(page.getByText(t("chat.emptyTitle"))).toBeVisible();
 });
 
+test("a file pasted into the composer is attached to the next message", async ({ page }) => {
+  const frame = (event: unknown) => `data: ${JSON.stringify(event)}\n\n`;
+  let sent: unknown;
+  await page.route("**/api/chat", async (route) => {
+    sent = JSON.parse(route.request().postData() ?? "{}");
+    await route.fulfill({
+      status: 200,
+      contentType: "text/event-stream",
+      body:
+        frame({ type: "conversation", conversationId: "e2e-pasted-file" }) +
+        frame({ type: "done", text: "Gelesen." }),
+    });
+  });
+
+  await openApp(page);
+  const composer = page.getByPlaceholder(t("chat.placeholder"));
+  await composer.evaluate((element) => {
+    const clipboard = new DataTransfer();
+    clipboard.items.add(
+      new File(["Quarterly revenue: 42"], "quarterly.txt", { type: "text/plain" }),
+    );
+    element.dispatchEvent(new ClipboardEvent("paste", { bubbles: true, clipboardData: clipboard }));
+  });
+
+  await expect(page.getByText("quarterly.txt", { exact: true })).toBeVisible();
+  await composer.fill("Summarize this file.");
+  await composer.press("Enter");
+
+  await expect
+    .poll(() => sent)
+    .toMatchObject({
+      message: "Summarize this file.",
+      attachments: [
+        {
+          name: "quarterly.txt",
+          mimeType: "text/plain",
+          data: "UXVhcnRlcmx5IHJldmVudWU6IDQy",
+        },
+      ],
+    });
+  await expect(page.getByText("quarterly.txt", { exact: true })).toBeVisible();
+});
+
 test("each conversation keeps its own unsent draft across switches and reloads", async ({
   page,
   server,

@@ -78,6 +78,16 @@ Chat
   with an inline viewer ("Save to library / In der Bibliothek speichern"), and the source list
   behind a web answer. A page written to the wiki mid-turn appears as a chip naming it, with
   what a rewrite changed and a way to throw it out.
+- When a task needs an account or service that is not connected, the assistant can put the full
+  connection flow in the conversation. Pipedream app search, one-time Pipedream setup, onOffice
+  credentials and WhatsApp pairing all stay inside the chat card; secrets go straight to the
+  local settings API and never become chat messages.
+- Safe preferences are available as real controls in chat: appearance, accent color, language,
+  timezone, quick-action behavior and start-at-login. An explicit value is applied immediately;
+  a missing or ambiguous value shows the relevant control, including a searchable timezone
+  picker. The assistant uses manage_app_setting rather than a choices card or directions to
+  Settings. Credentials, access grants, sending permissions and destructive options are not safe
+  preferences and remain behind their existing confirmation or setup flows.
 - If the connection to the local server drops, the chat says so above the composer; running
   turns continue on the server and the screen catches up when it reconnects.
 - If the AI provider rejects a turn for rate limits, a notice offers one-click switching to

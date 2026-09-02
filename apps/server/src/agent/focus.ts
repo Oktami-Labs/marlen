@@ -82,10 +82,13 @@ export function focusFromCard(card: AgentCard): FocusPatch | null {
     case "delegation":
     case "lead":
     case "chart":
+    case "composed":
     case "sources":
     case "mail_sources":
     case "wiki_note":
     case "form":
+    case "connection":
+    case "app_setting":
       return null;
     default:
       return card satisfies never;

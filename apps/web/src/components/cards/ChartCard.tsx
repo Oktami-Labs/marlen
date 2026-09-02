@@ -1,4 +1,4 @@
-import type { AgentCard, ChartPoint, ChartTone } from "@marlen/shared";
+import type { AgentCard, ChartKind, ChartPoint, ChartTone } from "@marlen/shared";
 import { BarChart3, LineChart } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -23,16 +23,8 @@ const TONE_BG: Record<ChartTone, string> = {
  * One accent tone by default; a point's `tone` recolors its bar by meaning.
  */
 export function ChartCard({ card }: { card: ChartData }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const { chartType, title, unit, points } = card;
-
-  const fmt = (v: number) => {
-    const n = Number.isInteger(v)
-      ? v.toLocaleString(i18n.language)
-      : v.toLocaleString(i18n.language, { maximumFractionDigits: 2 });
-    if (!unit) return n;
-    return unit.length <= 1 ? `${n}${unit}` : `${n} ${unit}`;
-  };
 
   return (
     <CardShell
@@ -41,18 +33,51 @@ export function ChartCard({ card }: { card: ChartData }) {
       meta={t("chat.cards.chart.pointCount", { count: points.length })}
       title={title}
     >
-      <div
+      <ChartPlot
+        chartType={chartType}
+        title={title}
+        unit={unit}
+        points={points}
         className="px-4 pb-4 pt-1"
-        role="img"
-        aria-label={t("chat.cards.chart.alt", { title: title ?? t("chat.cards.chart.badge") })}
-      >
-        {chartType === "line" ? (
-          <LinePlot points={points} fmt={fmt} />
-        ) : (
-          <BarPlot points={points} fmt={fmt} />
-        )}
-      </div>
+      />
     </CardShell>
+  );
+}
+
+export function ChartPlot({
+  chartType,
+  title,
+  unit,
+  points,
+  className,
+}: {
+  chartType: ChartKind;
+  title?: string;
+  unit?: string;
+  points: ChartPoint[];
+  className?: string;
+}) {
+  const { t, i18n } = useTranslation();
+  const fmt = (value: number) => {
+    const number = Number.isInteger(value)
+      ? value.toLocaleString(i18n.language)
+      : value.toLocaleString(i18n.language, { maximumFractionDigits: 2 });
+    if (!unit) return number;
+    return unit.length <= 1 ? `${number}${unit}` : `${number} ${unit}`;
+  };
+
+  return (
+    <div
+      className={className}
+      role="img"
+      aria-label={t("chat.cards.chart.alt", { title: title ?? t("chat.cards.chart.badge") })}
+    >
+      {chartType === "line" ? (
+        <LinePlot points={points} fmt={fmt} />
+      ) : (
+        <BarPlot points={points} fmt={fmt} />
+      )}
+    </div>
   );
 }
 

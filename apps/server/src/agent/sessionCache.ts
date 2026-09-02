@@ -1,4 +1,5 @@
 import type { Agent } from "@earendil-works/pi-agent-core";
+import type { ImageContent } from "@earendil-works/pi-ai";
 import { moduleLogger, type TurnLogger } from "../core/logger.js";
 import { forgetSeenMail } from "../email/read/seenMail.js";
 import { buildAgent } from "./assembly.js";
@@ -22,6 +23,7 @@ export interface AgentSession {
     handlers?: RunHandlers,
     signal?: AbortSignal,
     log?: TurnLogger,
+    images?: ImageContent[],
   ): Promise<string>;
 }
 
@@ -43,12 +45,13 @@ function createAgentSession(
     inFlight: 0,
     retired: false,
     lastUsed: Date.now(),
-    async runTurn(prompt, handlers, signal, turnLog) {
+    async runTurn(prompt, handlers, signal, turnLog, images) {
       session.inFlight++;
       try {
         return await runPrompt(session, prompt, {
           handlers,
           signal,
+          images,
           log: turnLog,
           compact: async (options) => {
             const next = await compactedMessages(session.agent.state, turnLog, options);

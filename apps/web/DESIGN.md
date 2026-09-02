@@ -31,8 +31,10 @@ Reach for these before writing markup. A new primitive earns its place at two
 clean call sites; when you add one, add it to this list.
 
 - **Buttons:** `default` = accent fill (the CTA); `secondary`/`ghost` = tonal
-  fills; `outline` is a tonal fill too, despite the name. Compact icon actions
-  use `icon-sm`/`icon-xs`. Never hand-roll `h-8 w-8` or restate ghost colors.
+  fills; `outline` is a tonal fill too, despite the name. `plain` is reserved
+  for fill-free app-chrome controls whose logo or avatar is already the visible
+  affordance. Compact icon actions use `icon-sm`/`icon-xs`. Never hand-roll
+  `h-8 w-8` or restate variant colors.
   Destructive row actions are `ghost-danger` + `Trash2`, one action one icon,
   whether the row is deleted or only moved to a terminal status. `X` is the
   non-destructive counterpart (close, clear) and stays `ghost`.
@@ -126,6 +128,8 @@ clean call sites; when you add one, add it to this list.
   chat runs under centered day headings (`text-2xs` uppercase, no rule).
 - **Panel controls** are icon buttons in the panel header, never control rows in
   the content area. No suggestion/template chips.
+- **Resizable panels:** `ResizeHandle` is the pointer and keyboard grip for
+  docked side panels. Pair it with `useResizableWidth`; do not hand-roll a splitter.
 - **Form actions** are right-aligned, primary rightmost.
 
 ## Surfaces
@@ -160,10 +164,11 @@ canvas to read over either.
 ## Color
 
 - **Neutrals are true grey**, chroma 0, never tinted toward the accent.
-- **Slate-violet is the single accent.** The CTA and the user's chat bubble are
-  filled with it (the bubble face is the `.bubble-accent` gradient). Beyond that it marks only the logo, the nav rail's active item
-  and hover tint, links, the switch's on-state, matched search text, and the
-  focus ring. Never wash a panel or page in it.
+- **The selected preset is the single accent.** Violet is the default. The CTA
+  and the user's chat bubble are filled with it (the bubble face is the
+  `.bubble-accent` gradient). Beyond that it marks the logo, the nav rail's
+  active item and hover tint, links, the switch's on-state, matched search text,
+  and the focus ring. Never wash a panel or page in it.
 - **Ink** (`--primary`) is the selected/pressed tone: the active `Chip`, the
   skip-link. Not a CTA fill.
 - **Type tints on icon chips**, one tone per type, chip only, never the row

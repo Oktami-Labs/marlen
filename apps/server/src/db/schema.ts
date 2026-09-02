@@ -1,4 +1,7 @@
+import { sql } from "drizzle-orm";
 import {
+  blob,
+  check,
   index,
   integer,
   primaryKey,
@@ -35,6 +38,34 @@ export const messages = sqliteTable("messages", {
   memoryIds: text("memory_ids"),
   createdAt: text("created_at").notNull(),
 });
+
+export const chatAttachments = sqliteTable(
+  "chat_attachments",
+  {
+    id: text("id").primaryKey(),
+    messageId: text("message_id").notNull(),
+    conversationId: text("conversation_id").notNull(),
+    name: text("name").notNull(),
+    mimeType: text("mime_type").notNull(),
+    kind: text("kind", { enum: ["image", "document"] }).notNull(),
+    position: integer("position").notNull(),
+    size: integer("size").notNull(),
+    data: blob("data", { mode: "buffer" }).notNull(),
+    extractedText: text("extracted_text"),
+    createdAt: text("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_chat_attachments_message_position").on(table.messageId, table.position),
+    index("idx_chat_attachments_conversation").on(table.conversationId),
+    check("chat_attachments_kind", sql`${table.kind} in ('image', 'document')`),
+    check("chat_attachments_position", sql`${table.position} >= 0`),
+    check(
+      "chat_attachments_text_kind",
+      sql`(${table.kind} = 'image' and ${table.extractedText} is null)
+        or (${table.kind} = 'document' and ${table.extractedText} is not null)`,
+    ),
+  ],
+);
 
 /**
  * Snapshots of agent-written drafts; the provider stays source of truth for

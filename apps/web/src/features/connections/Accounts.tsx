@@ -3,7 +3,6 @@ import {
   type ConnectedAccount,
   EMAIL_APP_LABELS,
   type EmailApp,
-  type PipedreamApp,
 } from "@marlen/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { Inbox, LogOut, Plus, Settings } from "lucide-react";
@@ -18,21 +17,18 @@ import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { EmptyState } from "@/components/ui/empty-state";
 import { RetryableError } from "@/components/ui/feedback";
 import { GroupLabel } from "@/components/ui/group-label";
-import { Input } from "@/components/ui/input";
 import { ListRow } from "@/components/ui/list-row";
-import { OptionRow } from "@/components/ui/option-row";
 import { Skeleton } from "@/components/ui/skeleton";
-import { Spinner } from "@/components/ui/spinner";
 import {
   AccountPermissionsEditor,
   type PermissionGrants,
   READ_ONLY_GRANTS,
 } from "@/features/connections/AccountPermissions";
+import { ConnectionSetup } from "@/features/connections/ConnectionSetup";
 import {
   OnOfficeAccountRow,
   OnOfficeForm,
   OnOfficePermissionsEditor,
-  OnOfficePickerButton,
   useOnOfficeStatus,
 } from "@/features/connections/OnOffice";
 import { SignatureEditor } from "@/features/connections/SignatureEditor";
@@ -41,9 +37,7 @@ import {
   useWhatsAppStatus,
   WhatsAppAccountRow,
   WhatsAppBusinessRow,
-  WhatsAppPairingCard,
   WhatsAppPermissionsEditor,
-  WhatsAppPickerButton,
 } from "@/features/connections/WhatsApp";
 import {
   accountColorsQuery,
@@ -51,78 +45,9 @@ import {
   accountPermissionsQuery,
   isEmailApp,
 } from "@/lib/accounts";
-import { api, isPipedreamMissing } from "@/lib/api";
+import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { stagger, UNASSIGNED_ACCOUNT_COLOR } from "@/lib/utils";
-
-const CONNECT_POLL_INTERVAL_MS = 3000;
-const CONNECT_WATCH_TIMEOUT_MS = 10 * 60_000;
-
-function PickerRow({
-  app,
-  busy,
-  onConnect,
-}: {
-  app: PipedreamApp;
-  busy: string | null;
-  onConnect: (slug: string) => void;
-}) {
-  return (
-    <OptionRow
-      fill="recessed"
-      onClick={() => onConnect(app.slug)}
-      disabled={busy !== null}
-      icon={<AppIcon src={app.imgSrc} className="h-5 w-5" />}
-      label={app.name}
-      trailing={
-        busy === app.slug ? (
-          <Spinner className="shrink-0 text-muted-foreground" />
-        ) : (
-          <Plus className="h-4 w-4 shrink-0 text-muted-foreground opacity-0 transition-opacity group-hover:opacity-100" />
-        )
-      }
-    />
-  );
-}
-
-function PickerSkeleton() {
-  return (
-    <>
-      {[0, 1, 2].map((i) => (
-        <Skeleton key={i} className="h-11 w-full rounded-lg" />
-      ))}
-    </>
-  );
-}
-
-function matchesNative(query: string, keywords: string[]): boolean {
-  const tokens = query.trim().toLowerCase().split(/\s+/).filter(Boolean);
-  return tokens.every((token) => keywords.some((keyword) => keyword.includes(token)));
-}
-
-function PickerSection({
-  heading,
-  apps,
-  busy,
-  onConnect,
-}: {
-  heading: string;
-  apps: PipedreamApp[];
-  busy: string | null;
-  onConnect: (slug: string) => void;
-}) {
-  if (apps.length === 0) return null;
-  return (
-    <div className="flex flex-col gap-1.5">
-      <GroupLabel as="p" size="sm" className="px-1">
-        {heading}
-      </GroupLabel>
-      {apps.map((app) => (
-        <PickerRow key={app.slug} app={app} busy={busy} onConnect={onConnect} />
-      ))}
-    </div>
-  );
-}
 
 function appLabel(account: ConnectedAccount): string {
   if (account.appName) return account.appName;
@@ -160,41 +85,14 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
   const [colorDraft, setColorDraft] = React.useState<AccountColor[] | null>(null);
   const colors = colorDraft ?? colorsQuery.data ?? [];
   const permissions = permissionsQuery.data ?? null;
-  const [busy, setBusy] = React.useState<string | null>(null);
-  const [connecting, setConnecting] = React.useState(false);
   const [pickerOpen, setPickerOpen] = React.useState(false);
-  const [query, setQuery] = React.useState("");
-  const [debouncedQuery, setDebouncedQuery] = React.useState("");
   const [confirmId, setConfirmId] = React.useState<string | null>(null);
   const [removing, setRemoving] = React.useState(false);
   const [permissionsAccountId, setPermissionsAccountId] = React.useState<string | null>(null);
   const [onOfficePermsOpen, setOnOfficePermsOpen] = React.useState(false);
   const { status: onOffice, refresh: refreshOnOffice } = useOnOfficeStatus();
-  const [onOfficeFormOpen, setOnOfficeFormOpen] = React.useState(false);
   const { status: whatsApp, refresh: refreshWhatsApp } = useWhatsAppStatus();
-  const [whatsAppPairingOpen, setWhatsAppPairingOpen] = React.useState(false);
   const [whatsAppPermsOpen, setWhatsAppPermsOpen] = React.useState(false);
-
-  React.useEffect(() => {
-    if (!pickerOpen) return;
-    const q = query.trim();
-    const timer = setTimeout(() => setDebouncedQuery(q), q ? 300 : 0);
-    return () => clearTimeout(timer);
-  }, [query, pickerOpen]);
-
-  const appsQuery = useQuery({
-    queryKey: ["accounts", "apps", debouncedQuery],
-    queryFn: async () => {
-      try {
-        return await api.pipedreamApps(debouncedQuery);
-      } catch (error) {
-        if (isPipedreamMissing(error)) return [];
-        throw error;
-      }
-    },
-    enabled: pickerOpen,
-  });
-  const results = debouncedQuery === query.trim() ? (appsQuery.data ?? null) : null;
 
   const ensureColors = React.useCallback(
     async (accts: ConnectedAccount[], existing: AccountColor[]) => {
@@ -240,71 +138,6 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
       void ensureColors(accountsQuery.data, colorsQuery.data);
     }
   }, [accountsQuery.data, colorsQuery.data, ensureColors]);
-
-  const stopWatchRef = React.useRef<(() => void) | null>(null);
-  React.useEffect(() => () => stopWatchRef.current?.(), []);
-
-  // The external connect page cannot signal back, so poll for the new account.
-  const watchForNewAccount = (priorIds: Set<string>, expiresAt: string) => {
-    stopWatchRef.current?.();
-    let stopped = false;
-    stopWatchRef.current = () => {
-      stopped = true;
-      setConnecting(false);
-    };
-    const expiry = Date.parse(expiresAt);
-    const deadline = Math.min(
-      Number.isNaN(expiry) ? Infinity : expiry,
-      Date.now() + CONNECT_WATCH_TIMEOUT_MS,
-    );
-    void (async () => {
-      while (!stopped && Date.now() < deadline) {
-        await new Promise((r) => setTimeout(r, CONNECT_POLL_INTERVAL_MS));
-        if (stopped) return;
-        const next = await api.pipedreamAccounts().catch(() => null);
-        if (!next) continue;
-        queryClient.setQueryData(accountListQuery.queryKey, next);
-        const added = next.find((a) => !priorIds.has(a.id));
-        if (!added) continue;
-        stopWatchRef.current = null;
-        setConnecting(false);
-        void queryClient
-          .fetchQuery(accountColorsQuery)
-          .then((saved) => ensureColors(next, saved))
-          .catch(() => {});
-        if (isEmailApp(added.app)) {
-          void api
-            .learnAccountVoice(added.id)
-            .then(() => toast.success(t("connections.learnVoiceStarted", { name: added.name })))
-            .catch((err: unknown) => toast.error(err));
-        }
-        onChanged?.();
-        return;
-      }
-      if (!stopped) {
-        stopWatchRef.current = null;
-        setConnecting(false);
-      }
-    })();
-  };
-
-  const connect = async (app: string) => {
-    setBusy(app);
-    const priorIds = new Set((accounts ?? []).map((a) => a.id));
-    try {
-      const token = await api.pipedreamConnectToken(app);
-      // Provider sessions live in the user's browser, not the desktop webview.
-      window.open(token.connectLinkUrl, "_blank", "noopener");
-      setPickerOpen(false);
-      setQuery("");
-      setConnecting(true);
-      watchForNewAccount(priorIds, token.expiresAt);
-    } catch (err) {
-      toast.error(err);
-    } finally {
-      setBusy(null);
-    }
-  };
 
   const remove = async (id: string) => {
     setRemoving(true);
@@ -378,9 +211,6 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
   const colorFor = (accountId: string): AccountColor | undefined =>
     colors.find((c) => c.accountId === accountId);
 
-  const emailResults = (results ?? []).filter((a) => isEmailApp(a.slug));
-  const moreResults = (results ?? []).filter((a) => !isEmailApp(a.slug));
-
   const accountGroups = (() => {
     const byApp = new Map<string, ConnectedAccount[]>();
     for (const account of accounts ?? []) {
@@ -392,27 +222,11 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
     return [...byApp.entries()];
   })();
 
-  const showOnOfficePick =
-    onOffice !== null &&
-    !onOffice.configured &&
-    matchesNative(query, ["onoffice", "crm", "immobilien", "makler", "real estate"]);
-
-  const openOnOfficeForm = () => {
+  const connectionComplete = React.useCallback(() => {
     setPickerOpen(false);
-    setQuery("");
-    setOnOfficeFormOpen(true);
-  };
-
-  const showWhatsAppPick =
-    whatsApp !== null &&
-    !whatsApp.linked &&
-    matchesNative(query, ["whatsapp", "messaging", "nachrichten", "chat", "business", "baileys"]);
-
-  const openWhatsAppPairing = () => {
-    setPickerOpen(false);
-    setQuery("");
-    setWhatsAppPairingOpen(true);
-  };
+    void queryClient.invalidateQueries({ queryKey: ["accounts"] });
+    onChanged?.();
+  }, [onChanged, queryClient]);
 
   return (
     <div className="@container flex flex-col gap-3">
@@ -423,7 +237,6 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
             size="sm"
             className="w-full @md:w-auto"
             onClick={() => setPickerOpen((open) => !open)}
-            loading={busy !== null}
           >
             <Plus />
             {t("connections.addAccount")}
@@ -432,111 +245,8 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
 
         {pickerOpen && (
           <Card padding="sm" className="flex flex-col gap-2">
-            <Input
-              value={query}
-              onChange={(e) => setQuery(e.target.value)}
-              placeholder={t("connections.searchProviders")}
-              autoFocus
-            />
-            {appsQuery.isError && debouncedQuery === query.trim() ? (
-              <RetryableError onRetry={() => void appsQuery.refetch()}>
-                {appsQuery.error.message}
-              </RetryableError>
-            ) : query.trim() ? (
-              results?.length === 0 && !showOnOfficePick && !showWhatsAppPick ? (
-                <p className="px-1 py-2 text-xs text-muted-foreground">
-                  {t("connections.noProvidersFound", { q: query.trim() })}
-                </p>
-              ) : (
-                <div className="flex max-h-80 flex-col gap-1.5 overflow-y-auto py-0.5">
-                  {showOnOfficePick && <OnOfficePickerButton onClick={openOnOfficeForm} />}
-                  {showWhatsAppPick && <WhatsAppPickerButton onClick={openWhatsAppPairing} />}
-                  {results ? (
-                    results.map((app) => (
-                      <PickerRow key={app.slug} app={app} busy={busy} onConnect={connect} />
-                    ))
-                  ) : (
-                    <PickerSkeleton />
-                  )}
-                </div>
-              )
-            ) : !results ? (
-              <div className="flex flex-col gap-1.5 py-0.5">
-                <PickerSkeleton />
-              </div>
-            ) : (
-              <div className="flex max-h-80 flex-col gap-4 overflow-y-auto py-0.5">
-                <PickerSection
-                  heading={t("connections.suggestedHeading")}
-                  apps={emailResults}
-                  busy={busy}
-                  onConnect={connect}
-                />
-                {showOnOfficePick && (
-                  <div className="flex flex-col gap-1.5">
-                    <GroupLabel as="p" size="sm" className="px-1">
-                      {t("connections.crmHeading")}
-                    </GroupLabel>
-                    <OnOfficePickerButton onClick={openOnOfficeForm} />
-                  </div>
-                )}
-                {showWhatsAppPick && (
-                  <div className="flex flex-col gap-1.5">
-                    <GroupLabel as="p" size="sm" className="px-1">
-                      {t("connections.messagingHeading")}
-                    </GroupLabel>
-                    <WhatsAppPickerButton onClick={openWhatsAppPairing} />
-                  </div>
-                )}
-                {moreResults.length > 0 && (
-                  <PickerSection
-                    heading={t("connections.moreAppsHeading")}
-                    apps={moreResults}
-                    busy={busy}
-                    onConnect={connect}
-                  />
-                )}
-              </div>
-            )}
-            <p className="px-1 pt-0.5 text-2xs leading-relaxed text-muted-foreground">
-              {t("connections.anyAppHint")}
-            </p>
+            <ConnectionSetup onComplete={connectionComplete} />
           </Card>
-        )}
-
-        {connecting && (
-          <div className="flex items-center gap-2">
-            <Spinner className="h-3 w-3 shrink-0" />
-            <p className="text-xs text-muted-foreground">{t("connections.finishConnecting")}</p>
-            <Button variant="ghost" size="sm" onClick={() => stopWatchRef.current?.()}>
-              {t("common.cancel")}
-            </Button>
-          </div>
-        )}
-
-        {onOfficeFormOpen && onOffice && (
-          <OnOfficeForm
-            status={onOffice}
-            onSaved={async () => {
-              setOnOfficeFormOpen(false);
-              await refreshOnOffice();
-              onChanged?.();
-            }}
-            onClose={() => setOnOfficeFormOpen(false)}
-          />
-        )}
-
-        {whatsAppPairingOpen && whatsApp && (
-          <WhatsAppPairingCard
-            status={whatsApp}
-            onPaired={async () => {
-              setWhatsAppPairingOpen(false);
-              toast.success(t("whatsapp.pairedToast"));
-              await refreshWhatsApp();
-              onChanged?.();
-            }}
-            onClose={() => setWhatsAppPairingOpen(false)}
-          />
         )}
 
         {!accounts ? (

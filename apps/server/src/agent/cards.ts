@@ -1,5 +1,6 @@
 import {
   type AgentCard,
+  type AppSettingCardDetails,
   type AttachmentItem,
   type CardAccount,
   CHART_KINDS,
@@ -18,6 +19,7 @@ import {
   type LeadCardData,
   type MailSearchHit,
   type MessageCard,
+  parseAppSettingCardDetails,
   type ReportItem,
   type ReportRef,
   type ReportSection,
@@ -27,6 +29,7 @@ import {
 } from "@marlen/shared";
 import { textDiff } from "../core/utils/diff.js";
 import { isNonEmptyString, isRecord } from "../core/utils/util.js";
+import { parseComposedCard } from "./composedCards.js";
 import { parseEmailRef } from "./emailRefs.js";
 
 export type CardOf<K extends AgentCard["kind"]> = Extract<AgentCard, { kind: K }>;
@@ -267,6 +270,25 @@ function parseChoicesCard(details: Record<string, unknown>): CardOf<"choices"> |
     .filter((o): o is ChoiceOption => o !== undefined);
   if (options.length === 0) return undefined;
   return buildChoicesCard(details.question, options);
+}
+
+const MAX_CONNECTION_QUERY_LENGTH = 100;
+
+export function buildConnectionCard(query: string): CardOf<"connection"> {
+  return { kind: "connection", query: query.trim().slice(0, MAX_CONNECTION_QUERY_LENGTH) };
+}
+
+function parseConnectionCard(details: Record<string, unknown>): CardOf<"connection"> | undefined {
+  return isString(details.query) ? buildConnectionCard(details.query) : undefined;
+}
+
+export function buildAppSettingCard(details: AppSettingCardDetails): CardOf<"app_setting"> {
+  return { kind: "app_setting", ...details } as CardOf<"app_setting">;
+}
+
+function parseAppSettingCard(details: Record<string, unknown>): CardOf<"app_setting"> | undefined {
+  const parsed = parseAppSettingCardDetails(details.setting, details.value);
+  return parsed ? buildAppSettingCard(parsed) : undefined;
 }
 
 function parseReportRef(value: unknown): ReportRef | undefined {
@@ -678,9 +700,12 @@ const CARD_PARSERS: {
   delegation: (details) => parseDelegationCard(details),
   lead: (details) => parseLeadCard(details),
   chart: (details) => parseChartCard(details),
+  composed: (details) => parseComposedCard(details),
   message_draft: (details) => parseMessageDraftCard(details),
   attachments: parseAttachmentsCard,
   choices: parseChoicesCard,
+  connection: (details) => parseConnectionCard(details),
+  app_setting: (details) => parseAppSettingCard(details),
   report: parseReportCard,
   sources: (details) => parseSourcesCard(details),
   mail_sources: (details) => parseMailSourcesCard(details),

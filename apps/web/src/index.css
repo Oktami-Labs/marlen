@@ -142,6 +142,45 @@
   --shadow-2xl: 0 0 #0000;
 }
 
+:root {
+  --theme-hue: 293;
+  --theme-accent-chroma: 0.235;
+  --theme-dark-accent-chroma: 0.18;
+  --accent: oklch(0.535 var(--theme-accent-chroma) var(--theme-hue));
+  --accent-soft: oklch(0.575 var(--theme-accent-chroma) var(--theme-hue));
+  --ring: oklch(0.535 var(--theme-accent-chroma) var(--theme-hue));
+}
+
+:root[data-accent-color="blue"] {
+  --theme-hue: 255;
+  --theme-accent-chroma: 0.19;
+  --theme-dark-accent-chroma: 0.15;
+}
+
+:root[data-accent-color="teal"] {
+  --theme-hue: 185;
+  --theme-accent-chroma: 0.15;
+  --theme-dark-accent-chroma: 0.12;
+}
+
+:root[data-accent-color="rose"] {
+  --theme-hue: 15;
+  --theme-accent-chroma: 0.21;
+  --theme-dark-accent-chroma: 0.17;
+}
+
+:root[data-accent-color="amber"] {
+  --theme-hue: 75;
+  --theme-accent-chroma: 0.16;
+  --theme-dark-accent-chroma: 0.13;
+}
+
+.dark {
+  --accent: oklch(0.6987 var(--theme-dark-accent-chroma) var(--theme-hue));
+  --accent-soft: oklch(0.6587 var(--theme-dark-accent-chroma) var(--theme-hue));
+  --ring: oklch(0.6987 var(--theme-dark-accent-chroma) var(--theme-hue));
+}
+
 @layer base {
   html {
     scroll-behavior: smooth;

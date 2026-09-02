@@ -5,7 +5,6 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { IconButton } from "@/components/ui/icon-button";
 import { ListRow } from "@/components/ui/list-row";
@@ -13,6 +12,10 @@ import { OptionRow } from "@/components/ui/option-row";
 import { Skeleton } from "@/components/ui/skeleton";
 import { Spinner } from "@/components/ui/spinner";
 import { ArmedToggleRow } from "@/features/connections/AccountPermissions";
+import {
+  type ConnectionPresentation,
+  ConnectionSurface,
+} from "@/features/connections/ConnectionSurface";
 import { api } from "@/lib/api";
 import { useServerEvents } from "@/lib/serverEvents";
 import { toast } from "@/lib/toast";
@@ -20,8 +23,8 @@ import { toast } from "@/lib/toast";
 /**
  * The personal WhatsApp link, a native integration over the WhatsApp Web
  * protocol, paired by scanning a QR code with the phone. It lives alongside
- * the Pipedream accounts in Settings → Accounts: a picker entry opens the
- * pairing card, and once linked it shows as a connected row. Pairing is
+ * the Pipedream accounts: a picker entry opens the pairing controls, and once
+ * linked it shows as a connected row. Pairing is
  * asynchronous, the QR, the scan and the final open state each arrive as a
  * "whatsapp" server event, so the status here stays live.
  */
@@ -74,10 +77,12 @@ export function WhatsAppPairingCard({
   status,
   onPaired,
   onClose,
+  presentation,
 }: {
   status: WhatsAppStatus;
   onPaired: () => Promise<void>;
   onClose: () => void;
+  presentation?: ConnectionPresentation;
 }) {
   const { t } = useTranslation();
   const [restarting, setRestarting] = React.useState(false);
@@ -112,7 +117,7 @@ export function WhatsAppPairingCard({
   };
 
   return (
-    <Card padding="md" className="animate-in-up flex flex-col gap-4">
+    <ConnectionSurface presentation={presentation} className="animate-in-up flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1.5">
           <p className="text-sm font-medium">{t("whatsapp.pairTitle")}</p>
@@ -152,7 +157,7 @@ export function WhatsAppPairingCard({
           </>
         )}
       </div>
-    </Card>
+    </ConnectionSurface>
   );
 }
 

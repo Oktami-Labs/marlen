@@ -1,3 +1,5 @@
+import { CHAT_ATTACHMENT_SCHEMA_STEP } from "./chatAttachmentSchemaStep.js";
+
 /**
  * Numbered schema steps applied in order against PRAGMA user_version by
  * db/index.ts: a database at version N gets steps N+1..length, each in its own
@@ -783,4 +785,8 @@ export const SCHEMA_STEPS: readonly string[] = [
     FROM automation_suggestions WHERE status = 'pending';
     DROP TABLE automation_suggestions;
   `,
+  // 42: user-pasted chat attachments keep their bytes and extracted document
+  // text beside the durable transcript. The message id owns them; the repeated
+  // conversation id makes conversation deletion and history loading direct.
+  CHAT_ATTACHMENT_SCHEMA_STEP,
 ];

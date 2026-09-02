@@ -53,10 +53,10 @@ const HTML_EXTRACT_OPTIONS: HtmlToTextOptions = {
 };
 
 // Load large format parsers only when needed.
-async function extractText(absPath: string, ext: string): Promise<string> {
+async function extractText(data: Buffer, ext: string): Promise<string> {
   if (ext === ".pdf") {
     const { PDFParse } = await import("pdf-parse");
-    const parser = new PDFParse({ data: new Uint8Array(await readFile(absPath)) });
+    const parser = new PDFParse({ data: new Uint8Array(data) });
     try {
       return (await parser.getText()).text;
     } finally {
@@ -65,13 +65,13 @@ async function extractText(absPath: string, ext: string): Promise<string> {
   }
   if (ext === ".docx") {
     const { default: mammoth } = await import("mammoth");
-    const { value } = await mammoth.extractRawText({ buffer: await readFile(absPath) });
+    const { value } = await mammoth.extractRawText({ buffer: data });
     return value;
   }
   if (ext === ".html" || ext === ".htm") {
-    return htmlToText(await readFile(absPath, "utf8"), HTML_EXTRACT_OPTIONS).trim();
+    return htmlToText(data.toString("utf8"), HTML_EXTRACT_OPTIONS).trim();
   }
-  return readFile(absPath, "utf8");
+  return data.toString("utf8");
 }
 
 function normalize(text: string): string {
@@ -85,6 +85,10 @@ function normalize(text: string): string {
       .trim()
       .slice(0, MAX_TEXT_LENGTH)
   );
+}
+
+export async function extractDocumentText(data: Buffer, ext: string): Promise<string> {
+  return normalize(await extractText(data, ext));
 }
 
 /** Split on nearby text boundaries without dropping characters. */
@@ -167,7 +171,7 @@ async function indexFile(relPath: string, size: number, mtimeMs: number): Promis
     return false;
   }
   try {
-    const text = normalize(await extractText(join(libraryDir, relPath), ext));
+    const text = await extractDocumentText(await readFile(join(libraryDir, relPath)), ext);
     if (!text) {
       store.replaceDocument(
         {

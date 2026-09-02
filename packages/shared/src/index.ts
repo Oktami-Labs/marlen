@@ -1,5 +1,6 @@
 import type { AgentCard, EmailRef } from "./cards.js";
 
+export * from "./appSettings.js";
 export * from "./cards.js";
 export * from "./changelog.js";
 export * from "./onoffice.js";
@@ -29,23 +30,6 @@ export interface PipedreamApp {
   slug: string;
   name: string;
   imgSrc?: string;
-}
-
-export const SUPPORTED_LANGUAGES = ["en", "de"] as const;
-export type Language = (typeof SUPPORTED_LANGUAGES)[number];
-
-export const LANGUAGE_LABELS: Record<Language, string> = {
-  en: "English",
-  de: "Deutsch",
-};
-
-export const LANGUAGE_ENGLISH_NAMES: Record<Language, string> = {
-  en: "English",
-  de: "German",
-};
-
-export function isLanguage(value: unknown): value is Language {
-  return typeof value === "string" && (SUPPORTED_LANGUAGES as readonly string[]).includes(value);
 }
 
 export type ApiErrorCode = "pipedream_not_configured";
@@ -188,6 +172,22 @@ export interface ChatToolCall {
   batch?: number;
 }
 
+export type ChatAttachmentKind = "image" | "document";
+
+/** Metadata shown with a chat message. The bytes stay on the local server. */
+export interface ChatAttachment {
+  id: string;
+  name: string;
+  mimeType: string;
+  size: number;
+  kind: ChatAttachmentKind;
+}
+
+/** Browser-to-server representation used only while sending a new message. */
+export interface ChatAttachmentUpload extends ChatAttachment {
+  data: string;
+}
+
 export interface ChatMessage {
   id: string;
   conversationId: string;
@@ -197,6 +197,7 @@ export interface ChatMessage {
   cards?: MessageCard[];
   toolCalls?: ChatToolCall[];
   refs?: EmailRef[];
+  attachments?: ChatAttachment[];
   memoryIds?: string[];
   error?: string;
 }
@@ -664,6 +665,7 @@ export type ServerEventTopic =
   | "leads"
   | "whatsapp"
   | "accounts"
+  | "settings"
   | "seen"
   | "notification";
 

@@ -1,6 +1,7 @@
-import type { EmailRef } from "@marlen/shared";
+import type { ChatAttachmentUpload, EmailRef, LiveChatTurn } from "@marlen/shared";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { applyAgentCardAction } from "@/features/chat/clientActions";
 import {
   createInitialRunState,
   type DisplayMessage,
@@ -27,10 +28,24 @@ const AWAITING_REPLY: DisplayMessage = {
   thinking: true,
 };
 
+function appendLiveTurn(messages: DisplayMessage[], turn: LiveChatTurn | null): DisplayMessage[] {
+  if (!turn) return messages;
+  for (const { toolCallId, card } of turn.cards) {
+    applyAgentCardAction(turn.conversationId, toolCallId, card);
+  }
+  return [...messages, toLiveDisplayMessage(turn)];
+}
+
 export interface UseChatRunsOptions {
   setHistoryOpen: React.Dispatch<React.SetStateAction<boolean>>;
   onFocusComposer: () => void;
   pendingFocusAccountId?: string | null;
+}
+
+interface SendChatInput {
+  message: string;
+  refs?: EmailRef[];
+  attachments?: ChatAttachmentUpload[];
 }
 
 export interface UseChatRunsResult {
@@ -38,7 +53,7 @@ export interface UseChatRunsResult {
   busy: boolean;
   restoring: boolean;
   conversationId: string | undefined;
-  send: (message: string, refs?: EmailRef[]) => Promise<boolean>;
+  send: (input: SendChatInput) => Promise<boolean>;
   stop: () => Promise<void>;
   openConversation: (id: string) => Promise<void>;
   newConversation: () => void;
@@ -78,9 +93,9 @@ export function useChatRuns({
     let restored: { conversationId: string; messages: DisplayMessage[] } | null = null;
     Promise.all([api.conversationMessages(savedId), api.liveChat(savedId)])
       .then(([msgs, live]) => {
+        if (cancelled) return;
         if (msgs.length === 0 && !live.turn) return;
-        const messages = msgs.map(toDisplayMessage);
-        if (live.turn) messages.push(toLiveDisplayMessage(live.turn));
+        const messages = appendLiveTurn(msgs.map(toDisplayMessage), live.turn);
         restored = { conversationId: savedId, messages };
       })
       .catch((err) => {
@@ -109,8 +124,7 @@ export function useChatRuns({
       void Promise.all([api.conversationMessages(awaitingId), api.liveChat(awaitingId)])
         .then(([msgs, live]) => {
           if (cancelled) return;
-          const messages = msgs.map(toDisplayMessage);
-          if (live.turn) messages.push(toLiveDisplayMessage(live.turn));
+          const messages = appendLiveTurn(msgs.map(toDisplayMessage), live.turn);
           dispatch({
             type: "open-conversation-loaded",
             conversationId: awaitingId,
@@ -128,7 +142,7 @@ export function useChatRuns({
   }, [awaitingId, dispatch]);
 
   const send = React.useCallback(
-    async (message: string, refs?: EmailRef[]) => {
+    async ({ message, refs, attachments }: SendChatInput) => {
       const runId = crypto.randomUUID();
       const sentAt = new Date().toISOString();
       const userMessage: DisplayMessage = {
@@ -140,6 +154,7 @@ export function useChatRuns({
         cards: [],
         streaming: false,
         refs,
+        attachments,
       };
       const assistantMessage: DisplayMessage = {
         id: crypto.randomUUID(),
@@ -160,7 +175,7 @@ export function useChatRuns({
       let accepted = false;
       try {
         await streamChat(
-          { conversationId: conversationIdAtStart, message, refs, focusAccountId },
+          { conversationId: conversationIdAtStart, message, refs, attachments, focusAccountId },
           (event) => {
             if (event.type === "conversation") {
               accepted = true;
@@ -173,6 +188,12 @@ export function useChatRuns({
               toast.error(
                 event.kind === "rate_limit" ? t("chat.rateLimited.message") : event.message,
               );
+            }
+            if (event.type === "card") {
+              const conversationId = stateRef.current.runs[runId]?.conversationId;
+              if (conversationId) {
+                applyAgentCardAction(conversationId, event.toolCallId, event.card);
+              }
             }
             dispatch({ type: "stream", runId, event });
           },
@@ -205,8 +226,7 @@ export function useChatRuns({
       try {
         const [msgs, live] = await Promise.all([api.conversationMessages(id), api.liveChat(id)]);
         if (stateRef.current.activeConversationId !== id) return;
-        const messages = msgs.map(toDisplayMessage);
-        if (live.turn) messages.push(toLiveDisplayMessage(live.turn));
+        const messages = appendLiveTurn(msgs.map(toDisplayMessage), live.turn);
         dispatch({
           type: "open-conversation-loaded",
           conversationId: id,

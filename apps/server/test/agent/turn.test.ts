@@ -463,4 +463,63 @@ describe("an agent turn", () => {
     expect(assistant?.content).toContain("rate limit");
     expect(assistant?.content).not.toContain("rate_limit_error");
   });
+
+  it("attaches the pages a message names and attributes only what the model read or noted", async () => {
+    await (await import("../../src/storage/home/agentHome.js")).ensureAgentHome();
+    const wiki = await import("../../src/storage/wiki/store.js");
+    await wiki.writeNamedPage(
+      "zeitzone-regeln",
+      "Zeitzone: Termine immer in Europe/Berlin nennen.",
+      "user",
+    );
+    await wiki.writeNamedPage(
+      "lead-prozess",
+      "Lead-Prozess: neue Leads binnen 30 Minuten anrufen.",
+      "user",
+    );
+    await wiki.writeNamedPage(
+      "spoerk-notizen",
+      "Notizen zu Spörk & Partner.\n\nonOffice: Create & change statt nur anlegen.",
+      "user",
+    );
+
+    turnRecorder._setSessionsForTest({
+      ...unusedSessions,
+      pooled: async () =>
+        fakeSession(async (prompt, handlers) => {
+          // A page's subject words attach its summary to the turn; a word its
+          // body merely shares with the message ("change") does not.
+          expect(prompt).toContain("[Relevant long-term memory");
+          expect(prompt).toContain("[zeitzone-regeln]");
+          expect(prompt).toContain("[lead-prozess]");
+          expect(prompt).not.toContain("spoerk-notizen");
+          handlers?.onToolStart?.("call-1", "page_used", "Note wiki pages used", {
+            ids: ["zeitzone-regeln"],
+          });
+          handlers?.onToolEnd?.("call-1", "page_used", false, {
+            content: [{ type: "text", text: "Noted 1 page as used." }],
+          });
+          return "Die Zeitzone ist jetzt America/New_York.";
+        }),
+    });
+
+    const turn = turnRecorder.beginTurn("conv-memory");
+    const { text } = await turn.run({
+      prompt: "Change my Zeitzone for the lead process to America/New_York",
+      session: "pooled",
+      conversation: { type: "chat", title: "Zeitzone" },
+      handlers: {},
+      log: silentLog,
+    });
+    expect(text).toBe("Die Zeitzone ist jetzt America/New_York.");
+
+    const { db, schema } = dbModule;
+    const rows = await db
+      .select()
+      .from(schema.messages)
+      .where(eq(schema.messages.conversationId, "conv-memory"));
+    const assistant = rows.find((row) => row.role === "assistant");
+    // An attached summary the model did not rely on is not attributed.
+    expect(JSON.parse(assistant?.memoryIds ?? "[]")).toEqual(["zeitzone-regeln"]);
+  });
 });

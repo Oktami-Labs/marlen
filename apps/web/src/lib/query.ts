@@ -59,6 +59,7 @@ const DATA_TOPICS: Record<Exclude<ServerEventTopic, "notification">, true> = {
   leads: true,
   whatsapp: true,
   accounts: true,
+  settings: true,
   seen: true,
 };
 

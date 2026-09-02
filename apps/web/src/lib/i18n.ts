@@ -21,6 +21,12 @@ export function rememberLanguage(language: Language): void {
   localStorage.setItem(STORAGE_KEY, language);
 }
 
+/** Apply a server-confirmed language from either Settings or a live agent action. */
+export async function applyLanguagePreference(language: Language): Promise<void> {
+  rememberLanguage(language);
+  await i18n.changeLanguage(language);
+}
+
 void i18n.use(initReactI18next).init({
   resources: { en: { translation: en }, de: { translation: de } },
   lng: detectInitialLanguage(),

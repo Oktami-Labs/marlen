@@ -36,7 +36,6 @@ export const test = base.extend<TestFixtures, WorkerFixtures>({
           "marlen-setup-dismissed": "1",
           "marlen-language": language as string,
           "marlen-theme": "light",
-          "marlen-sidebar-collapsed": "false",
         };
         try {
           for (const [key, value] of Object.entries(defaults)) {

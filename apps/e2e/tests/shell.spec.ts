@@ -6,10 +6,67 @@ test("a fresh install opens the app and navigates between views", async ({ page 
 
   await expect(page.getByRole("heading", { level: 1 })).toHaveText(t("views.home.title"));
 
-  for (const view of ["automations", "knowledge", "settings"] as const) {
+  for (const view of ["automations", "knowledge"] as const) {
     await page.getByRole("link", { name: t(`views.${view}.title`), exact: true }).click();
     await expect(page.getByRole("heading", { level: 1 })).toHaveText(t(`views.${view}.title`));
   }
+
+  const primaryNav = page.getByRole("navigation", { name: t("sidebar.primaryNavigation") });
+  await expect(
+    primaryNav.getByRole("link", { name: t("views.settings.title"), exact: true }),
+  ).toHaveCount(0);
+
+  await page.getByRole("button", { name: t("sidebar.openProfileMenu") }).click();
+  const profileMenu = page.getByRole("menu", { name: t("sidebar.profileMenu") });
+  await profileMenu.getByRole("menuitem", { name: t("views.settings.title"), exact: true }).click();
+  await expect(page.getByRole("heading", { level: 1 })).toHaveText(t("views.settings.title"));
+});
+
+test("the navigation sidebar resizes by pointer and keyboard and remembers its width", async ({
+  page,
+}) => {
+  await openApp(page);
+
+  const sidebar = page.getByRole("complementary").first();
+  const resize = page.getByRole("separator", { name: t("sidebar.resize") });
+  const dragGrip = async (dx: number) => {
+    const grip = await resize.boundingBox();
+    if (!grip) throw new Error("the sidebar resize handle was not rendered");
+    await page.mouse.move(grip.x + grip.width / 2, grip.y + grip.height / 2);
+    await page.mouse.down();
+    await page.mouse.move(grip.x + grip.width / 2 + dx, grip.y + grip.height / 2, { steps: 10 });
+    await page.mouse.up();
+  };
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(256);
+
+  await dragGrip(96);
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(352);
+  await expect(resize).toHaveAttribute("aria-valuenow", "352");
+
+  await page.reload();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(352);
+
+  await resize.focus();
+  await page.keyboard.press("ArrowLeft");
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(328);
+  await page.keyboard.press("Home");
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(200);
+  await page.keyboard.press("End");
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(384);
+
+  // Pulling well past the minimum folds the sidebar to an icon rail.
+  await dragGrip(-300);
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(64);
+  await expect(
+    page.getByRole("link", { name: t("views.automations.title"), exact: true }),
+  ).toBeVisible();
+
+  await page.reload();
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(64);
+
+  // Pulling the rail's edge back out reopens it at its last width and keeps dragging.
+  await dragGrip(100);
+  await expect.poll(async () => (await sidebar.boundingBox())?.width).toBe(300);
 });
 
 test("setup keeps one task open while both step headers stay available", async ({ page }) => {
@@ -86,15 +143,19 @@ test("saving a profile preference confirms the save", async ({ page, request }) 
   }
 });
 
-test("the settings rail keeps the workspace focused until chat is opened", async ({ page }) => {
+test("settings keeps the chat open while categories change", async ({ page }) => {
   await openApp(page, "/settings?section=general");
 
+  const collapseChat = page.getByRole("button", { name: t("app.collapseChat") });
   const expandChat = page.getByRole("button", { name: t("app.expandChat") });
-  await expect(expandChat).toBeVisible();
-  await expect(page.getByRole("navigation", { name: t("settings.nav.label") })).toBeVisible();
-  await expect(page.getByRole("combobox", { name: t("settings.nav.label") })).toBeHidden();
+  await expect(collapseChat).toBeVisible();
+  await expect(expandChat).toBeHidden();
+  await expect(page.getByRole("navigation", { name: t("settings.nav.label") })).toBeHidden();
 
-  await page.getByRole("button", { name: t("settings.nav.permissions"), exact: true }).click();
+  const category = page.getByRole("combobox", { name: t("settings.nav.label") });
+  await expect(category).toBeVisible();
+  await category.click();
+  await page.getByRole("option", { name: t("settings.nav.permissions"), exact: true }).click();
   await expect(page).toHaveURL(/\/settings\?section=permissions$/);
   await expect(
     page.getByRole("heading", { name: t("settings.fileAccess.title"), exact: true }),
@@ -112,9 +173,8 @@ test("the settings rail keeps the workspace focused until chat is opened", async
     page.getByRole("heading", { name: t("settings.fileAccess.title"), exact: true }),
   ).toBeVisible();
 
-  await expandChat.click();
-  await expect(expandChat).toBeHidden();
-  await expect(page.getByRole("button", { name: t("app.collapseChat") })).toBeVisible();
+  await collapseChat.click();
+  await expect(expandChat).toBeVisible();
 });
 
 test("settings uses a wider single reading column on a large monitor", async ({ page }) => {
@@ -216,10 +276,7 @@ test("@mobile the navigation is a drawer on a phone", async ({ page }) => {
   // the DOM and only the viewport check distinguishes the two states.
   await expect(home).not.toBeInViewport();
 
-  await page
-    .getByRole("button", { name: t("app.openMenu") })
-    .first()
-    .click();
+  await page.getByRole("button", { name: t("app.openMenu"), exact: true }).click();
   await expect(home).toBeInViewport();
 });
 

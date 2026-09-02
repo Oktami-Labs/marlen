@@ -17,7 +17,8 @@ export const appHelpTool: AgentTool = tool({
     `any question about the app itself — what it can do, where a page or setting lives, how a ` +
     `feature behaves (topic "guide"), or which version is running and what changed in an ` +
     `update (topic "changelog") — and answer from what it returns, never from general ` +
-    `knowledge about email apps or assistants.`,
+    `knowledge about email apps or assistants. Do not call this merely to perform an action ` +
+    `covered by a dedicated tool, such as changing a safe preference or connecting a service.`,
   params: {
     topic: Type.Union([Type.Literal("guide"), Type.Literal("changelog")], {
       description:

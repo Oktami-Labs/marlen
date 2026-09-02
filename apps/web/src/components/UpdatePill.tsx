@@ -47,7 +47,8 @@ export function useUpdateState(): UpdateState | null {
 // Announce each version once per launch.
 const announced = new Set<string>();
 
-export function UpdatePill({ state, isCollapsed }: { state: UpdateState; isCollapsed: boolean }) {
+/** `compact` is the collapsed nav rail: icon only from `md` up, the label stays in the tooltip. */
+export function UpdatePill({ state, compact = false }: { state: UpdateState; compact?: boolean }) {
   const { t } = useTranslation();
   const [open, setOpen] = React.useState(false);
   const label = t(state.ready ? "app.updateAvailable" : "app.updateWaiting");
@@ -63,15 +64,11 @@ export function UpdatePill({ state, isCollapsed }: { state: UpdateState; isColla
     <>
       <Button
         onClick={() => setOpen(true)}
-        className={cn(
-          "animate-in-up update-pill w-full shrink-0 px-3",
-          isCollapsed && "md:w-9 md:px-0",
-        )}
+        className={cn("animate-in-up update-pill w-full shrink-0 px-3", compact && "md:px-0")}
         aria-label={label}
-        data-tooltip={isCollapsed ? label : undefined}
       >
         <Sparkles />
-        <span className={cn(isCollapsed && "md:hidden")}>{label}</span>
+        <span className={cn(compact && "md:hidden")}>{label}</span>
       </Button>
       <ChangelogDialog open={open} onOpenChange={setOpen} pending={state} />
     </>

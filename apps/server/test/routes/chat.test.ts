@@ -1,21 +1,36 @@
 import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import type { Conversation, ConversationListResponse } from "@marlen/shared";
+import type { ChatMessage, Conversation, ConversationListResponse } from "@marlen/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 let app: Awaited<ReturnType<typeof import("../../src/app.js").buildApp>>;
 let database: typeof import("../../src/db/index.js");
+let turnRecorder: typeof import("../../src/agent/turnRecorder.js");
+type AgentSession = import("../../src/agent/sessionCache.js").AgentSession;
+
+function fakeSession(runTurn: AgentSession["runTurn"]): AgentSession {
+  return {
+    agent: null as never,
+    toolset: { tools: [], readTools: [], close: async () => {} },
+    inFlight: 0,
+    retired: false,
+    lastUsed: Date.now(),
+    runTurn,
+  };
+}
 
 beforeAll(async () => {
   const scratch = await mkdtemp(join(tmpdir(), "marlen-chat-route-test-"));
   process.env.AGENT_HOME_PATH = join(scratch, "Marlen");
   process.env.DATABASE_PATH = join(scratch, "test.db");
   database = await import("../../src/db/index.js");
+  turnRecorder = await import("../../src/agent/turnRecorder.js");
   app = await (await import("../../src/app.js")).buildApp();
 });
 
 afterAll(async () => {
+  turnRecorder?._setSessionsForTest(null);
   await app?.close();
 });
 
@@ -111,5 +126,108 @@ describe("conversation routes", () => {
     });
     expect(missing.statusCode).toBe(404);
     expect(missing.json<{ error: string }>()).toMatchObject({ error: "not found" });
+  });
+
+  it("sends pasted documents and images to the model and keeps them with the message", async () => {
+    const conversationId = "chat-with-attachments";
+    const document = Buffer.from("Quarterly revenue: 42", "utf8");
+    const image = Buffer.from(
+      "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=",
+      "base64",
+    );
+    let modelPrompt = "";
+    let modelImages: Parameters<AgentSession["runTurn"]>[4];
+
+    await database.db.insert(database.schema.conversations).values({
+      id: conversationId,
+      title: "Quarterly review",
+      type: "chat",
+      createdAt: "2026-09-02T12:00:00.000Z",
+    });
+    turnRecorder._setSessionsForTest({
+      pooled: async () =>
+        fakeSession(async (prompt, handlers, _signal, _log, images) => {
+          modelPrompt = prompt;
+          modelImages = images;
+          handlers?.onTextDelta?.("Revenue is 42.");
+          return "Revenue is 42.";
+        }),
+      ephemeral: async () => {
+        throw new Error("ephemeral session not expected in this test");
+      },
+    });
+
+    try {
+      const response = await app.inject({
+        method: "POST",
+        url: "/api/chat",
+        payload: {
+          conversationId,
+          message: "Summarize these files.",
+          attachments: [
+            {
+              id: "quarterly-document",
+              name: "quarterly.txt",
+              mimeType: "text/plain",
+              size: document.length,
+              kind: "document",
+              data: document.toString("base64"),
+            },
+            {
+              id: "quarterly-chart",
+              name: "chart.png",
+              mimeType: "image/png",
+              size: image.length,
+              kind: "image",
+              data: image.toString("base64"),
+            },
+          ],
+        },
+      });
+
+      expect(response.statusCode).toBe(200);
+      expect(response.body).toContain('"type":"done","text":"Revenue is 42."');
+      expect(modelPrompt).toContain("Summarize these files.");
+      expect(modelPrompt).toContain("Quarterly revenue: 42");
+      expect(modelImages).toEqual([
+        { type: "image", data: image.toString("base64"), mimeType: "image/png" },
+      ]);
+
+      const messagesResponse = await app.inject({
+        method: "GET",
+        url: `/api/conversations/${conversationId}/messages`,
+      });
+      expect(messagesResponse.statusCode).toBe(200);
+      const messages = messagesResponse.json<ChatMessage[]>();
+      expect(messages[0]).toMatchObject({
+        role: "user",
+        content: "Summarize these files.",
+        attachments: [
+          {
+            id: "quarterly-document",
+            name: "quarterly.txt",
+            mimeType: "text/plain; charset=utf-8",
+            size: document.length,
+            kind: "document",
+          },
+          {
+            id: "quarterly-chart",
+            name: "chart.png",
+            mimeType: "image/png",
+            size: image.length,
+            kind: "image",
+          },
+        ],
+      });
+
+      const storedDocument = await app.inject({
+        method: "GET",
+        url: "/api/chat/attachments/quarterly-document",
+      });
+      expect(storedDocument.statusCode).toBe(200);
+      expect(storedDocument.rawPayload).toEqual(document);
+    } finally {
+      turnRecorder._setSessionsForTest(null);
+    }
   });
 });

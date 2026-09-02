@@ -5,11 +5,14 @@ import { moduleLogger } from "../core/logger.js";
 import { loadOnOfficeTools } from "../integrations/onoffice/tools.js";
 import { buildWhatsAppTools } from "../integrations/whatsapp/tools.js";
 import { appHelpTool } from "./appHelpTool.js";
+import { manageAppSettingTool } from "./appSettingTool.js";
 import { automationManageTools, automationReadTools } from "./automationTools.js";
 import type { SessionCapabilities } from "./capabilities.js";
 import { presentChartTool } from "./chartTool.js";
 import { presentChoicesTool } from "./choicesTool.js";
 import { compactedMessages } from "./compaction.js";
+import { composeCardTool } from "./composedCardTool.js";
+import { presentConnectionTool } from "./connectionTool.js";
 import { buildConversationSearchTool } from "./conversationTools.js";
 import { buildDelegateTool } from "./delegate.js";
 import { keepDraftTool, listDraftsTool } from "./draftTools.js";
@@ -92,7 +95,15 @@ export async function buildAgent(
         ...(caps.interactive ? [voiceLearnTool] : []),
         buildPublishReportTool(toolSessionId),
         // A question needs someone there to answer; a chart reads the same on Home.
-        ...(caps.interactive ? [presentChoicesTool, presentFormTool] : []),
+        ...(caps.interactive
+          ? [
+              presentChoicesTool,
+              presentFormTool,
+              presentConnectionTool,
+              manageAppSettingTool,
+              composeCardTool,
+            ]
+          : []),
         presentChartTool,
       ],
       messages: history,

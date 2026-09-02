@@ -459,8 +459,7 @@ function DialogDemo() {
 }
 
 /** Stands the real pill up in the real sidebar, with the newest release as the
- *  waiting update, outside the desktop shell nothing ever mounts it. Collapse
- *  the sidebar while it is up to see its icon-only width. */
+ *  waiting update, outside the desktop shell nothing ever mounts it. */
 function UpdatePillDemo() {
   const [shown, setShown] = React.useState(false);
   const pending = CHANGELOG[0]?.version;

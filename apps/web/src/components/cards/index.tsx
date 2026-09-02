@@ -1,8 +1,11 @@
 import type { AccountColor, AgentCard, CardAccount } from "@marlen/shared";
 import { accountColor } from "@/lib/accounts";
+import { AppSettingCard } from "./AppSettingCard";
 import { AttachmentsCard } from "./AttachmentsCard";
 import { ChartCard } from "./ChartCard";
 import { ChoicesCard } from "./ChoicesCard";
+import { ComposedCard } from "./ComposedCard";
+import { ConnectionCard } from "./ConnectionCard";
 import { DelegationCard } from "./DelegationCard";
 import { EmailDraftCard } from "./EmailDraftCard";
 import { FormCard } from "./FormCard";
@@ -32,6 +35,8 @@ export function AgentCardView({ card, colors }: { card: AgentCard; colors?: Acco
       return <LeadCard card={card} />;
     case "chart":
       return <ChartCard card={card} />;
+    case "composed":
+      return <ComposedCard card={card} />;
     case "message_draft":
       return <MessageDraftCard card={card} />;
     case "attachments":
@@ -40,6 +45,10 @@ export function AgentCardView({ card, colors }: { card: AgentCard; colors?: Acco
       return <ReportCard card={card} colors={colors} />;
     case "choices":
       return <ChoicesCard card={card} colors={colors} />;
+    case "connection":
+      return <ConnectionCard card={card} />;
+    case "app_setting":
+      return <AppSettingCard card={card} />;
     case "sources":
       return <SourcesCard card={card} />;
     case "mail_sources":

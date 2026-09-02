@@ -279,7 +279,7 @@ export async function buildTurnPrompt(
     const address = parseMailbox(ref.from ?? "")?.address;
     return address ? [address] : [];
   });
-  const pagesNote = await relevantPagesNote(`${prompt} ${refText}`, conversationId, {
+  const pagesNote = await relevantPagesNote(`${prompt} ${refText}`, {
     accountIds,
     contactIds,
   }).catch(() => "");

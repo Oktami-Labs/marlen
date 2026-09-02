@@ -8,6 +8,7 @@ import type {
   AppStatus,
   Automation,
   AutomationRun,
+  ChatAttachmentUpload,
   ChatMessage,
   ChatStreamEvent,
   ConnectedAccount,
@@ -193,6 +194,7 @@ export const api = {
   setPipedreamMode: (useCustom: boolean) =>
     http<PipedreamStatus>("PUT", "/api/pipedream/mode", { useCustom }),
   pipedreamAccounts: () => get<ConnectedAccount[]>("/api/pipedream/accounts"),
+  syncPipedreamAccounts: () => http<ConnectedAccount[]>("POST", "/api/pipedream/accounts/sync"),
   pipedreamApps: (q: string) =>
     get<PipedreamApp[]>(`/api/pipedream/apps?q=${encodeURIComponent(q)}`),
   pipedreamConnectToken: (app: string) =>
@@ -459,6 +461,7 @@ export const api = {
   mailAttachmentUrl: (accountId: string, messageId: string, filename: string): string =>
     `/api/mail/attachments/open?accountId=${encodeURIComponent(accountId)}` +
     `&messageId=${encodeURIComponent(messageId)}&filename=${encodeURIComponent(filename)}`,
+  chatAttachmentUrl: (id: string): string => `/api/chat/attachments/${encodeURIComponent(id)}`,
   saveMailAttachment: (accountId: string, messageId: string, filename: string) =>
     http<{ saved: string }>("POST", "/api/mail/attachments/save", {
       accountId,
@@ -476,6 +479,7 @@ export async function streamChat(
     conversationId?: string;
     message: string;
     refs?: EmailRef[];
+    attachments?: ChatAttachmentUpload[];
     focusAccountId?: string | null;
   },
   onEvent: (event: ChatStreamEvent) => void,

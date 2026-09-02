@@ -1,6 +1,7 @@
 import type { Agent } from "@earendil-works/pi-agent-core";
 import {
   type AssistantMessage,
+  type ImageContent,
   isContextOverflow,
   isRetryableAssistantError,
 } from "@earendil-works/pi-ai";
@@ -25,6 +26,7 @@ export interface RunHandlers {
 export interface RunOptions {
   handlers?: RunHandlers;
   signal?: AbortSignal;
+  images?: ImageContent[];
   log?: TurnLogger;
   compact?: (options?: { force?: boolean }) => Promise<boolean>;
 }
@@ -109,8 +111,13 @@ export async function runPrompt(
   prompt: string,
   options: RunOptions = {},
 ): Promise<string> {
-  const { handlers = {}, signal, log = defaultLog, compact } = options;
+  const { handlers = {}, signal, images = [], log = defaultLog, compact } = options;
   if (signal?.aborted) return "";
+  if (images.length > 0 && !session.agent.state.model.input.includes("image")) {
+    throw new Error(
+      "The selected model cannot read image attachments. Choose a model with image input and send the message again.",
+    );
+  }
 
   let text = "";
   const turnStartedAt = Date.now();
@@ -184,7 +191,7 @@ export async function runPrompt(
 
   try {
     await compact?.();
-    await session.agent.prompt(prompt);
+    await session.agent.prompt(prompt, images);
     irreducibleOverflow = await retryTransientFailures(session.agent, log, signal, compact);
   } finally {
     signal?.removeEventListener("abort", onAbort);

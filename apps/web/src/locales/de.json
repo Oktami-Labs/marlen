@@ -51,9 +51,12 @@
   },
   "sidebar": {
     "closeMenu": "Menü schließen",
-    "expand": "Seitenleiste ausklappen",
-    "collapse": "Seitenleiste einklappen",
+    "primaryNavigation": "Hauptnavigation",
+    "resize": "Breite der Navigationsleiste anpassen",
     "finishSetup": "Einrichtung abschließen",
+    "localProfile": "Lokales Profil",
+    "openProfileMenu": "Profilmenü öffnen",
+    "profileMenu": "Profilmenü",
     "lightMode": "Heller Modus",
     "darkMode": "Dunkler Modus"
   },
@@ -90,7 +93,7 @@
     "noAutomationRuns": "Noch keine Automatisierungsläufe.",
     "untitled": "(ohne Titel)",
     "thinking": "Denkt nach…",
-    "memoryUsed": "Wissen im Kontext",
+    "memoryUsed": "Genutztes Wissen",
     "working": "Der Assistent arbeitet",
     "emptyTitle": "Fragen Sie alles zu Ihrem Postfach",
     "emptyBody": "Der Assistent durchsucht Ihre verbundenen Konten, versieht E-Mails mit Labels und schreibt Entwürfe.",
@@ -148,6 +151,16 @@
       "noSubject": "(kein Betreff)",
       "remove": "{{label}} entfernen"
     },
+    "attachments": {
+      "add": "Bilder oder Dateien anhängen",
+      "remove": "{{name}} entfernen",
+      "tooMany": "Eine Nachricht kann bis zu {{count}} Anhänge enthalten.",
+      "unsupported": "\"{{name}}\" wird nicht unterstützt. Verwenden Sie PNG, JPEG, GIF, WebP, PDF, Word, Markdown, Text, CSV oder HTML.",
+      "tooLarge": "\"{{name}}\" ist größer als 10 MB.",
+      "totalTooLarge": "Anhänge dürfen pro Nachricht insgesamt bis zu 20 MB groß sein.",
+      "readFailed": "\"{{name}}\" konnte nicht gelesen werden.",
+      "retryPrompt": "Versuchen Sie es mit den angehängten Dateien erneut."
+    },
     "voice": {
       "start": "Nachricht diktieren",
       "stop": "Aufnahme umwandeln",
@@ -190,6 +203,9 @@
         "pointCount_one": "{{count}} Wert",
         "pointCount_other": "{{count}} Werte",
         "alt": "Diagramm: {{title}}"
+      },
+      "composed": {
+        "badge": "Übersicht"
       },
       "choices": {
         "title": "Option wählen"
@@ -263,6 +279,15 @@
         "badge": "Angaben",
         "submit": "Absenden",
         "sent": "Gesendet"
+      },
+      "connection": {
+        "badge": "Verbindung",
+        "title": "{{service}} verbinden",
+        "titleAny": "Dienst verbinden",
+        "continueMessage": "{{service}} ist verbunden. Fahre mit meiner Anfrage fort."
+      },
+      "appSetting": {
+        "badge": "App-Einstellung"
       }
     },
     "showcase": {
@@ -397,7 +422,7 @@
     "messagingHeading": "Messaging",
     "anyAppHint": "Das sind nur einige. Suchen Sie oben, dann finden Sie über 2.000 Apps, von anderen Mail-Diensten über Kalender und Notizen bis Chat.",
     "setupTitle": "Einmalige Einrichtung: Marlene mit Pipedream verbinden",
-    "setupIntro": "Marlene verbindet Ihre E-Mail-Konten über <pd>Pipedream</pd>, einen kostenlosen Dienst. Verbinden Sie so viele Konten, wie Sie wollen, auch mehrere vom selben Anbieter. Dafür brauchen Sie drei Werte aus Ihrem Pipedream-Workspace:",
+    "setupIntro": "Marlene verbindet Ihre Konten und Apps über <pd>Pipedream</pd>, einen kostenlosen Dienst, auch mehrere Konten desselben Anbieters. Dafür brauchen Sie drei Werte aus Ihrem Pipedream-Workspace:",
     "setupStep1": "Erstellen Sie ein kostenloses Pipedream-Konto.",
     "setupStep2": "Erstellen Sie unter Settings → API einen OAuth-Client und tragen Sie dessen Client ID und Client Secret unten ein.",
     "setupStep3": "Erstellen Sie ein Projekt (Name beliebig) und tragen Sie unten dessen URL oder die proj_…-ID ein.",
@@ -492,6 +517,12 @@
     },
     "noAccounts": "Noch keine E-Mail-Konten verbunden. Nutzen Sie die Knöpfe oben. Pro Anbieter geht auch mehr als ein Konto.",
     "finishConnecting": "Schließen Sie die Verbindung im neuen Browser-Tab ab. Das Konto erscheint dann automatisch hier.",
+    "connectTimedOut": "Das Verbindungsfenster ist abgelaufen. Versuchen Sie es erneut.",
+    "pipedreamSetupOption": "Pipedream einrichten",
+    "pipedreamSetupDetail": "Einmalige Einrichtung für E-Mail und mehr als 2.000 weitere Apps.",
+    "connected": "{{service}} ist verbunden.",
+    "connectedHint": "Der Assistent kann den Dienst ab Ihrer nächsten Nachricht verwenden.",
+    "continue": "Weiter",
     "unhealthy": "Problem",
     "disconnect": "Trennen",
     "disconnectConfirm": "Dieses Konto trennen?",
@@ -894,6 +925,15 @@
       "dark": "Dunkel",
       "system": "System"
     },
+    "accentColor": {
+      "label": "Akzentfarbe",
+      "description": "Legt die Akzentfarbe in Marlene fest.",
+      "violet": "Violett",
+      "blue": "Blau",
+      "teal": "Türkis",
+      "rose": "Rosa",
+      "amber": "Bernstein"
+    },
     "timezone": {
       "label": "Zeitzone",
       "description": "Automatisierungen laufen und Zeiten werden in dieser Zeitzone angezeigt",
@@ -901,7 +941,8 @@
     },
     "launchAtLogin": {
       "label": "Mit dem Computer starten",
-      "description": "Marlene startet beim Anmelden im Hintergrund, damit geplante Automatisierungen laufen, ohne dass Sie die App vorher öffnen."
+      "description": "Marlene startet beim Anmelden im Hintergrund, damit geplante Automatisierungen laufen, ohne dass Sie die App vorher öffnen.",
+      "desktopOnly": "In der Desktop-App verfügbar"
     },
     "export": {
       "label": "Vollständiger Export",

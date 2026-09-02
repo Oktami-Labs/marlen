@@ -1,3 +1,4 @@
+import type { AppSettingCard } from "./appSettings.js";
 import type { LeadStatus } from "./index.js";
 
 export interface EmailRef {
@@ -184,6 +185,42 @@ export interface SourceItem {
   age?: string;
 }
 
+export interface ComposedMetric {
+  label: string;
+  value: string;
+  detail?: string;
+  tone?: ChartTone;
+}
+
+export interface ComposedKeyValue {
+  label: string;
+  value: string;
+}
+
+export interface ComposedListItem {
+  title: string;
+  detail?: string;
+  tone?: ChartTone;
+}
+
+export type ComposedCardBlock =
+  | { kind: "markdown"; content: string }
+  | { kind: "metrics"; items: ComposedMetric[] }
+  | { kind: "key_value"; items: ComposedKeyValue[] }
+  | { kind: "list"; ordered?: boolean; items: ComposedListItem[] }
+  | { kind: "table"; columns: string[]; rows: string[][] }
+  | {
+      kind: "chart";
+      chartType: ChartKind;
+      title?: string;
+      unit?: string;
+      points: ChartPoint[];
+    };
+
+export type ComposedCardAction =
+  | { kind: "reply"; label: string; message: string }
+  | { kind: "open_url"; label: string; url: string };
+
 export type AgentCard =
   | {
       kind: "email_draft";
@@ -200,6 +237,14 @@ export type AgentCard =
       unit?: string;
       points: ChartPoint[];
     }
+  | {
+      kind: "composed";
+      version: 1;
+      title: string;
+      fallback: string;
+      blocks: ComposedCardBlock[];
+      actions?: ComposedCardAction[];
+    }
   | { kind: "message_draft"; channel: string; targetLabel: string; body: string; draftId: string }
   | {
       kind: "attachments";
@@ -212,6 +257,8 @@ export type AgentCard =
       question: string;
       options: ChoiceOption[];
     }
+  | { kind: "connection"; query: string }
+  | AppSettingCard
   | { kind: "sources"; query: string; items: SourceItem[] }
   | { kind: "mail_sources"; query: string; items: MailSearchHit[] }
   | { kind: "form"; title: string; fields: FormField[] }

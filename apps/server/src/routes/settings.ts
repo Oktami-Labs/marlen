@@ -12,16 +12,12 @@ import {
   getLanguageSetting,
   getTimezoneSetting,
   isValidTimezone,
-  LANGUAGE_SETTING_KEY,
   setAccountColors,
   setAccountPermissions,
   setAccountSignatures,
   setFileAccessSettings,
-  setSetting,
-  TIMEZONE_SETTING_KEY,
 } from "../db/settings.js";
-import { rescheduleNightlyLearn } from "../email/learn/service.js";
-import { rescheduleAll } from "../services/automations/scheduler.js";
+import { setLanguagePreference, setTimezonePreference } from "../services/appPreferences.js";
 import { fetchInlineImage } from "../services/signatureImage.js";
 
 const languageBody = Type.Object({ language: Type.String() });
@@ -102,8 +98,7 @@ export const settingsRoutes: FastifyPluginAsyncTypebox = async (app) => {
     if (!isLanguage(language)) {
       throw badRequest(`language must be one of: ${SUPPORTED_LANGUAGES.join(", ")}`);
     }
-    await setSetting(LANGUAGE_SETTING_KEY, language);
-    resetSessions();
+    await setLanguagePreference(language);
     return { language };
   });
 
@@ -114,11 +109,7 @@ export const settingsRoutes: FastifyPluginAsyncTypebox = async (app) => {
     if (!isValidTimezone(timezone)) {
       throw badRequest("timezone must be a valid IANA timezone");
     }
-    await setSetting(TIMEZONE_SETTING_KEY, timezone);
-    // node-cron captures timezone when each task is created.
-    await rescheduleAll();
-    await rescheduleNightlyLearn();
-    resetSessions();
+    await setTimezonePreference(timezone);
     return { timezone };
   });
 

@@ -12,7 +12,7 @@ import { LoadingRow, Notice } from "@/components/ui/feedback";
 import { LinkButton } from "@/components/ui/link-button";
 import { StepCircle } from "@/components/ui/step-circle";
 import { Accounts } from "@/features/connections/Accounts";
-import { PipedreamWizard } from "@/features/connections/ConnectionsPanel";
+import { PipedreamWizard } from "@/features/connections/PipedreamWizard";
 import { Providers } from "@/features/settings/Providers";
 import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";

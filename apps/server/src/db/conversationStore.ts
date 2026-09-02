@@ -1,5 +1,6 @@
+import { eq } from "drizzle-orm";
 import { emitServerEvent } from "../core/events.js";
-import { db, lazyTransaction, schema, sqlite } from "./index.js";
+import { db, schema } from "./index.js";
 
 /**
  * Create/delete lifecycle for the Conversation row (a chat, id = a uuid, or an
@@ -30,15 +31,17 @@ export async function ensureConversation(
   return created;
 }
 
-// Deletes a conversation and its messages in one transaction, so a crash
-// between the two deletes can't leave one without the other. agent_drafts rows
-// are left alone deliberately: a snapshot's conversationId is a navigation
-// link, not an ownership edge, and a dangling link degrades to "no link" at
-// read time.
-const deleteConversationRows = lazyTransaction((id: string) => {
-  sqlite.prepare("DELETE FROM messages WHERE conversation_id = ?").run(id);
-  sqlite.prepare("DELETE FROM conversations WHERE id = ?").run(id);
-});
+// Deletes a conversation, its messages, and their attachments in one
+// transaction. agent_drafts rows are left alone deliberately: a snapshot's
+// conversationId is a navigation link, not an ownership edge, and a dangling
+// link degrades to "no link" at read time.
+function deleteConversationRows(id: string): void {
+  db.transaction((tx) => {
+    tx.delete(schema.chatAttachments).where(eq(schema.chatAttachments.conversationId, id)).run();
+    tx.delete(schema.messages).where(eq(schema.messages.conversationId, id)).run();
+    tx.delete(schema.conversations).where(eq(schema.conversations.id, id)).run();
+  });
+}
 
 export function deleteConversationCascade(id: string): void {
   deleteConversationRows(id);

@@ -61,12 +61,14 @@ export async function setSetting(key: string, value: string): Promise<void> {
     .values({ key, value })
     .onConflictDoUpdate({ target: schema.settings.key, set: { value } });
   entries.set(key, value);
+  emitServerEvent("settings");
 }
 
 export async function deleteSetting(key: string): Promise<void> {
   const entries = await loadCache();
   await db.delete(schema.settings).where(eq(schema.settings.key, key));
   entries.delete(key);
+  emitServerEvent("settings");
 }
 
 export const LANGUAGE_SETTING_KEY = "app.language";

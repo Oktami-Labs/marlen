@@ -107,6 +107,19 @@ export const pipedreamRoutes: FastifyPluginAsyncTypebox = async (app) => {
     }
   });
 
+  app.post("/api/pipedream/accounts/sync", async (): Promise<ConnectedAccount[]> => {
+    try {
+      const accounts = await listAccounts({ refresh: true });
+      // OAuth finishes in an external browser. Once the chat detects the new
+      // account, rebuild its session so the corresponding tools are available.
+      resetSessions();
+      emitServerEvent("accounts");
+      return accounts;
+    } catch (error) {
+      throw upstreamError(errorMessage(error), error);
+    }
+  });
+
   app.get("/api/pipedream/apps", { schema: { querystring: appsQuerystring } }, async (req) => {
     const q = req.query.q?.trim() || "";
     try {

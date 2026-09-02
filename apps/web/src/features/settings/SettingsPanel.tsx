@@ -1,10 +1,4 @@
-import {
-  type AppStatus,
-  isLanguage,
-  isSetupComplete,
-  LANGUAGE_LABELS,
-  SUPPORTED_LANGUAGES,
-} from "@marlen/shared";
+import { type AppStatus, isSetupComplete } from "@marlen/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
   Cable,
@@ -28,20 +22,24 @@ import { Section } from "@/components/ui/section-header";
 import { Select } from "@/components/ui/select";
 import { SettingRow } from "@/components/ui/setting-row";
 import { Spinner } from "@/components/ui/spinner";
-import { Switch } from "@/components/ui/switch";
 import { ConnectionsPanel } from "@/features/connections/ConnectionsPanel";
 import { useOnOfficeStatus } from "@/features/connections/OnOffice";
 import { useWhatsAppStatus } from "@/features/connections/WhatsApp";
 import { AboutPanel } from "@/features/settings/About";
+import { AppearanceControl } from "@/features/settings/AppearanceControl";
+import {
+  AccentColorControl,
+  LanguageControl,
+  LaunchAtLoginControl,
+  QuickActionsControl,
+  TimezoneControl,
+  useCurrentTimezone,
+} from "@/features/settings/AppPreferenceControls";
 import { FileAccessSection } from "@/features/settings/FileAccessSection";
 import { Providers } from "@/features/settings/Providers";
 import { useAccountColors } from "@/lib/accounts";
 import { api } from "@/lib/api";
 import { desktopBridge } from "@/lib/desktop";
-import { rememberLanguage } from "@/lib/i18n";
-import { type QuickActionMode, useQuickActionMode } from "@/lib/quickActions";
-import { toast } from "@/lib/toast";
-import { useTheme } from "@/lib/useTheme";
 import { cn, errorMessage, withViewTransition } from "@/lib/utils";
 
 const SETTINGS_VIEWS = [
@@ -238,6 +236,7 @@ function GeneralSettings() {
     <Section index={0} className="animate-in-up" title={t("settings.sections.preferences.title")}>
       <Card padding="sm" className="flex flex-col gap-1">
         <AppearanceRow />
+        <AccentColorRow />
         <LanguageRow />
         <TimezoneRow />
         <QuickActionsRow />
@@ -308,168 +307,57 @@ function useSaveState() {
   return { state, error, run };
 }
 
-function PreferenceRow({
-  id,
-  label,
-  description,
-  error,
-  saving,
-  saved,
-  value,
-  onChange,
-  options,
-  searchable,
-}: {
-  id: string;
-  label: string;
-  description: React.ReactNode;
-  error?: string | null;
-  saving?: boolean;
-  saved?: boolean;
-  value: string;
-  onChange: (value: string) => void;
-  options: { value: string; label: string }[];
-  searchable?: boolean;
-}) {
+function AppearanceRow() {
   const { t } = useTranslation();
+
   return (
     <SettingRow
       bare
-      htmlFor={id}
-      label={label}
-      description={description}
-      error={error}
+      htmlFor="settings-appearance"
+      label={t("settings.appearance.label")}
+      description={t("settings.appearance.description")}
       className="rounded-lg px-2 py-2.5"
     >
-      {saving ? (
-        <Spinner className="h-3.5 w-3.5 text-muted-foreground" />
-      ) : saved ? (
-        <span className="inline-flex items-center gap-1 text-xs text-success">
-          <Check className="h-3.5 w-3.5" />
-          {t("common.saved")}
-        </span>
-      ) : null}
-      <Select
-        id={id}
-        aria-label={label}
-        className="w-full @md:w-52"
-        value={value}
-        onChange={onChange}
-        options={options}
-        searchable={searchable}
-      />
+      <AppearanceControl variant="select" id="settings-appearance" className="w-full @md:w-52" />
     </SettingRow>
   );
 }
 
-function AppearanceRow() {
+function AccentColorRow() {
   const { t } = useTranslation();
-  const [pref, , setPref] = useTheme();
 
   return (
-    <PreferenceRow
-      id="settings-appearance"
-      label={t("settings.appearance.label")}
-      description={t("settings.appearance.description")}
-      value={pref}
-      onChange={(value) => {
-        if (value === "light" || value === "dark" || value === "system") setPref(value);
-      }}
-      options={[
-        { value: "light", label: t("settings.appearance.light") },
-        { value: "dark", label: t("settings.appearance.dark") },
-        { value: "system", label: t("settings.appearance.system") },
-      ]}
-    />
+    <SettingRow
+      bare
+      htmlFor="settings-accent-color"
+      label={t("settings.accentColor.label")}
+      description={t("settings.accentColor.description")}
+      className="rounded-lg px-2 py-2.5"
+    >
+      <AccentColorControl id="settings-accent-color" className="w-full @md:w-52" />
+    </SettingRow>
   );
 }
 
 function LanguageRow() {
-  const { t, i18n } = useTranslation();
-  const { state, error, run } = useSaveState();
-
-  const persist = async (value: string) => {
-    if (!isLanguage(value) || value === i18n.language) return;
-    await run(async () => {
-      const { language } = await api.setLanguage(value);
-      await i18n.changeLanguage(language);
-      rememberLanguage(language);
-    });
-  };
+  const { t } = useTranslation();
 
   return (
-    <PreferenceRow
-      id="settings-language"
+    <SettingRow
+      bare
+      htmlFor="settings-language"
       label={t("settings.sections.language.title")}
       description={t("settings.sections.language.description")}
-      error={state === "error" ? error : null}
-      saving={state === "saving"}
-      saved={state === "saved"}
-      value={i18n.language}
-      onChange={(value) => void persist(value)}
-      options={SUPPORTED_LANGUAGES.map((code) => ({
-        value: code,
-        label: LANGUAGE_LABELS[code],
-      }))}
-      searchable
-    />
+      className="rounded-lg px-2 py-2.5"
+    >
+      <LanguageControl id="settings-language" className="w-full @md:w-52" />
+    </SettingRow>
   );
-}
-
-function timezoneOffset(tz: string): string {
-  try {
-    return (
-      new Intl.DateTimeFormat("en", { timeZone: tz, timeZoneName: "shortOffset" })
-        .formatToParts(new Date())
-        .find((p) => p.type === "timeZoneName")?.value ?? ""
-    );
-  } catch {
-    return "";
-  }
-}
-
-// Build the expensive timezone list only when Settings needs it.
-let timezoneOptionsCache: { value: string; label: string }[] | null = null;
-
-function getTimezoneOptions(): { value: string; label: string }[] {
-  if (timezoneOptionsCache) return timezoneOptionsCache;
-  let zones: string[];
-  try {
-    zones = Intl.supportedValuesOf("timeZone");
-  } catch {
-    zones = [Intl.DateTimeFormat().resolvedOptions().timeZone];
-  }
-  timezoneOptionsCache = zones.map((tz) => {
-    const name = tz.replace(/_/g, " ");
-    const offset = timezoneOffset(tz);
-    return { value: tz, label: offset ? `${name} (${offset})` : name };
-  });
-  return timezoneOptionsCache;
 }
 
 function TimezoneRow() {
   const { t, i18n } = useTranslation();
-  const options = React.useMemo(getTimezoneOptions, []);
-  const [timezone, setTimezone] = React.useState<string | null>(null);
-  const { state, error, run } = useSaveState();
-
-  React.useEffect(() => {
-    api
-      .timezone()
-      .then((r) => setTimezone(r.timezone))
-      .catch(() => {});
-  }, []);
-
-  const fallback = React.useMemo(() => Intl.DateTimeFormat().resolvedOptions().timeZone, []);
-  const value = timezone ?? fallback;
-
-  const persist = async (next: string) => {
-    if (next === value) return;
-    await run(async () => {
-      const { timezone: saved } = await api.setTimezone(next);
-      setTimezone(saved);
-    });
-  };
+  const timezone = useCurrentTimezone();
 
   let localTime = "";
   try {
@@ -477,7 +365,7 @@ function TimezoneRow() {
       hour: "2-digit",
       minute: "2-digit",
       hourCycle: "h23",
-      timeZone: value,
+      timeZone: timezone,
     }).format(new Date());
   } catch {
     // Some runtimes do not know every IANA zone.
@@ -488,28 +376,20 @@ function TimezoneRow() {
     : t("settings.timezone.description");
 
   return (
-    <PreferenceRow
-      id="settings-timezone"
+    <SettingRow
+      bare
+      htmlFor="settings-timezone"
       label={t("settings.timezone.label")}
       description={description}
-      error={state === "error" ? error : null}
-      saving={state === "saving"}
-      saved={state === "saved"}
-      value={value}
-      onChange={(next) => void persist(next)}
-      options={options}
-      searchable
-    />
+      className="rounded-lg px-2 py-2.5"
+    >
+      <TimezoneControl id="settings-timezone" className="w-full @md:w-52" />
+    </SettingRow>
   );
 }
 
 function QuickActionsRow() {
   const { t } = useTranslation();
-  const [mode, setMode] = useQuickActionMode();
-  const choices: { value: QuickActionMode; label: string }[] = [
-    { value: "send", label: t("settings.sections.quickActions.send") },
-    { value: "prefill", label: t("settings.sections.quickActions.prefill") },
-  ];
 
   return (
     <SettingRow
@@ -518,65 +398,14 @@ function QuickActionsRow() {
       description={t("settings.sections.quickActions.description")}
       className="rounded-lg px-2 py-2.5"
     >
-      <fieldset className="flex w-full min-w-0 rounded-lg border-0 bg-surface-2 p-1 @md:w-auto">
-        <legend className="sr-only">{t("settings.sections.quickActions.title")}</legend>
-        {choices.map((choice) => {
-          const selected = choice.value === mode;
-          return (
-            <label
-              key={choice.value}
-              className="relative min-w-0 flex-1 cursor-pointer @md:flex-none"
-            >
-              <input
-                type="radio"
-                name="settings-quick-actions"
-                value={choice.value}
-                checked={selected}
-                onChange={() => setMode(choice.value)}
-                className="peer sr-only"
-              />
-              <span
-                className={cn(
-                  "flex h-7 items-center justify-center whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-surface-2",
-                  selected
-                    ? "bg-primary text-primary-foreground"
-                    : "text-muted-foreground hover:text-foreground",
-                )}
-              >
-                {choice.label}
-              </span>
-            </label>
-          );
-        })}
-      </fieldset>
+      <QuickActionsControl id="settings-quick-actions" />
     </SettingRow>
   );
 }
 
 function LaunchAtLoginRow() {
   const { t } = useTranslation();
-  const bridge = desktopBridge();
-  const [enabled, setEnabled] = React.useState<boolean | null>(null);
-
-  React.useEffect(() => {
-    if (!bridge) return;
-    bridge
-      .getLaunchAtLogin()
-      .then(setEnabled)
-      .catch(() => setEnabled(false));
-  }, [bridge]);
-
-  if (!bridge || enabled === null) return null;
-
-  const toggle = async (next: boolean) => {
-    setEnabled(next);
-    try {
-      setEnabled(await bridge.setLaunchAtLogin(next));
-    } catch (err) {
-      setEnabled(!next);
-      toast.error(err);
-    }
-  };
+  if (!desktopBridge()) return null;
 
   return (
     <SettingRow
@@ -586,12 +415,7 @@ function LaunchAtLoginRow() {
       description={t("settings.launchAtLogin.description")}
       className="rounded-lg px-2 py-2.5"
     >
-      <Switch
-        id="settings-launch-at-login"
-        checked={enabled}
-        onCheckedChange={(next) => void toggle(next)}
-        aria-label={t("settings.launchAtLogin.label")}
-      />
+      <LaunchAtLoginControl id="settings-launch-at-login" />
     </SettingRow>
   );
 }

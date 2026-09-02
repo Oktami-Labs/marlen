@@ -8,6 +8,7 @@ import { linkDraftProposalConversation } from "../db/draftProposalStore.js";
 import { linkDraftConversation } from "../db/draftStore.js";
 import { db, schema, sqlite } from "../db/index.js";
 import { forgetSeenMail } from "../email/read/seenMail.js";
+import { attachmentModelInput, type PreparedChatAttachment } from "../services/chatAttachments.js";
 import { titleNewConversation } from "../services/conversations/title.js";
 import { readPage } from "../storage/wiki/store.js";
 import { serializeRefs } from "./emailRefs.js";
@@ -20,7 +21,6 @@ import {
   type EphemeralSessionOptions,
   getOrCreateSession,
 } from "./sessionCache.js";
-import { consumeRelevantPageIds } from "./wikiTools.js";
 
 const log = moduleLogger("turnRecorder");
 
@@ -163,6 +163,7 @@ export function _setSessionsForTest(override: TurnSessions | null): void {
 interface TurnRunOptions {
   prompt: string;
   refs?: EmailRef[];
+  attachments?: PreparedChatAttachment[];
   session: "pooled" | "ephemeral";
   ephemeral?: EphemeralSessionOptions;
   conversation: EnsureConversationInput;
@@ -193,11 +194,8 @@ function endedSilent(streamed: string, toolCalls: ChatToolCall[]): boolean {
   return streamed.slice(lastToolAt).trim() === "";
 }
 
-async function memoryIdsForTurn(
-  conversationId: string,
-  toolCalls: ChatToolCall[],
-): Promise<string[]> {
-  const ids = new Set(consumeRelevantPageIds(conversationId));
+async function memoryIdsForTurn(toolCalls: ChatToolCall[]): Promise<string[]> {
+  const ids = new Set<string>();
   for (const call of toolCalls) {
     if (call.isError) continue;
     const params = call.parameters as Record<string, unknown> | null | undefined;
@@ -268,13 +266,38 @@ export function beginTurn(conversationId: string): Turn {
 
       try {
         // Build pooled history before inserting the current prompt to avoid replaying it twice.
-        await db.insert(schema.messages).values({
-          id: randomUUID(),
-          conversationId,
-          role: "user",
-          content: opts.prompt,
-          refs: serializeRefs(opts.refs),
-          createdAt: new Date().toISOString(),
+        const messageId = randomUUID();
+        const createdAt = new Date().toISOString();
+        db.transaction((tx) => {
+          tx.insert(schema.messages)
+            .values({
+              id: messageId,
+              conversationId,
+              role: "user",
+              content: opts.prompt,
+              refs: serializeRefs(opts.refs),
+              createdAt,
+            })
+            .run();
+          if (opts.attachments && opts.attachments.length > 0) {
+            tx.insert(schema.chatAttachments)
+              .values(
+                opts.attachments.map((attachment, position) => ({
+                  id: attachment.id,
+                  messageId,
+                  conversationId,
+                  name: attachment.name,
+                  mimeType: attachment.mimeType,
+                  kind: attachment.kind,
+                  position,
+                  size: attachment.size,
+                  data: attachment.data,
+                  extractedText: attachment.kind === "document" ? attachment.extractedText : null,
+                  createdAt,
+                })),
+              )
+              .run();
+          }
         });
 
         if (opts.focusAccountId) {
@@ -296,7 +319,7 @@ export function beginTurn(conversationId: string): Turn {
         const handlers = collector.wrap(opts.handlers);
 
         const recordOutcome = async (content: string): Promise<void> => {
-          const memoryIds = await memoryIdsForTurn(conversationId, collector.toolCalls);
+          const memoryIds = await memoryIdsForTurn(collector.toolCalls);
           await db.insert(schema.messages).values({
             id: randomUUID(),
             conversationId,
@@ -323,11 +346,13 @@ export function beginTurn(conversationId: string): Turn {
 
         let text: string;
         try {
+          const attachmentInput = attachmentModelInput(opts.prompt, opts.attachments ?? []);
           text = await session.runTurn(
-            await buildTurnPrompt(opts.prompt, opts.refs, conversationId),
+            await buildTurnPrompt(attachmentInput.prompt, opts.refs, conversationId),
             handlers,
             signal,
             opts.log,
+            attachmentInput.images,
           );
           if (
             opts.requireReport &&

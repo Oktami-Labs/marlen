@@ -19,13 +19,26 @@ import {
   TurnInFlightError,
   TurnStoppedError,
 } from "../agent/turnRecorder.js";
-import { badRequest, conflict, requireRow } from "../core/errors.js";
+import { badRequest, conflict, notFound, requireRow } from "../core/errors.js";
 import { emitServerEvent } from "../core/events.js";
+import { contentDisposition, inlineForMime } from "../core/utils/fileResponse.js";
 import { errorMessage } from "../core/utils/util.js";
+import {
+  attachmentMetadata,
+  getChatAttachment,
+  listConversationAttachments,
+} from "../db/chatAttachmentStore.js";
 import { deleteConversationCascade } from "../db/conversationStore.js";
 import { db, lazyStatement, schema } from "../db/index.js";
 import { likeContains, likePattern } from "../db/like.js";
 import { buildFtsMatch } from "../db/sql.js";
+import {
+  MAX_CHAT_ATTACHMENT_BYTES,
+  MAX_CHAT_ATTACHMENTS,
+  MAX_CHAT_ATTACHMENTS_BYTES,
+  type PreparedChatAttachment,
+  prepareChatAttachments,
+} from "../services/chatAttachments.js";
 import { openSse } from "./sse.js";
 
 const conversationsQuery = Type.Object({
@@ -46,6 +59,22 @@ const chatBody = Type.Object({
   conversationId: Type.Optional(Type.String()),
   focusAccountId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   message: Type.String(),
+  attachments: Type.Optional(
+    Type.Array(
+      Type.Object({
+        id: Type.String({ minLength: 1, maxLength: 100, pattern: "^[A-Za-z0-9_-]+$" }),
+        name: Type.String({ minLength: 1, maxLength: 255 }),
+        mimeType: Type.String({ minLength: 1, maxLength: 100 }),
+        size: Type.Integer({ minimum: 1, maximum: MAX_CHAT_ATTACHMENT_BYTES }),
+        kind: Type.Union([Type.Literal("image"), Type.Literal("document")]),
+        data: Type.String({
+          minLength: 4,
+          maxLength: Math.ceil((MAX_CHAT_ATTACHMENT_BYTES * 4) / 3) + 4,
+        }),
+      }),
+      { maxItems: MAX_CHAT_ATTACHMENTS },
+    ),
+  ),
   refs: Type.Optional(
     Type.Array(
       Type.Object({
@@ -61,6 +90,8 @@ const chatBody = Type.Object({
     ),
   ),
 });
+
+const CHAT_BODY_LIMIT = Math.ceil((MAX_CHAT_ATTACHMENTS_BYTES * 4) / 3) + 1024 * 1024;
 
 const messageMatchStmt = lazyStatement(`
   SELECT DISTINCT m.conversation_id AS conversationId
@@ -246,127 +277,166 @@ export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
   }));
 
   app.get("/api/conversations/:id/messages", { schema: { params: idParams } }, async (req) => {
-    const rows = await db
-      .select()
-      .from(schema.messages)
-      .where(
-        and(
-          eq(schema.messages.conversationId, req.params.id),
-          inArray(schema.messages.role, ["user", "assistant"]),
-        ),
-      )
-      .orderBy(schema.messages.createdAt);
+    const [rows, attachmentRows] = await Promise.all([
+      db
+        .select()
+        .from(schema.messages)
+        .where(
+          and(
+            eq(schema.messages.conversationId, req.params.id),
+            inArray(schema.messages.role, ["user", "assistant"]),
+          ),
+        )
+        .orderBy(schema.messages.createdAt),
+      listConversationAttachments(req.params.id),
+    ]);
+    const attachmentsByMessage = new Map<string, ReturnType<typeof attachmentMetadata>[]>();
+    for (const attachment of attachmentRows) {
+      const existing = attachmentsByMessage.get(attachment.messageId);
+      if (existing) existing.push(attachmentMetadata(attachment));
+      else attachmentsByMessage.set(attachment.messageId, [attachmentMetadata(attachment)]);
+    }
 
     return rows.map(({ cards, toolCalls, refs, memoryIds, compactionCutoff: _, ...row }) => ({
       ...row,
       cards: parseStoredCards(cards),
       toolCalls: parseStoredToolCalls(toolCalls),
       refs: parseStoredRefs(refs),
+      attachments: attachmentsByMessage.get(row.id),
       memoryIds: memoryIds ? (JSON.parse(memoryIds) as string[]) : undefined,
     }));
   });
 
-  app.post("/api/chat", { schema: { body: chatBody } }, async (req, reply) => {
-    const message = req.body.message.trim();
-    if (!message) throw badRequest("message is required");
-
-    // Acquire the turn guard before hijacking the HTTP response.
-    const conversationId = req.body.conversationId ?? randomUUID();
-    let turn: Turn;
-    try {
-      turn = beginTurn(conversationId);
-    } catch (error) {
-      if (error instanceof TurnInFlightError) {
-        throw conflict("a reply is already in progress for this conversation");
-      }
-      throw error;
-    }
-
-    // A disconnected client does not cancel the durable turn.
-    const stream = openSse<ChatStreamEvent>(reply, () => {});
-    const send = (event: ChatStreamEvent) => stream.send(event);
-
-    let streamedText = "";
-    const live = startLiveTurn(conversationId);
-    try {
-      emitServerEvent("conversations");
-
-      send({ type: "conversation", conversationId });
-
-      let thinkingSent = false;
-      const { text } = await turn.run({
-        prompt: message,
-        refs: req.body.refs,
-        focusAccountId: req.body.focusAccountId,
-        session: "pooled",
-        conversation: { type: "chat", title: message.slice(0, 80) },
-        handlers: {
-          onTextDelta: (delta) => {
-            streamedText += delta;
-            live.text(delta);
-            send({ type: "text_delta", delta });
-          },
-          onThinking: () => {
-            if (!thinkingSent) {
-              thinkingSent = true;
-              live.thinking();
-              send({ type: "thinking" });
-            }
-          },
-          onToolStart: (toolCallId, toolName, toolLabel, parameters) => {
-            live.toolStart({
-              id: toolCallId,
-              name: toolName,
-              label: toolLabel,
-              isError: false,
-              done: false,
-              parameters,
-              contentOffset: streamedText.length,
-            });
-            send({
-              type: "tool_start",
-              toolCallId,
-              toolName,
-              toolLabel,
-              parameters,
-              contentOffset: streamedText.length,
-            });
-          },
-          onToolUpdate: (toolCallId, toolName, detail) => {
-            live.toolUpdate(toolCallId, detail);
-            send({ type: "tool_update", toolCallId, toolName, detail });
-          },
-          onToolEnd: (toolCallId, toolName, isError, result) => {
-            live.toolEnd(toolCallId, isError, result);
-            send({ type: "tool_end", toolCallId, toolName, isError, result });
-          },
-          onCard: (toolCallId, card) => {
-            live.card(toolCallId, card);
-            send({ type: "card", toolCallId, card });
-          },
-        },
-        log: req.log.child({ conversationId }),
-      });
-
-      send({ type: "done", text });
-    } catch (error) {
-      if (error instanceof TurnStoppedError) {
-        send({ type: "stopped", text: error.text });
-        return;
-      }
-      req.log.error(error, "chat failed");
-      const message = errorMessage(error);
-      send(
-        isRateLimitFailure(message)
-          ? { type: "error", message, kind: "rate_limit" }
-          : { type: "error", message },
-      );
-    } finally {
-      live.finish();
-      emitServerEvent("conversations");
-      stream.end();
-    }
+  app.get("/api/chat/attachments/:id", { schema: { params: idParams } }, async (req, reply) => {
+    const attachment = await getChatAttachment(req.params.id);
+    if (!attachment) throw notFound("attachment not found");
+    const disposition = contentDisposition(
+      inlineForMime(attachment.mimeType) ? "inline" : "attachment",
+      attachment.name,
+    );
+    return reply
+      .header("Content-Type", attachment.mimeType)
+      .header("Content-Disposition", disposition)
+      .send(attachment.data);
   });
+
+  app.post(
+    "/api/chat",
+    { bodyLimit: CHAT_BODY_LIMIT, schema: { body: chatBody } },
+    async (req, reply) => {
+      const message = req.body.message.trim();
+      let attachments: PreparedChatAttachment[];
+      try {
+        attachments = await prepareChatAttachments(req.body.attachments);
+      } catch (error) {
+        throw badRequest(errorMessage(error));
+      }
+      if (!message && attachments.length === 0) {
+        throw badRequest("message or attachment is required");
+      }
+
+      // Acquire the turn guard before hijacking the HTTP response.
+      const conversationId = req.body.conversationId ?? randomUUID();
+      let turn: Turn;
+      try {
+        turn = beginTurn(conversationId);
+      } catch (error) {
+        if (error instanceof TurnInFlightError) {
+          throw conflict("a reply is already in progress for this conversation");
+        }
+        throw error;
+      }
+
+      // A disconnected client does not cancel the durable turn.
+      const stream = openSse<ChatStreamEvent>(reply, () => {});
+      const send = (event: ChatStreamEvent) => stream.send(event);
+
+      let streamedText = "";
+      const live = startLiveTurn(conversationId);
+      try {
+        emitServerEvent("conversations");
+
+        send({ type: "conversation", conversationId });
+
+        let thinkingSent = false;
+        const { text } = await turn.run({
+          prompt: message,
+          refs: req.body.refs,
+          attachments,
+          focusAccountId: req.body.focusAccountId,
+          session: "pooled",
+          conversation: {
+            type: "chat",
+            title: (message || attachments.map(({ name }) => name).join(", ")).slice(0, 80),
+          },
+          handlers: {
+            onTextDelta: (delta) => {
+              streamedText += delta;
+              live.text(delta);
+              send({ type: "text_delta", delta });
+            },
+            onThinking: () => {
+              if (!thinkingSent) {
+                thinkingSent = true;
+                live.thinking();
+                send({ type: "thinking" });
+              }
+            },
+            onToolStart: (toolCallId, toolName, toolLabel, parameters) => {
+              live.toolStart({
+                id: toolCallId,
+                name: toolName,
+                label: toolLabel,
+                isError: false,
+                done: false,
+                parameters,
+                contentOffset: streamedText.length,
+              });
+              send({
+                type: "tool_start",
+                toolCallId,
+                toolName,
+                toolLabel,
+                parameters,
+                contentOffset: streamedText.length,
+              });
+            },
+            onToolUpdate: (toolCallId, toolName, detail) => {
+              live.toolUpdate(toolCallId, detail);
+              send({ type: "tool_update", toolCallId, toolName, detail });
+            },
+            onToolEnd: (toolCallId, toolName, isError, result) => {
+              live.toolEnd(toolCallId, isError, result);
+              send({ type: "tool_end", toolCallId, toolName, isError, result });
+            },
+            onCard: (toolCallId, card) => {
+              live.card(toolCallId, card);
+              send({ type: "card", toolCallId, card });
+            },
+          },
+          log: req.log.child({ conversationId }),
+        });
+
+        send({ type: "done", text });
+      } catch (error) {
+        if (error instanceof TurnStoppedError) {
+          send({ type: "stopped", text: error.text });
+          return;
+        }
+        req.log.error(error, "chat failed");
+        const message = errorMessage(error);
+        send(
+          isRateLimitFailure(message)
+            ? { type: "error", message, kind: "rate_limit" }
+            : { type: "error", message },
+        );
+      } finally {
+        live.finish();
+        emitServerEvent("conversations");
+        stream.end();
+      }
+    },
+  );
 
   app.post("/api/chat/:id/stop", { schema: { params: idParams } }, async (req) => {
     return { stopped: stopTurn(req.params.id) };

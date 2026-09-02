@@ -1,11 +1,17 @@
-import type { ChatToolCall, EmailRef } from "@marlen/shared";
+import type {
+  ChatAttachmentKind,
+  ChatAttachmentUpload,
+  ChatToolCall,
+  EmailRef,
+} from "@marlen/shared";
 import type { ParseKeys } from "i18next";
-import { ArrowDown, Plus, Quote, Send, Square } from "lucide-react";
+import { ArrowDown, Paperclip, Plus, Quote, Send, Square } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
 import { LoadingRow, Notice } from "@/components/ui/feedback";
 import { AgentAvatar } from "@/features/chat/AgentAvatar";
+import { AttachmentChips } from "@/features/chat/composer/AttachmentChips";
 import { GroundingMenu } from "@/features/chat/composer/GroundingMenu";
 import { RefChips } from "@/features/chat/composer/RefChips";
 import { SlashMenu } from "@/features/chat/composer/SlashMenu";
@@ -31,6 +37,60 @@ import { useAppVersion } from "@/lib/version";
 
 const SHOWCASE_COMMAND = "/showcase";
 const SYSTEM_PROMPT_COMMAND = "/sys";
+const NEW_ATTACHMENT_DRAFT = "new";
+const MAX_ATTACHMENTS = 5;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENTS_BYTES = 20 * 1024 * 1024;
+const ATTACHMENT_ACCEPT =
+  "image/png,image/jpeg,image/gif,image/webp,.pdf,.docx,.md,.markdown,.txt,.csv,.html,.htm";
+
+const ATTACHMENT_TYPES = {
+  ".png": { kind: "image", mimeType: "image/png" },
+  ".jpg": { kind: "image", mimeType: "image/jpeg" },
+  ".jpeg": { kind: "image", mimeType: "image/jpeg" },
+  ".gif": { kind: "image", mimeType: "image/gif" },
+  ".webp": { kind: "image", mimeType: "image/webp" },
+  ".pdf": { kind: "document", mimeType: "application/pdf" },
+  ".docx": {
+    kind: "document",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  },
+  ".md": { kind: "document", mimeType: "text/plain" },
+  ".markdown": { kind: "document", mimeType: "text/plain" },
+  ".txt": { kind: "document", mimeType: "text/plain" },
+  ".csv": { kind: "document", mimeType: "text/plain" },
+  ".html": { kind: "document", mimeType: "text/plain" },
+  ".htm": { kind: "document", mimeType: "text/plain" },
+} satisfies Record<string, { kind: ChatAttachmentKind; mimeType: string }>;
+
+function attachmentType(file: File): { kind: ChatAttachmentKind; mimeType: string } | null {
+  const extension = file.name.toLowerCase().match(/\.[^.]+$/)?.[0];
+  const byExtension = extension
+    ? ATTACHMENT_TYPES[extension as keyof typeof ATTACHMENT_TYPES]
+    : null;
+  if (byExtension) return byExtension;
+  const mimeType = file.type.toLowerCase().split(";", 1)[0];
+  return (
+    Object.values(ATTACHMENT_TYPES).find(
+      (candidate) => candidate.kind === "image" && candidate.mimeType === mimeType,
+    ) ?? null
+  );
+}
+
+function fileBase64(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onerror = () => reject(reader.error ?? new Error("file read failed"));
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("file read failed"));
+        return;
+      }
+      resolve(reader.result.slice(reader.result.indexOf(",") + 1));
+    };
+    reader.readAsDataURL(file);
+  });
+}
 
 interface PendingSend extends QueuedMessage {
   refs?: EmailRef[];
@@ -60,6 +120,10 @@ export function ChatPanel({
 }) {
   const { t } = useTranslation();
   const [queue, setQueue] = React.useState<PendingSend[]>([]);
+  const [attachmentDrafts, setAttachmentDrafts] = React.useState<
+    Record<string, ChatAttachmentUpload[]>
+  >({});
+  const [attachmentReads, setAttachmentReads] = React.useState(0);
   const { colors: accountColors } = useAccountColors({ withAccounts: false });
   const viewportRef = React.useRef<HTMLDivElement>(null);
   const textareaRef = React.useRef<HTMLTextAreaElement>(null);
@@ -72,6 +136,70 @@ export function ChatPanel({
     pendingFocusAccountId,
   });
   const { text: input, setText: setInput, ...composerRefs } = useComposerDraft(runs.conversationId);
+  const attachmentDraftKey = runs.conversationId ?? NEW_ATTACHMENT_DRAFT;
+  const attachments = attachmentDrafts[attachmentDraftKey] ?? [];
+  const fileInputRef = React.useRef<HTMLInputElement>(null);
+
+  const addFiles = async (files: File[]) => {
+    if (files.length === 0) return;
+    const targetKey = attachmentDraftKey;
+    const existing = attachmentDrafts[targetKey] ?? [];
+    const added: ChatAttachmentUpload[] = [];
+    let totalBytes = existing.reduce((total, attachment) => total + attachment.size, 0);
+    setAttachmentReads((count) => count + 1);
+    try {
+      for (const file of files) {
+        if (existing.length + added.length >= MAX_ATTACHMENTS) {
+          toast.error(t("chat.attachments.tooMany", { count: MAX_ATTACHMENTS }));
+          break;
+        }
+        const type = attachmentType(file);
+        if (!type) {
+          toast.error(t("chat.attachments.unsupported", { name: file.name }));
+          continue;
+        }
+        if (file.size === 0 || file.size > MAX_ATTACHMENT_BYTES) {
+          toast.error(t("chat.attachments.tooLarge", { name: file.name }));
+          continue;
+        }
+        if (totalBytes + file.size > MAX_ATTACHMENTS_BYTES) {
+          toast.error(t("chat.attachments.totalTooLarge"));
+          break;
+        }
+        try {
+          added.push({
+            id: crypto.randomUUID(),
+            name: file.name,
+            mimeType: type.mimeType,
+            size: file.size,
+            kind: type.kind,
+            data: await fileBase64(file),
+          });
+          totalBytes += file.size;
+        } catch {
+          toast.error(t("chat.attachments.readFailed", { name: file.name }));
+        }
+      }
+      if (added.length > 0) {
+        setAttachmentDrafts((current) => ({
+          ...current,
+          [targetKey]: [...(current[targetKey] ?? []), ...added].slice(0, MAX_ATTACHMENTS),
+        }));
+      }
+    } finally {
+      setAttachmentReads((count) => count - 1);
+      textareaRef.current?.focus();
+    }
+  };
+
+  const removeAttachment = (id: string) => {
+    setAttachmentDrafts((current) => ({
+      ...current,
+      [attachmentDraftKey]: (current[attachmentDraftKey] ?? []).filter(
+        (candidate) => candidate.id !== id,
+      ),
+    }));
+  };
 
   const isPage = layout === "page";
   const transcriptShown = (isPage || !historyOpen) && !runs.restoring && runs.messages.length > 0;
@@ -193,49 +321,72 @@ export function ChatPanel({
     }
   };
 
-  const sendText = async (message: string, sendRefs?: EmailRef[]): Promise<boolean> => {
-    if (!message || runs.busy) return true;
+  const sendText = async (item: PendingSend): Promise<boolean> => {
+    if ((!item.text && !item.attachments?.length) || runs.busy) return true;
     setHistoryOpen(false);
 
-    if (import.meta.env.DEV && message.toLowerCase() === SHOWCASE_COMMAND) {
-      await showcase(message);
+    if (
+      !item.attachments?.length &&
+      import.meta.env.DEV &&
+      item.text.toLowerCase() === SHOWCASE_COMMAND
+    ) {
+      await showcase(item.text);
       return true;
     }
-    if (message.toLowerCase() === SYSTEM_PROMPT_COMMAND) {
-      await showSystemPrompt(message);
+    if (!item.attachments?.length && item.text.toLowerCase() === SYSTEM_PROMPT_COMMAND) {
+      await showSystemPrompt(item.text);
       return true;
     }
-    return runs.send(message, sendRefs);
+    return runs.send({ message: item.text, refs: item.refs, attachments: item.attachments });
   };
 
-  const restoreDraft = (message: string, sendRefs?: EmailRef[]) => {
-    setInput((current) => (current ? `${message}\n\n${current}` : message));
-    for (const ref of sendRefs ?? []) composerRefs.add(ref);
+  const restoreDraft = (item: PendingSend) => {
+    setInput((current) =>
+      item.text && current ? `${item.text}\n\n${current}` : item.text || current,
+    );
+    for (const ref of item.refs ?? []) composerRefs.add(ref);
+    const restoredAttachments = item.attachments;
+    if (restoredAttachments?.length) {
+      setAttachmentDrafts((current) => ({
+        ...current,
+        [attachmentDraftKey]: [
+          ...restoredAttachments,
+          ...(current[attachmentDraftKey] ?? []).filter(
+            (attachment) => !restoredAttachments.some(({ id }) => id === attachment.id),
+          ),
+        ],
+      }));
+    }
     textareaRef.current?.focus();
   };
 
   // Local commands may await before marking the run busy.
   const sendingRef = React.useRef(false);
 
-  const startSend = (message: string, sendRefs?: EmailRef[]) => {
+  const startSend = (item: PendingSend) => {
     sendingRef.current = true;
-    void sendText(message, sendRefs)
+    void sendText(item)
       .then((accepted) => {
-        if (!accepted) restoreDraft(message, sendRefs);
+        if (!accepted) restoreDraft(item);
       })
       .finally(() => {
         sendingRef.current = false;
       });
   };
 
-  const sendOrQueue = (message: string, sendRefs?: EmailRef[]) => {
-    if (!message) return;
+  const sendOrQueue = (
+    message: string,
+    sendRefs?: EmailRef[],
+    sendAttachments?: ChatAttachmentUpload[],
+  ) => {
+    if (!message && !sendAttachments?.length) return;
+    const item = pendingSend(message, { refs: sendRefs, attachments: sendAttachments });
     // Do not let transcript restoration overwrite a new turn.
     if (runs.busy || runs.restoring || sendingRef.current) {
-      setQueue((pending) => [...pending, pendingSend(message, { refs: sendRefs })]);
+      setQueue((pending) => [...pending, item]);
       return;
     }
-    startSend(message, sendRefs);
+    startSend(item);
   };
 
   // Selected transcript text, offered back to the composer as a quote.
@@ -261,16 +412,20 @@ export function ChatPanel({
 
   const send = () => {
     const message = input.trim();
-    if (!message) return;
+    if ((!message && attachments.length === 0) || attachmentReads > 0) return;
     setInput("");
     const sendRefs = composerRefs.refs.length > 0 ? composerRefs.refs : undefined;
     composerRefs.clear();
-    sendOrQueue(message, sendRefs);
+    setAttachmentDrafts((current) => ({ ...current, [attachmentDraftKey]: [] }));
+    sendOrQueue(message, sendRefs, attachments.length > 0 ? attachments : undefined);
   };
 
   const retryTurn = (index: number) => {
     const asked = runs.messages[index - 1];
-    if (asked?.role === "user") sendOrQueue(asked.content, asked.refs);
+    if (asked?.role !== "user") return;
+    const message =
+      asked.content || (asked.attachments?.length ? t("chat.attachments.retryPrompt") : "");
+    sendOrQueue(message, asked.refs);
   };
 
   const continueTurn = () => sendOrQueue(t("chat.message.continuePrompt"));
@@ -285,7 +440,7 @@ export function ChatPanel({
     conversationRef.current = runs.conversationId;
     if (previous === undefined || previous === runs.conversationId || queue.length === 0) return;
     setQueue([]);
-    for (const item of [...queue].reverse()) restoreDraft(item.text, item.refs);
+    for (const item of [...queue].reverse()) restoreDraft(item);
   });
 
   // Drain one queued message only after the active turn settles.
@@ -295,7 +450,7 @@ export function ChatPanel({
     if (!next || runs.busy || runs.restoring || sendingRef.current) return;
     setQueue((pending) => pending.slice(1));
     if (next.newConversation) runs.newConversation();
-    startSend(next.text, next.refs);
+    startSend(next);
   });
 
   React.useEffect(() => {
@@ -445,10 +600,35 @@ export function ChatPanel({
             />
           </div>
         )}
+        {attachments.length > 0 && (
+          <div className="px-2 pt-1">
+            <AttachmentChips
+              attachments={attachments}
+              onRemove={(attachment) => removeAttachment(attachment.id)}
+            />
+          </div>
+        )}
+        <input
+          ref={fileInputRef}
+          type="file"
+          multiple
+          accept={ATTACHMENT_ACCEPT}
+          className="hidden"
+          onChange={(event) => {
+            void addFiles(Array.from(event.currentTarget.files ?? []));
+            event.currentTarget.value = "";
+          }}
+        />
         <textarea
           ref={textareaRef}
           value={input}
           onChange={(e) => setInput(e.target.value)}
+          onPaste={(event) => {
+            const files = Array.from(event.clipboardData.files);
+            if (files.length === 0) return;
+            event.preventDefault();
+            void addFiles(files);
+          }}
           onKeyDown={(e) => {
             // The command menu owns its keys while it is open.
             if (slash.onKeyDown(e)) {
@@ -475,7 +655,7 @@ export function ChatPanel({
             "max-h-40 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-2 py-2 text-base leading-relaxed [scrollbar-width:none] [-webkit-scrollbar]:hidden placeholder:text-muted-foreground focus:outline-none md:text-sm",
             !input && "overflow-x-hidden whitespace-nowrap",
           )}
-          aria-busy={runs.busy}
+          aria-busy={runs.busy || attachmentReads > 0}
         />
         <div className="flex items-center gap-1">
           <Button
@@ -492,6 +672,18 @@ export function ChatPanel({
           >
             <Plus />
           </Button>
+          <Button
+            type="button"
+            variant="ghost"
+            size="icon-sm"
+            className="shrink-0 rounded-xl"
+            loading={attachmentReads > 0}
+            onClick={() => fileInputRef.current?.click()}
+            aria-label={t("chat.attachments.add")}
+            title={t("chat.attachments.add")}
+          >
+            <Paperclip />
+          </Button>
           <ModelControl conversationId={runs.conversationId} className="shrink-0" />
           <VoiceInput
             className="shrink-0"
@@ -501,7 +693,7 @@ export function ChatPanel({
             }}
           />
           <div className="min-w-2 flex-1" />
-          {runs.busy && !input.trim() ? (
+          {runs.busy && !input.trim() && attachments.length === 0 ? (
             <Button
               onClick={() => void runs.stop()}
               size="icon-sm"
@@ -515,7 +707,7 @@ export function ChatPanel({
           ) : (
             <Button
               onClick={send}
-              disabled={!input.trim()}
+              disabled={(!input.trim() && attachments.length === 0) || attachmentReads > 0}
               size="icon-sm"
               className="shrink-0 rounded-xl"
               aria-label={runs.busy ? t("chat.queue.send") : t("chat.send")}

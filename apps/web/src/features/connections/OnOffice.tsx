@@ -4,7 +4,6 @@ import { Building2, Check, ExternalLink, LogOut, Plus, Settings, X } from "lucid
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { FormField } from "@/components/ui/form-field";
 import { IconButton } from "@/components/ui/icon-button";
@@ -12,6 +11,10 @@ import { Input } from "@/components/ui/input";
 import { ListRow } from "@/components/ui/list-row";
 import { OptionRow } from "@/components/ui/option-row";
 import { ArmedToggleRow } from "@/features/connections/AccountPermissions";
+import {
+  type ConnectionPresentation,
+  ConnectionSurface,
+} from "@/features/connections/ConnectionSurface";
 import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { openExternal } from "@/lib/utils";
@@ -19,8 +22,8 @@ import { openExternal } from "@/lib/utils";
 /**
  * onOffice CRM connection, a native (non-Pipedream) integration authenticated
  * with an API user's token + secret. It lives alongside the Pipedream accounts
- * in Settings → Accounts: an entry in the "add account" picker opens the token
- * form, and once configured it shows as a connected row in the accounts list.
+ * in the shared connection picker, and once configured it shows as a connected
+ * row in the accounts list.
  */
 
 /** Fetch and refresh the onOffice credential status. A failed fetch leaves status null (the entry just hides). */
@@ -189,12 +192,17 @@ export function OnOfficeForm({
   status,
   onSaved,
   onClose,
+  presentation,
 }: {
   status: OnOfficeStatus;
   onSaved: () => Promise<void>;
   onClose?: () => void;
+  presentation?: ConnectionPresentation;
 }) {
   const { t } = useTranslation();
+  const formId = React.useId();
+  const tokenInput = `${formId}-token`;
+  const secretInput = `${formId}-secret`;
   const [token, setToken] = React.useState("");
   const [secret, setSecret] = React.useState("");
   const [busy, setBusy] = React.useState(false);
@@ -219,7 +227,7 @@ export function OnOfficeForm({
   };
 
   return (
-    <Card padding="md" className="animate-in-up flex flex-col gap-4">
+    <ConnectionSurface presentation={presentation} className="animate-in-up flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         {/* Connecting needs the how-to; editing saved credentials does not. */}
         <div className="flex flex-col gap-1.5">
@@ -249,9 +257,9 @@ export function OnOfficeForm({
       )}
 
       <div className="grid gap-4 sm:grid-cols-2">
-        <FormField id="oo-token" label={t("onoffice.token")}>
+        <FormField id={tokenInput} label={t("onoffice.token")}>
           <Input
-            id="oo-token"
+            id={tokenInput}
             type="password"
             value={token}
             onChange={(e) => setToken(e.target.value)}
@@ -260,9 +268,9 @@ export function OnOfficeForm({
             autoComplete="off"
           />
         </FormField>
-        <FormField id="oo-secret" label={t("onoffice.secret")}>
+        <FormField id={secretInput} label={t("onoffice.secret")}>
           <Input
-            id="oo-secret"
+            id={secretInput}
             type="password"
             value={secret}
             onChange={(e) => setSecret(e.target.value)}
@@ -279,6 +287,6 @@ export function OnOfficeForm({
           {t("onoffice.save")}
         </Button>
       </div>
-    </Card>
+    </ConnectionSurface>
   );
 }

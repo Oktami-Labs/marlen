@@ -363,6 +363,90 @@ const CHART_LINE_CARD: AgentCard = {
   ],
 };
 
+const COMPOSED_LAUNCH_CARD: AgentCard = {
+  kind: "composed",
+  version: 1,
+  title: "Launch-Bereitschaft · Kaffeerösterei Nord",
+  fallback:
+    "Der Launch ist zu 78 % bereit. Zwei Punkte sind erledigt, Freigabe und Drucktermin stehen noch aus.",
+  blocks: [
+    {
+      kind: "metrics",
+      items: [
+        { label: "Bereit", value: "78 %", detail: "+12 % seit Montag", tone: "success" },
+        { label: "Offen", value: "2", detail: "1 Freigabe, 1 Termin", tone: "warning" },
+        { label: "Budget", value: "12.500 €", detail: "im Rahmen", tone: "accent" },
+      ],
+    },
+    {
+      kind: "markdown",
+      content: "**Nächster Engpass:** Elifs Freigabe für die Verpackung fehlt bis Donnerstag.",
+    },
+    {
+      kind: "list",
+      items: [
+        { title: "Markenkern und Logo freigegeben", tone: "success" },
+        { title: "Texte für drei Sorten eingepflegt", tone: "success" },
+        {
+          title: "Verpackungsvarianten freigeben",
+          detail: "Antwort von Elif steht aus",
+          tone: "warning",
+        },
+        { title: "Drucktermin bestätigen", detail: "Angebot liegt vor", tone: "neutral" },
+      ],
+    },
+  ],
+  actions: [
+    {
+      kind: "reply",
+      label: "Freigabe nachfassen",
+      message: "Entwirf eine kurze Nachricht an Elif und frage nach der Verpackungsfreigabe.",
+    },
+    {
+      kind: "open_url",
+      label: "Projektordner",
+      url: "https://example.com/projekte/kaffeeroesterei",
+    },
+  ],
+};
+
+const COMPOSED_COMPARISON_CARD: AgentCard = {
+  kind: "composed",
+  version: 1,
+  title: "Drei Druckangebote im Vergleich",
+  fallback:
+    "Printwerk ist mit 3.250 Euro der günstigste Anbieter. Norddruck liegt 230 Euro darüber, liefert aber zwei Tage früher.",
+  blocks: [
+    {
+      kind: "key_value",
+      items: [
+        { label: "Empfehlung", value: "Norddruck" },
+        { label: "Grund", value: "Frühester Termin bei FSC-Papier" },
+      ],
+    },
+    {
+      kind: "table",
+      columns: ["Anbieter", "Preis", "Lieferung", "Papier"],
+      rows: [
+        ["Norddruck", "3.480 €", "8 Tage", "FSC"],
+        ["Printwerk", "3.250 €", "10 Tage", "FSC"],
+        ["Colorhaus", "3.690 €", "9 Tage", "Recycling"],
+      ],
+    },
+    {
+      kind: "chart",
+      chartType: "bar",
+      title: "Preis netto",
+      unit: "€",
+      points: [
+        { label: "Norddruck", value: 3480, tone: "accent" },
+        { label: "Printwerk", value: 3250, tone: "success" },
+        { label: "Colorhaus", value: 3690, tone: "neutral" },
+      ],
+    },
+  ],
+};
+
 /** The delegate fan-out mid-flight: settled, failed, running and queued lanes,
  *  so every mark renders, including the live spinner. */
 const DELEGATION_CARD: AgentCard = {
@@ -459,6 +543,16 @@ const FORM_CARD: AgentCard = {
   ],
 };
 
+const CONNECTION_CARD: AgentCard = {
+  kind: "connection",
+  query: "Google Calendar",
+};
+
+const APP_SETTING_CARD: AgentCard = {
+  kind: "app_setting",
+  setting: "appearance",
+};
+
 /** A digest-style reply exercising the markdown vocabulary: heading, bold, mailto, list, table, link. */
 const MARKDOWN_SAMPLE = `### Was heute wichtig ist
 
@@ -523,9 +617,13 @@ export const SHOWCASE_TURNS: ShowcaseTurn[] = [
   { cards: [CHOICES_CARD] },
   { cards: [LEAD_CARD] },
   { cards: [CHART_BAR_CARD, CHART_LINE_CARD] },
+  { cards: [COMPOSED_LAUNCH_CARD] },
+  { cards: [COMPOSED_COMPARISON_CARD] },
   { contentKey: "chat.showcase.sourcesNote", cards: [SOURCES_CARD] },
   { contentKey: "chat.showcase.savedNote", cards: [WIKI_NOTE_CARD] },
   { contentKey: "chat.showcase.formNote", cards: [FORM_CARD] },
+  { cards: [CONNECTION_CARD] },
+  { cards: [APP_SETTING_CARD] },
   { content: MARKDOWN_SAMPLE },
   { thinking: true },
 ];

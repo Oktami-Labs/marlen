@@ -47,6 +47,39 @@ describe("settings", () => {
     expect(await settings.getSetting("e2e.third")).toBe("three");
   });
 
+  it("lets the agent apply a known timezone and offers the real control for an incomplete one", async () => {
+    const initial = await settings.getTimezoneSetting();
+    const { manageAppSettingTool } = await import("../../src/agent/appSettingTool.js");
+
+    try {
+      const changed = await manageAppSettingTool.execute("setting-timezone", {
+        setting: "timezone",
+        value: "America/New_York",
+      });
+
+      expect(await settings.getTimezoneSetting()).toBe("America/New_York");
+      expect(changed.details).toEqual({
+        kind: "app_setting",
+        setting: "timezone",
+        value: "America/New_York",
+      });
+      expect(changed.content).toContainEqual(
+        expect.objectContaining({ type: "text", text: expect.stringContaining("Set timezone") }),
+      );
+
+      const incomplete = await manageAppSettingTool.execute("setting-timezone-incomplete", {
+        setting: "timezone",
+        value: "america",
+      });
+
+      expect(await settings.getTimezoneSetting()).toBe("America/New_York");
+      expect(incomplete.details).toEqual({ kind: "app_setting", setting: "timezone" });
+    } finally {
+      if (initial) await settings.setSetting(settings.TIMEZONE_SETTING_KEY, initial);
+      else await settings.deleteSetting(settings.TIMEZONE_SETTING_KEY);
+    }
+  });
+
   it("keeps a pasted signature's formatting", async () => {
     const pasted =
       '<table><tr><td style="color:#333">Max Mustermann<br>' +
