@@ -9,8 +9,8 @@ drafts, and organizes mail (Gmail, Outlook / Microsoft 365, anything Pipedream
 connects), runs scheduled automations, and answers a chat. Single user, single
 machine. The Fastify server, SQLite db, and LLM agent all run on-device. There
 is no backend. That shapes the code: module-level singletons instead of DI and
-no SaaS telemetry. This source repo is private; the public `Oktami-Labs/marlen`
-repo holds only the releases (the auto-update feed) and the download site.
+no SaaS telemetry. Source, releases (the auto-update feed) and the download
+site all live in the public `Oktami-Labs/marlen` repo.
 
 pnpm monorepo:
 

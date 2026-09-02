@@ -1,10 +1,10 @@
 # Packaging + update feed for the desktop shell. Input is build/app (assembled
 # by scripts/build.mjs, node_modules installed by the dist script); output
 # lands in dist/. `publish` doubles as the electron-updater feed baked into
-# the app: releases live in the public Oktami-Labs/marlen repo (releases and
-# the download site only; the source repo is private), and a published
-# release is what running apps offer as an update. release.yml publishes
-# there with a PAT; its RELEASE_REPO must match owner/repo below.
+# the app: releases live in the public Oktami-Labs/marlen repo, this one, and a
+# published release is what running apps offer as an update. release.yml
+# publishes there with the workflow's own token; owner/repo below must name the
+# repo the workflow runs in.
 appId: email.marlen.desktop
 productName: Marlen
 directories:

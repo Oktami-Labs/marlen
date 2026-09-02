@@ -3,7 +3,7 @@
 This is the shipping Electron shell around the Marlen server and web app. It
 runs the bundled `@marlen/server` as a utility child process on `127.0.0.1`
 (ports 43117+), opens a window on it, and auto-updates from releases in the
-public `Oktami-Labs/marlen` repo. This source repo is private.
+public `Oktami-Labs/marlen` repo, which also holds this source.
 The SQLite database, agent home (`wiki/` and `knowledge/`), WhatsApp session,
 and logs live under Electron's per-user data directory
 (`~/Library/Application Support/Marlen` on macOS).
@@ -38,21 +38,17 @@ electron-builder uses it to collect the npm-managed runtime tree in `build/app`.
 1. Bump `version` in `apps/desktop/package.json`.
 2. Tag the same version as `vX.Y.Z` and push the tag.
 3. The `release.yml` workflow builds macOS and Windows installers and
-   uploads them to a **draft** release in the public `Oktami-Labs/marlen`
-   repo. It authenticates with the `RELEASE_TOKEN` repo secret: a
-   fine-grained PAT with Contents read/write on that one repo (the
-   workflow's own `GITHUB_TOKEN` cannot write elsewhere). It expires; a
-   failing draft step means it needs replacing. The draft first commits a
-   `VERSION` bump to that repo's `main` and targets it, because GitHub's
-   "latest" release (what the updater and marlen.email resolve) is the one
-   with the newest tagged commit, not the one published last.
+   uploads them to a **draft** release on this repo. It authenticates with
+   the workflow's own `GITHUB_TOKEN`, which needs no secret; the release
+   lives where the workflow runs. The draft is created before the builders
+   start, because two of them racing to create it end up with two drafts.
 4. Publish the release. Running apps poll every 4 hours (and on launch),
    download in the background, and show a "restart to update" toast.
 
 ## Downloads & updates
 
 Everything a user or an installed app touches lives in the public
-`Oktami-Labs/marlen` repo, which holds no source: the releases (the
+`Oktami-Labs/marlen` repo, alongside the source: the releases (the
 electron-updater feed baked into the app via `publish` in
 `electron-builder.yml`), the GitHub Pages download site on its `gh-pages`
 branch (reads the latest release via the GitHub API, needs no rebuild per
