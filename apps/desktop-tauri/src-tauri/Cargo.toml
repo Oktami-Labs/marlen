@@ -1,6 +1,6 @@
 [package]
 name = "marlen-desktop-tauri"
-version = "0.4.8"
+version = "0.5.0"
 description = "Marlene desktop shell preview"
 edition = "2021"
 
