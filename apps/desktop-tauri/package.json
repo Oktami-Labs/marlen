@@ -8,6 +8,6 @@
     "typecheck": "cargo check --manifest-path src-tauri/Cargo.toml"
   },
   "devDependencies": {
-    "@tauri-apps/cli": "^2.8.5"
+    "@tauri-apps/cli": "^2.11.4"
   }
 }

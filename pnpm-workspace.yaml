@@ -13,4 +13,4 @@ onlyBuiltDependencies:
 packageExtensions:
   tiptap-markdown:
     peerDependencies:
-      "@tiptap/pm": "^2"
+      "@tiptap/pm": "^3"

@@ -3,7 +3,7 @@ import { EditorContent, useEditor } from "@tiptap/react";
 import StarterKit from "@tiptap/starter-kit";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Markdown } from "tiptap-markdown";
+import { Markdown, type MarkdownStorage } from "tiptap-markdown";
 import { AccountDot } from "@/components/ui/account-dot";
 import { Button } from "@/components/ui/button";
 import { Chip } from "@/components/ui/chip";
@@ -14,6 +14,13 @@ import { useAccountColors } from "@/lib/accounts";
 import { api } from "@/lib/api";
 import { dateTimeLabel } from "@/lib/dates";
 import { toast } from "@/lib/toast";
+
+// tiptap-markdown exports its storage type but never augments tiptap's Storage.
+declare module "@tiptap/core" {
+  interface Storage {
+    markdown: MarkdownStorage;
+  }
+}
 
 /**
  * The browser's md editor: tiptap over markdown (tiptap-markdown parses on
@@ -52,7 +59,7 @@ function MarkdownArea({
   });
   React.useEffect(() => {
     if (!editor) return;
-    onReady(() => (editor.storage.markdown as { getMarkdown: () => string }).getMarkdown());
+    onReady(() => editor.storage.markdown.getMarkdown());
   }, [editor, onReady]);
   return (
     <EditorContent
