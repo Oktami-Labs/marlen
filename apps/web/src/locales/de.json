@@ -86,7 +86,8 @@
   "chat": {
     "newConversation": "Neue Unterhaltung",
     "history": "Verlauf",
-    "noConversations": "Noch keine Unterhaltungen.",
+    "noConversations": "Noch keine Chats.",
+    "noAutomationRuns": "Noch keine Automatisierungsläufe.",
     "untitled": "(ohne Titel)",
     "thinking": "Denkt nach…",
     "memoryUsed": "Wissen im Kontext",
@@ -98,7 +99,7 @@
     "stop": "Antwort stoppen",
     "jumpToLatest": "Zur neuesten Nachricht springen",
     "resize": "Breite des Chat-Bereichs anpassen",
-    "searchPlaceholder": "Unterhaltungen",
+    "searchPlaceholder": "Unterhaltungen durchsuchen…",
     "noSearchResults": "Keine Treffer.",
     "collapseHistory": "Verlauf einklappen",
     "showHistory": "Verlauf anzeigen",
@@ -106,14 +107,13 @@
     "automations": "Automatisierungen",
     "groupToday": "Heute",
     "groupYesterday": "Gestern",
-    "groupThisWeek": "Diese Woche",
-    "groupEarlier": "Früher",
     "loadMore": "Mehr laden",
     "runsMore_one": "1 älteren Lauf anzeigen",
     "runsMore_other": "{{count}} ältere Läufe anzeigen",
     "runsLess": "Weniger anzeigen",
     "rename": "Umbenennen",
     "delete": "Löschen",
+    "moreActions": "Weitere Aktionen für die Unterhaltung",
     "deleteConfirmTitle": "Diese Unterhaltung löschen?",
     "deleteConfirmBody": "Die Unterhaltung und alle Nachrichten sind dann weg.",
     "rateLimited": {
@@ -222,8 +222,8 @@
         "open": "Öffnen",
         "download": "Herunterladen"
       },
-      "briefing": {
-        "label": "Briefing",
+      "report": {
+        "label": "Bericht",
         "itemCount_one": "{{count}} Eintrag",
         "itemCount_other": "{{count}} Einträge",
         "empty": "Gerade gibt es nichts zu tun.",
@@ -232,28 +232,17 @@
         "reviewDraft": "Entwurf prüfen",
         "askAbout": "Dazu nachfragen",
         "markHandled": "Als erledigt markieren",
-        "showMore_one": "{{count}} weitere anzeigen",
-        "showMore_other": "{{count}} weitere anzeigen",
-        "draftReplyPrompt": "Entwirf eine Antwort auf {{sender}}s E-Mail „{{subject}}“ in {{account}} (Thread {{threadId}}). Im Briefing zusammengefasst als: {{gist}}",
-        "draftReplyPromptNoAccount": "Entwirf eine Antwort auf {{sender}}s E-Mail „{{subject}}“ (Thread {{threadId}}). Im Briefing zusammengefasst als: {{gist}}",
+        "draftReplyPrompt": "Entwirf eine Antwort oder Nachfass-Nachricht an {{sender}} zur E-Mail „{{subject}}“ in {{account}} (Thread {{threadId}}). Im Bericht zusammengefasst als: {{gist}}",
         "reviewDraftPrompt": "Zeig mir den Entwurf, den du für {{sender}}s E-Mail „{{subject}}“ (Thread {{threadId}}, Entwurf {{draftId}}) geschrieben hast, damit ich ihn prüfen kann.",
-        "askAboutPrompt": "Im heutigen Briefing hast du {{sender}}s E-Mail „{{subject}}“ (Thread {{threadId}}) markiert, „{{gist}}“. Worum geht es dabei, und muss ich etwas tun?",
-        "groups": {
-          "urgent": "Dringend",
-          "reply": "Antwort ausstehend",
-          "action": "Zu tun",
-          "fyi": "Zur Kenntnis"
-        },
+        "askAboutPrompt": "In deinem Bericht hast du {{sender}}s E-Mail „{{subject}}“ (Thread {{threadId}}) markiert, „{{gist}}“. Worum geht es dabei, und muss ich etwas tun?",
+        "askAboutItemPrompt": "In deinem Bericht steht „{{title}}“: {{gist}}. Worum geht es dabei, und muss ich etwas tun?",
         "stats": {
-          "reply_one": "{{count}} braucht eine Antwort",
-          "reply_other": "{{count}} brauchen eine Antwort",
-          "draftsReady_one": "{{count}} Entwurf bereit",
-          "draftsReady_other": "{{count}} Entwürfe bereit",
           "scanned_one": "{{count}} geprüft",
           "scanned_other": "{{count}} geprüft"
         },
-        "rolledUp_one": "Zusammengefasst · {{count}} Nachricht",
-        "rolledUp_other": "Zusammengefasst · {{count}} Nachrichten"
+        "newMessage": "neue Nachricht",
+        "updated": "aktualisiert",
+        "since": "seit {{when}}"
       },
       "sources": {
         "badge": "Quellen",
@@ -530,24 +519,18 @@
     "missedRun": "Jetzt ausführen",
     "missedRunning": "Läuft…",
     "newMark": "Neu",
-    "newCount_one": "1 neuer Eintrag",
-    "newCount_other": "{{count}} neue Einträge",
     "markAllSeen": "Alles gesehen",
     "triggerCatchUp": "Nachgeholt",
     "triggerCatchUpDetail": "Nachgeholter Lauf für den Termin am {{when}}. Deckt alles seit dem letzten Lauf ab.",
     "triggerTodo": "Aus To-do",
     "triggerTodoDetail": "Gestartet, als Sie das To-do „{{title}}“ erledigt haben.",
+    "triggerTodoAnswerDetail": "Gestartet mit Ihrer Antwort „{{answer}}“ auf das To-do „{{title}}“.",
     "triggerMail": "Neue Mail",
     "triggerMailDetail": "Gestartet durch neue Mail in {{accounts}}.",
     "attentionTitle": "Zu erledigen",
     "attentionEmpty": "Alles erledigt. Neue Aufgaben und Freigaben erscheinen hier.",
-    "approvalsGroup": "Zur Freigabe",
-    "suggestionsWaiting_one": "{{count}} neuer Vorschlag zum Prüfen",
-    "suggestionsWaiting_other": "{{count}} neue Vorschläge zum Prüfen",
     "approvalsAllAccounts": "Alle Konten",
     "approvalsFilterAccount": "Nach Konto filtern",
-    "approvalsShowMore_one": "1 weitere anzeigen",
-    "approvalsShowMore_other": "{{count}} weitere anzeigen",
     "showLess": "Weniger anzeigen",
     "outboundSentToast": "Nachricht gesendet.",
     "todosOverdue": "Überfällig",
@@ -584,26 +567,17 @@
     "createAutomation": "Automatisierung erstellen",
     "viewAutomations": "Automatisierungen ansehen",
     "deletedAutomation": "Gelöschte Automatisierung",
-    "briefingUrgent_one": "{{count}} dringend",
-    "briefingUrgent_other": "{{count}} dringend",
     "openInChat": "Im Chat öffnen",
-    "greetingMorning": "Guten Morgen.",
-    "greetingDay": "Guten Tag.",
-    "greetingEvening": "Guten Abend.",
-    "statusClear": "Nichts wartet auf Sie",
-    "statusNeeds_one": "Eine Sache wartet auf Sie",
-    "statusNeeds_other": "{{count}} Dinge warten auf Sie",
-    "statusMine_one": "eine erledige ich selbst",
-    "statusMine_other": "{{count}} erledige ich selbst",
-    "statusBriefing": "{{name}}, {{when}}: {{headline}}",
-    "statusOpenBriefing": "Briefing öffnen",
+    "briefingTitle": "Briefing",
+    "briefingRefresh": "Neu erstellen",
     "workTitle": "Marlene arbeitet",
     "workNow": "jetzt",
     "workStarting": "Startet…",
     "workStepRunning": "läuft",
     "workUpNext": "Als Nächstes",
     "workScheduled": "Geplant",
-    "workFailed": "Fehlgeschlagen."
+    "workFailed": "Fehlgeschlagen.",
+    "todosAnswered": "Antwort: {{answer}}"
   },
   "drafts": {
     "noSubject": "(kein Betreff)",
@@ -709,13 +683,6 @@
       "running": "läuft",
       "success": "erfolgreich",
       "error": "Fehler"
-    },
-    "suggestions": {
-      "title": "Vorgeschlagene Automatisierungen",
-      "hint": "Muster aus Ihren letzten Chats. Übernehmen zum Einplanen, oder dauerhaft verwerfen.",
-      "accept": "Automatisierung hinzufügen",
-      "dismiss": "Verwerfen",
-      "showInstruction": "Anweisung anzeigen"
     }
   },
   "leads": {
@@ -788,7 +755,6 @@
       "deal": "Vorgänge",
       "style": "Schreibstil",
       "skill": "Skills",
-      "triage": "Triage-Lernen",
       "account": "Kontowissen",
       "general": "Allgemein"
     },
@@ -881,6 +847,13 @@
     "offlineBody": "Die Verbindung zum Marlene-Server wird alle paar Sekunden geprüft. Es geht von selbst weiter, sobald er wieder da ist."
   },
   "settings": {
+    "nav": {
+      "label": "Bereiche der Einstellungen",
+      "general": "Allgemein",
+      "connections": "Verbindungen",
+      "permissions": "Zugriff",
+      "data": "Daten & App"
+    },
     "sections": {
       "ai": {
         "title": "KI & Modell",
@@ -895,7 +868,7 @@
         "chipNoAccounts": "Noch keine Konten"
       },
       "preferences": {
-        "title": "Darstellung & Sprache"
+        "title": "App-Einstellungen"
       },
       "data": {
         "title": "Lokale Daten"
@@ -909,9 +882,9 @@
       },
       "quickActions": {
         "title": "Schnellaktionen",
-        "description": "Was Schaltflächen wie „Antwort entwerfen“ tun: die Anfrage sofort senden oder ins Eingabefeld legen, damit Sie sie vorher anpassen können.",
-        "send": "Sofort senden",
-        "prefill": "Vor dem Senden bearbeiten"
+        "description": "Legt fest, ob Schnellaktionen die Anfrage ausführen oder zur Prüfung im Chat öffnen.",
+        "send": "Sofort ausführen",
+        "prefill": "Im Chat prüfen"
       }
     },
     "appearance": {
@@ -942,7 +915,7 @@
       "license": "Lizenz",
       "licenseValue": "Proprietär, alle Rechte vorbehalten",
       "github": "GitHub",
-      "viewOnGithub": "Auf GitHub ansehen",
+      "technicalDetails": "Technische Details",
       "reportIssue": "Problem melden",
       "check": "Nach Updates suchen",
       "upToDate": "Sie sind auf dem neuesten Stand",
@@ -953,9 +926,9 @@
       "manual": "Version {{version}} ist verfügbar, zum Installieren herunterladen"
     },
     "provider": "Anbieter",
-    "model": "Modell",
+    "model": "Standardmodell",
     "signInFirst": "Erst oben bei einem Anbieter anmelden, dann hier sein Modell wählen.",
-    "usingModel": "Verwendet <model>{{model}}</model>",
+    "usingModel": "Standardmodell: <model>{{model}}</model>",
     "loadingProviders": "Anbieter werden geladen…",
     "addApiKey": "API-Schlüssel hinzufügen",
     "addApiKeyTitle": "API-Schlüssel hinzufügen",
@@ -976,8 +949,11 @@
     "enterCodeAt": "Geben Sie diesen Code ein unter <uri>{{uri}}</uri>",
     "loginInputPlaceholder": "Code / Weiterleitungs-URL einfügen, falls der Vorgang nicht automatisch abschließt…",
     "fileAccess": {
-      "title": "Dateizugriff",
-      "chipOff": "Kein Zugriff",
+      "title": "Computerzugriff",
+      "homeOnly": "Nur Marlene-Ordner",
+      "fullAccess": "Vollzugriff",
+      "includedWithCommands": "Im Vollzugriff enthalten.",
+      "commandsOverride": "Shell-Befehle können Dateien unabhängig von den einzelnen Datei-Schaltern lesen und ändern.",
       "read": {
         "title": "Dateien lesen",
         "badge": "Lesen",
@@ -997,13 +973,13 @@
         "confirmCta": "Schreiben erlauben"
       },
       "bash": {
-        "title": "Befehle ausführen",
-        "badge": "Befehle",
-        "on": "Darf Shell-Befehle als Sie ausführen (bash), wenn Sie es sagen.",
-        "off": "Kann keine Befehle ausführen.",
-        "confirmTitle": "Der KI das Ausführen von Befehlen erlauben?",
+        "title": "Vollzugriff auf den Computer",
+        "badge": "Vollzugriff",
+        "on": "Darf Shell-Befehle als Sie ausführen, auch zum Lesen und Ändern beliebiger Dateien.",
+        "off": "Kann keine Shell-Befehle ausführen.",
+        "confirmTitle": "Vollzugriff auf den Computer erlauben?",
         "confirmBody": "Der Assistent führt dann echte Shell-Befehle als Sie aus, mit allem, was Ihr Benutzerkonto darf. In E-Mails versteckte Anweisungen könnten schädliche Befehle anstoßen. Nur einschalten, wenn Sie das Risiko kennen. Jederzeit abschaltbar.",
-        "confirmCta": "Befehle erlauben"
+        "confirmCta": "Vollzugriff erlauben"
       }
     }
   },

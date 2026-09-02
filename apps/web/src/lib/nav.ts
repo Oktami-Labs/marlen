@@ -15,8 +15,6 @@ interface NavItem {
   id: View;
   path: string;
   icon: LucideIcon;
-  /** Shown only while onOffice is connected because leads depend on the CRM. */
-  requiresOnOffice?: boolean;
 }
 
 /**
@@ -27,22 +25,13 @@ interface NavItem {
 export const NAV_ITEMS: NavItem[] = [
   { id: "home", path: "/", icon: Inbox },
   { id: "chat", path: "/chat", icon: MessagesSquare },
-  { id: "leads", path: "/leads", icon: Users, requiresOnOffice: true },
+  { id: "leads", path: "/leads", icon: Users },
   { id: "automations", path: "/automations", icon: CalendarClock },
   { id: "knowledge", path: "/knowledge", icon: BookOpen },
   { id: "settings", path: "/settings", icon: Settings2 },
 ];
 
 export const NAV_VIEWS: View[] = NAV_ITEMS.map((item) => item.id);
-
-/**
- * The nav as the current install shows it: items behind requiresOnOffice
- * appear only once the CRM is connected. Sidebar and palette both render
- * from this, so a hidden view never surfaces in either.
- */
-export function visibleNavItems(onofficeConfigured: boolean): NavItem[] {
-  return NAV_ITEMS.filter((item) => !item.requiresOnOffice || onofficeConfigured);
-}
 
 /** Dev-only route metadata for typed palette matches. */
 export const SHOWCASE_NAV = {

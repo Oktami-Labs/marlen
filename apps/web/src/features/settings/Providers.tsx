@@ -7,7 +7,6 @@ import { Card } from "@/components/ui/card";
 import { LoadingRow, Notice } from "@/components/ui/feedback";
 import { IconButton } from "@/components/ui/icon-button";
 import { Input } from "@/components/ui/input";
-import { ListRow } from "@/components/ui/list-row";
 import { Select } from "@/components/ui/select";
 import { Spinner } from "@/components/ui/spinner";
 import { api } from "@/lib/api";
@@ -73,23 +72,26 @@ export function Providers({
   // Keep the list to connected providers and subscription sign-ins. The full
   // API-key provider catalog remains available through "Add API key".
   const connected = providers.filter((p) => p.auth !== null);
-  const signIns = providers.filter((p) => p.oauth && p.auth === null);
+  const signIns = providers.filter((p) => p.oauth && p.auth === null && p.modelCount > 0);
   const rows = [...connected, ...signIns];
+  const apiKeyAvailable = providers.some((p) => p.auth === null && p.modelCount > 0);
 
   return (
     <div className="flex flex-col gap-3">
-      <div className="flex flex-col gap-2">
-        {rows.map((p, i) => (
-          <div key={p.id} className="animate-in-up" style={stagger(i)}>
-            <ProviderRow
-              provider={p}
-              busy={busy}
-              onSignIn={p.oauth && p.auth === null ? () => void startLogin(p.id) : undefined}
-              onLogout={() => void logout(p.id)}
-            />
-          </div>
-        ))}
-      </div>
+      {rows.length > 0 && (
+        <Card padding="sm" className="flex flex-col gap-1">
+          {rows.map((p, i) => (
+            <div key={p.id} className="animate-in-up" style={stagger(i)}>
+              <ProviderRow
+                provider={p}
+                busy={busy}
+                onSignIn={p.oauth && p.auth === null ? () => void startLogin(p.id) : undefined}
+                onLogout={() => void logout(p.id)}
+              />
+            </div>
+          ))}
+        </Card>
+      )}
 
       {flow && <LoginFlowCard flow={flow} onClose={() => setFlow(null)} />}
 
@@ -102,11 +104,11 @@ export function Providers({
           }}
           onClose={() => setAdding(false)}
         />
-      ) : (
+      ) : apiKeyAvailable ? (
         <Button variant="secondary" size="sm" className="w-fit" onClick={() => setAdding(true)}>
           <Plus /> {t("settings.addApiKey")}
         </Button>
-      )}
+      ) : null}
     </div>
   );
 }
@@ -137,7 +139,7 @@ function ProviderRow({
           : t("settings.providerStatus.none");
 
   return (
-    <ListRow>
+    <div className="surface-hover flex items-center justify-between gap-3 rounded-lg px-2 py-2.5">
       <div className="min-w-0">
         <p className="truncate text-sm font-medium">{provider.name}</p>
         <p
@@ -160,7 +162,7 @@ function ProviderRow({
       ) : (
         <span className="shrink-0 text-xs font-medium text-success">env</span>
       )}
-    </ListRow>
+    </div>
   );
 }
 
@@ -179,7 +181,7 @@ function AddApiKey({
   const [pick, setPick] = React.useState("");
 
   // Any provider you're not already connected to can take an API key.
-  const available = providers.filter((p) => p.auth === null);
+  const available = providers.filter((p) => p.auth === null && p.modelCount > 0);
   const options = [
     { value: "", label: t("settings.chooseProvider") },
     ...available.map((p) => ({ value: p.id, label: p.name })),

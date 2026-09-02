@@ -4,7 +4,6 @@ import { Type } from "@sinclair/typebox";
 import { and, asc, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { parseStoredCards } from "../agent/cards.js";
 import { notFound, requireRow } from "../core/errors.js";
-import { decideSuggestion, listPendingSuggestions } from "../db/automationSuggestions.js";
 import { db, schema } from "../db/index.js";
 import { likeContains, likePattern } from "../db/like.js";
 import {
@@ -12,6 +11,7 @@ import {
   deleteAutomation,
   updateAutomation,
 } from "../services/automations/manage.js";
+import { handleReportItem } from "../services/automations/reportState.js";
 import { runSteps } from "../services/automations/runProgress.js";
 import {
   findMissedAutomations,
@@ -19,7 +19,6 @@ import {
   runAutomation,
   runMissedAutomations,
 } from "../services/automations/scheduler.js";
-import { handleBriefingItem } from "../services/automations/threadState.js";
 
 const runsQuery = Type.Object({
   q: Type.Optional(Type.String()),
@@ -29,10 +28,7 @@ const runsQuery = Type.Object({
 
 const idParams = Type.Object({ id: Type.String() });
 
-const briefingItemBody = Type.Object({
-  accountId: Type.String({ minLength: 1 }),
-  threadId: Type.String({ minLength: 1 }),
-});
+const reportItemBody = Type.Object({ key: Type.String({ minLength: 1 }) });
 
 const automationBody = Type.Object({
   name: Type.String(),
@@ -125,6 +121,7 @@ export const automationRoutes: FastifyPluginAsyncTypebox = async (app) => {
           visible,
           or(
             likePattern(schema.automationRuns.result, pattern),
+            likePattern(schema.automationRuns.cards, pattern),
             likePattern(schema.automations.name, pattern),
           ),
         )
@@ -182,45 +179,11 @@ export const automationRoutes: FastifyPluginAsyncTypebox = async (app) => {
   });
 
   app.post(
-    "/api/runs/:id/briefing-items/handled",
-    { schema: { params: idParams, body: briefingItemBody } },
+    "/api/runs/:id/report-items/handled",
+    { schema: { params: idParams, body: reportItemBody } },
     async (req) => {
-      const handled = await handleBriefingItem(
-        req.params.id,
-        req.body.accountId,
-        req.body.threadId,
-      );
-      if (!handled) throw notFound("no briefing item with this account and thread");
-      return { ok: true };
-    },
-  );
-
-  app.get("/api/automations/suggestions", async () => listPendingSuggestions());
-
-  app.post(
-    "/api/automations/suggestions/:id/accept",
-    { schema: { params: idParams } },
-    async (req) => {
-      const suggestions = await listPendingSuggestions();
-      const suggestion = suggestions.find((s) => s.id === req.params.id);
-      if (!suggestion) throw notFound("no pending suggestion with this id");
-      const automation = await createAutomation({
-        name: suggestion.name,
-        instruction: suggestion.instruction,
-        schedule: suggestion.schedule,
-      });
-      // Retire only after the automation exists, so a failed create leaves the suggestion pending.
-      await decideSuggestion(req.params.id, "accepted");
-      return automation;
-    },
-  );
-
-  app.post(
-    "/api/automations/suggestions/:id/dismiss",
-    { schema: { params: idParams } },
-    async (req) => {
-      const decided = await decideSuggestion(req.params.id, "dismissed");
-      if (!decided) throw notFound("no pending suggestion with this id");
+      const handled = await handleReportItem(req.params.id, req.body.key);
+      if (!handled) throw notFound("no report item with this key");
       return { ok: true };
     },
   );

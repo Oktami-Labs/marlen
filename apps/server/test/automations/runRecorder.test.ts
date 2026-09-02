@@ -28,6 +28,10 @@ beforeAll(async () => {
     schedule: "0 6 * * *",
     createdAt: new Date().toISOString(),
   });
+  await dbModule.db.insert(dbModule.schema.settings).values({
+    key: "app.language",
+    value: "en",
+  });
 });
 
 describe("automation run prompt context", () => {
@@ -36,6 +40,7 @@ describe("automation run prompt context", () => {
     expect(first.succeeded).toBe(true);
     expect(prompts[0]).toContain("no previous successful run");
     expect(prompts[0]).toContain("Check emails from the past 24 hours.");
+    expect(prompts[0]).toContain("Report in English.");
 
     const [recorded] = await dbModule.db.select().from(dbModule.schema.automationRuns);
     const catchUp = await runRecorder.executeAutomationRun("auto-1", {
@@ -76,21 +81,30 @@ describe("automation run prompt context", () => {
     expect(prompt).toContain("Exposé Seestraße 4 fehlt noch.\nRückruf ab 16 Uhr.");
   });
 
-  it("carries unresolved briefing work across runs until its draft is decided", async () => {
+  it("carries unresolved report work across runs until its draft is decided", async () => {
     const at = "2026-09-01T08:00:00.000Z";
-    await dbModule.db.insert(dbModule.schema.automationThreadStates).values({
-      automationId: "auto-1",
-      accountId: "account-1",
-      threadId: "thread-open",
-      messageId: "message-1",
-      itemJson: JSON.stringify({
-        threadId: "thread-open",
+    const itemKey = "email:account-1\nthread-open";
+    const item = (messageId: string, title: string, gist: string) => ({
+      key: itemKey,
+      ref: {
+        kind: "email",
         accountId: "account-1",
+        threadId: "thread-open",
+        messageId,
         sender: "Anna",
-        subject: "Contract question",
-        gist: "contract: payment term still open → reply",
-        priority: "reply",
-      }),
+      },
+      title,
+      gist,
+      needsUser: true,
+    });
+    await dbModule.db.insert(dbModule.schema.automationReportItems).values({
+      automationId: "auto-1",
+      itemKey,
+      changeKey: "message-1",
+      sectionLabel: "Reply",
+      itemJson: JSON.stringify(
+        item("message-1", "Contract question", "contract: payment term still open → reply"),
+      ),
       disposition: "open",
       lastReportedAt: at,
       updatedAt: at,
@@ -111,21 +125,16 @@ describe("automation run prompt context", () => {
     expect((await runRecorder.executeAutomationRun("auto-1")).succeeded).toBe(true);
     expect(prompts.at(-1)).not.toContain("thread-open");
 
-    const [state] = await dbModule.db.select().from(dbModule.schema.automationThreadStates);
+    const [state] = await dbModule.db.select().from(dbModule.schema.automationReportItems);
     expect(state?.disposition).toBe("handled");
 
     // The same thread can receive new mail later. The historical draft
     // decision must not suppress that newer message on this or any later run.
-    await dbModule.db.update(dbModule.schema.automationThreadStates).set({
-      messageId: "message-2",
-      itemJson: JSON.stringify({
-        threadId: "thread-open",
-        accountId: "account-1",
-        sender: "Anna",
-        subject: "A new contract question",
-        gist: "contract: delivery date changed → reply",
-        priority: "reply",
-      }),
+    await dbModule.db.update(dbModule.schema.automationReportItems).set({
+      changeKey: "message-2",
+      itemJson: JSON.stringify(
+        item("message-2", "A new contract question", "contract: delivery date changed → reply"),
+      ),
       disposition: "open",
       handledAt: null,
       lastReportedAt: "2026-09-01T10:00:00.000Z",

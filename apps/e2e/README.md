@@ -63,6 +63,22 @@ account.
   `toBeInViewport()`, not `toBeVisible()`.
 - **Failing tests attach the server log** automatically (`serverLogs` fixture).
 
+## Demo recordings
+
+`pnpm demo` (repo root) builds the web app, runs the `demo` Playwright project
+(specs whose titles carry `@demo`, video always on, a 1720×1000 viewport)
+against a seeded isolated server, converts each recording to MP4 under
+`~/Movies/agent-demos/marlen/` next to its final screenshot, and opens it.
+`pnpm demo <words>` narrows to the demos whose title contains the words;
+`--no-open` skips the player. A demo spec opts into the seeded server with
+`test.use({ seeded: true })`: the worker's state directory is filled with the
+demo persona (`apps/server/src/services/demo/`, the same data `pnpm seed:demo`
+puts into a dev instance) before the server boots, and the spec reads the
+names it asserts on from that module's `DEMO` handles. Extend the fixtures
+there when a demo needs more data rather than seeding inside a spec. The
+default `pnpm test:e2e` skips `@demo` specs; the demo project exists only
+while `DEMO` is set, which the script does.
+
 ## What is out of reach
 
 Anything behind a third-party round trip: linking a Pipedream account, pairing

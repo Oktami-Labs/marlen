@@ -162,7 +162,6 @@ export function LibrarySection({ focusId }: { focusId: string | null }) {
         deal: t("storage.wikiGroups.deal"),
         style: t("storage.wikiGroups.style"),
         skill: t("storage.wikiGroups.skill"),
-        triage: t("storage.wikiGroups.triage"),
         account: t("storage.wikiGroups.account"),
         general: t("storage.wikiGroups.general"),
       },

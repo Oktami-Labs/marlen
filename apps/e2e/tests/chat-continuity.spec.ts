@@ -115,6 +115,57 @@ function seedFinishedChat(stateDir: string, id: string, hoursAgo: number, questi
   );
 }
 
+test("history stays flat, newest-first, and opens automation runs on demand", async ({
+  page,
+  server,
+}) => {
+  const suffix = randomUUID().slice(0, 8);
+  const chatId = `history-chat-${suffix}`;
+  const olderChatId = `history-chat-older-${suffix}`;
+  const runId = `history-run-${suffix}`;
+  const chatTitle = `Contract notice period ${suffix}`;
+  const olderChatTitle = `Old project notes ${suffix}`;
+  const chatPreview = "Check Nina's last email and summarize the termination clause.";
+  const automationName = `Morning briefing ${suffix}`;
+  const createdAt = new Date().toISOString();
+  const olderAt = new Date(Date.now() - 48 * HOUR_MS).toISOString();
+  sql(
+    server.stateDir,
+    `INSERT INTO conversations (id, title, type, created_at) VALUES
+       ('${chatId}', '${chatTitle}', 'chat', '${createdAt}'),
+       ('${olderChatId}', '${olderChatTitle}', 'chat', '${olderAt}'),
+       ('${runId}', 'Run: ${automationName}', 'automation', '${createdAt}');
+     INSERT INTO messages (id, conversation_id, role, content, created_at) VALUES
+       ('${chatId}-u', '${chatId}', 'user', '${chatPreview.replaceAll("'", "''")}', '${createdAt}');`,
+  );
+
+  await openApp(page, "/chat");
+  const history = page.getByRole("complementary", { name: t("chat.history") });
+  const automations = history.getByRole("button", {
+    name: t("chat.automations"),
+    exact: true,
+  });
+
+  await expect(history.getByRole("button", { name: t("chat.chats"), exact: true })).toHaveCount(0);
+  await expect(history.getByText(chatTitle, { exact: true })).toBeVisible();
+  await expect(history.getByText(chatPreview, { exact: true })).toBeVisible();
+  await expect(history.getByText(olderChatTitle, { exact: true })).toBeVisible();
+  await expect(history.getByText(automationName, { exact: true })).toHaveCount(0);
+  await expect(history.getByRole("heading", { level: 4 })).toHaveCount(0);
+
+  const newerRow = history.getByRole("button", { name: new RegExp(chatTitle) });
+  const olderRow = history.getByRole("button", { name: new RegExp(olderChatTitle) });
+  const [newerBox, olderBox] = await Promise.all([newerRow.boundingBox(), olderRow.boundingBox()]);
+  expect(newerBox).not.toBeNull();
+  expect(olderBox).not.toBeNull();
+  expect(newerBox?.y ?? 0).toBeLessThan(olderBox?.y ?? 0);
+
+  await automations.click();
+  await expect(history.getByRole("button", { name: t("chat.chats"), exact: true })).toBeVisible();
+  await expect(history.getByText(automationName, { exact: true })).toBeVisible();
+  await expect(history.getByText(chatTitle, { exact: true })).toHaveCount(0);
+});
+
 test("a chat finished over an hour ago reopens where the user left it", async ({
   page,
   server,
@@ -259,8 +310,9 @@ test("a destructive confirmation stays open when the delete fails", async ({ pag
   await conversation.hover();
   await conversation
     .locator("..")
-    .getByRole("button", { name: t("chat.delete") })
+    .getByRole("button", { name: t("chat.moreActions") })
     .click();
+  await page.getByRole("menuitem", { name: t("chat.delete") }).click();
 
   const dialog = page.getByRole("dialog");
   await dialog.getByRole("button", { name: t("chat.delete") }).click();

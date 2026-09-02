@@ -1,12 +1,13 @@
 import { randomUUID } from "node:crypto";
-import type { MessageCard, RunTrigger } from "@marlen/shared";
-import { and, desc, eq } from "drizzle-orm";
+import { LANGUAGE_ENGLISH_NAMES, type MessageCard, type RunTrigger } from "@marlen/shared";
+import { and, desc, eq, gt, inArray } from "drizzle-orm";
 import { env } from "../../core/env.js";
 import { emitRunNotification, emitServerEvent } from "../../core/events.js";
 import { moduleLogger } from "../../core/logger.js";
 import { errorMessage } from "../../core/utils/util.js";
 import { db, schema } from "../../db/index.js";
-import { automationThreadContext } from "./threadState.js";
+import { getLanguageSetting } from "../../db/settings.js";
+import { automationReportContext } from "./reportState.js";
 import { getTurnRunner } from "./turnRunner.js";
 
 const log = moduleLogger("runRecorder");
@@ -24,6 +25,42 @@ function notificationSummary(result: string): string {
 }
 
 const APPROVAL_CARD_KINDS = new Set(["email_draft", "message_draft"]);
+
+const DRAFT_OUTCOME_LIMIT = 20;
+
+/**
+ * Drafts from earlier runs the user sent or discarded since the previous run.
+ * Feedback rides the prompt; the model decides what to make of it.
+ */
+async function draftOutcomeContext(conversationId: string, since: string): Promise<string> {
+  const rows = await db
+    .select({
+      subject: schema.agentDrafts.subject,
+      to: schema.agentDrafts.toAddrs,
+      status: schema.agentDrafts.status,
+    })
+    .from(schema.agentDrafts)
+    .where(
+      and(
+        eq(schema.agentDrafts.conversationId, conversationId),
+        inArray(schema.agentDrafts.status, ["sent", "discarded"]),
+        gt(schema.agentDrafts.updatedAt, since),
+      ),
+    )
+    .orderBy(desc(schema.agentDrafts.updatedAt))
+    .limit(DRAFT_OUTCOME_LIMIT);
+  if (rows.length === 0) return "";
+  const lines = rows.map((row) => {
+    const to = (JSON.parse(row.to) as string[]).join(", ");
+    return `- ${row.status}: "${row.subject || "(no subject)"}" to ${to || "(no recipients)"}`;
+  });
+  return (
+    "\n\nDrafts from earlier runs the user decided on since the previous run:\n" +
+    `${lines.join("\n")}\n` +
+    "A discarded draft was not wanted. Weigh that before drafting a similar reply again, and " +
+    "note a lasting pattern in the wiki."
+  );
+}
 
 function leftApprovals(cardsJson: string | null): boolean {
   if (!cardsJson) return false;
@@ -88,10 +125,12 @@ export async function executeAutomationRun(
       )
       .orderBy(desc(schema.automationRuns.startedAt))
       .limit(1);
+    const language = (await getLanguageSetting()) ?? "de";
     const context = [
       lastSuccess?.finishedAt
         ? `The previous successful run finished at ${lastSuccess.finishedAt}.`
         : "This automation has no previous successful run.",
+      `Report in ${LANGUAGE_ENGLISH_NAMES[language]}.`,
     ];
     const trigger = opts.trigger;
     if (trigger?.kind === "catchUp") {
@@ -101,22 +140,36 @@ export async function executeAutomationRun(
           `turn one catch-up into an unbounded historical sweep.`,
       );
     } else if (trigger?.kind === "todo") {
+      const ref = trigger.ref;
+      const about =
+        ref?.kind === "email_draft"
+          ? ` It is about the email draft ${ref.draftId} to ${ref.to} in account ${ref.accountId}; use the draft tools to change, send or discard it.`
+          : ref?.kind === "outbound"
+            ? ` It is about the ${ref.channel} draft ${ref.outboundId} to ${ref.targetLabel}; use the ${ref.channel} tools to change or send it.`
+            : "";
       context.push(
-        `This run fired because the user completed the linked todo "${trigger.title}" (todo id ${trigger.todoId}). Whoever or whatever that todo names is the subject of this run.`,
+        (ref
+          ? `This run fired because the user answered your question on the approval "${trigger.title}" (item id ${trigger.todoId}).`
+          : `This run fired because the user completed the linked todo "${trigger.title}" (todo id ${trigger.todoId}). Whoever or whatever that todo names is the subject of this run.`) +
+          about +
+          (trigger.answer ? ` The user answered: "${trigger.answer}". Act on that answer.` : ""),
       );
     } else if (trigger?.kind === "mail") {
       context.push(
         `This run was triggered by new inbound mail in: ${trigger.accountNames.join(", ")}. Start from that mailbox's newest messages instead of sweeping every account.`,
       );
     }
-    const durableThreadContext = await automationThreadContext(automationId);
+    const durableThreadContext = await automationReportContext(automationId);
+    const draftOutcomes = lastSuccess?.finishedAt
+      ? await draftOutcomeContext(conversationId, lastSuccess.finishedAt)
+      : "";
     const todoNotes =
       trigger?.kind === "todo" && trigger.body
         ? `\n\nNotes from the completed todo "${trigger.title}":\n${trigger.body}`
         : "";
     const instructionMessage =
       `Scheduled automation "${automation.name}". ${context.join(" ")}` +
-      `${durableThreadContext} Execute this instruction now and report the outcome:\n\n` +
+      `${durableThreadContext}${draftOutcomes} Execute this instruction now and report the outcome:\n\n` +
       `${automation.instruction}${todoNotes}`;
 
     const { text, cardsJson } = await getTurnRunner()({

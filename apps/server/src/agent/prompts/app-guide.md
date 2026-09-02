@@ -13,7 +13,7 @@ What Marlene is
 Pages (sidebar, top to bottom)
 - Home / Start: the day at a glance (details below).
 - Chat: this conversation. Also available as a side panel over every other page.
-- Leads: the prospect directory — only visible while an onOffice CRM is connected.
+- Leads: the prospect directory.
 - Automations / Automatisierungen: standing instructions on a schedule or on demand.
 - Knowledge / Wissen: a file browser over the assistant's wiki and document library.
 - Settings / Einstellungen: AI sign-in, accounts and permissions, file access, preferences,
@@ -22,21 +22,31 @@ Pages (sidebar, top to bottom)
   anywhere. A light/dark toggle sits in the header; keyboard shortcuts under Cmd+Shift+7.
 
 Home / Start
-- Banners on top when relevant: setup incomplete, provider unreachable, and missed scheduled
-  runs with a "Run now / Jetzt ausführen" catch-up button. New items since the last visit wear
-  a dot and are counted, with "Mark all seen / Alles gesehen".
-- Briefing hero: the pinned automation's latest result (typically a morning briefing), with
-  buttons to refresh it and to open it in chat.
+- Banners on top when relevant: setup incomplete, provider unreachable. New items since the
+  last visit wear a dot and are counted, with "Mark all seen / Alles gesehen".
+- Two columns (stacked on a narrow window): what waits on the user on the left, what the
+  assistant reports and does on the right.
 - "To do / Zu erledigen": overdue items first ("Missed / Überfällig"), then drafts waiting for
-  approval ("To approve / Zur Freigabe"), then to-dos grouped by day ("Today / Heute",
-  "Tomorrow / Morgen", dates, "Anytime / Jederzeit") interleaved with the day's upcoming
-  scheduled runs. The plus adds a to-do; the pencil edits one in place (title, due date, note,
-  and an automation to start on completion); rows drag between days; completed items collapse
-  into a "done / erledigt" disclosure.
-- "New results / Neue Ergebnisse": output cards of recent successful automation runs.
-- "Activity / Aktivität" (collapsed by default): the full run log with status, why each run
-  started ("Caught up / Nachgeholt", "From a to-do / Aus To-do", "New mail / Neue Mail"), a
-  retry for failed runs, and open-in-chat.
+  approval ("To approve / Zur Freigabe", with an account filter once several mailboxes are
+  connected), then to-dos grouped by day ("Today / Heute", "Tomorrow / Morgen", dates,
+  "Anytime / Jederzeit"). Each group label carries its count. The plus adds a to-do; the pencil
+  edits one in place (title, due date, note, and an automation to start on completion); rows
+  drag between days; completed items collapse into a "done / erledigt" disclosure. A to-do the
+  assistant filed as a question carries answer buttons: one click completes it, records the
+  answer, and, when an automation is linked, starts that automation with the answer.
+- "Briefing": the latest report, open in full: the pinned automation's newest result, else the
+  newest morning briefing, with its day and time, a refresh button ("Refresh / Neu erstellen")
+  and open-in-chat. A report with nothing in it folds to its headline. The assistant names
+  the report's sections itself (the morning briefing uses urgent, awaiting reply, to do,
+  waiting for reply, FYI, plus folded groups for newsletters and receipts). Items say what
+  changed since the previous report ("new message / neue Nachricht", "since Mon / seit Mo."),
+  items closed since then show struck through once. The check on a row marks it handled.
+- "Marlene is working / Marlene arbeitet": today's finished runs in order, the run in flight with
+  its live steps, then what is scheduled next ("Up next / Als Nächstes"). A row unfolds into the
+  run's output, including any chart, lead or attachment list it produced; failed runs offer a
+  retry; every run has open-in-chat; earlier days sit behind
+  "Show N earlier runs / N frühere Läufe anzeigen". Why a run started shows as a badge
+  ("Caught up / Nachgeholt", "From a to-do / Aus To-do", "New mail / Neue Mail").
 
 Chat
 - The composer sends on Enter (Shift+Enter for a new line). There is no file-upload control;
@@ -63,7 +73,7 @@ Chat
 - A focus chip in the header sets the conversation's default account (or all); an email draft card
   can move that focus to its account and thread until the user changes it.
 - The assistant's work renders as cards in the conversation: email drafts (with send / keep /
-  discard), WhatsApp drafts, briefings, clarifying choices, detail forms (several missing fields
+  discard), WhatsApp drafts, reports, clarifying choices, detail forms (several missing fields
   asked at once, sent back as one message), research progress, charts, leads, attachment lists
   with an inline viewer ("Save to library / In der Bibliothek speichern"), and the source list
   behind a web answer. A page written to the wiki mid-turn appears as a chip naming it, with
@@ -91,8 +101,8 @@ Outbound flow (email and WhatsApp)
   the selected account's "Send / Senden" grant in Settings. Each connected account has its own
   grants; WhatsApp has its own "Auto-send / Automatisch senden" grant, off by default. A send grant
   applies in chat and in automations alike.
-- Draft bodies pass through a humanizing edit before saving; the draft card shows the final
-  text, with the account's signature set off below the body. A body may use markdown for
+- The draft card shows the saved text, with the account's signature set off below the body. A
+  body may use markdown for
   **bold**, *italic*, links, lists, quotes and `code`: mail goes out as HTML with the source as
   its plain-text alternative, so formatting arrives as formatting, never as visible asterisks. Drafts written as an account with
   a learned style wear an "In your style / In Ihrem Stil" badge.
@@ -101,12 +111,12 @@ Automations / Automatisierungen
 - An automation is a named standing instruction plus a schedule: every day, weekdays, chosen
   days, a specific date (runs once), or "On demand only / Nur auf Abruf" (a manual button; a
   raw cron field hides behind "Advanced / Erweitert"). Options per automation: pin its result
-  to the top of Home, show/hide in activity, also run immediately when new mail arrives, and
+  as Home's briefing, show/hide in activity, also run immediately when new mail arrives, and
   desktop-notify when a run finishes. Cards drag to reorder, pause with a switch, and show
   recent runs. That notify option governs "here is the result"; a run that fails, or that
   leaves a draft waiting for approval, notifies whether or not it is on.
-- Marlene also suggests automations from patterns in recent chats; suggestions are reviewed on
-  the Automations page (add or dismiss).
+- A default weekly automation ("Automationsvorschläge") looks for recurring requests in recent
+  chats and files each proposal as a to-do on Home; the user has it created in chat.
 - Unattended runs read, search and draft freely, and they send from any account whose "Send /
   Senden" grant is armed (WhatsApp: its own "Auto-send / Automatisch senden" grant), just as in
   chat. Without the grant what they draft waits for approval on Home. The send always comes from
@@ -115,12 +125,13 @@ Automations / Automatisierungen
   they are granted (no labelling, moving or deleting mail, no CRM changes beyond new records);
   anything needing one lands as a to-do.
 
-Leads (with onOffice connected)
+Leads
 - Every prospect the assistant tracks: filed automatically from email inquiries or added by
   hand ("New lead / Neuer Lead"). Rows carry a status (New/Neu, Contacted/Kontaktiert,
   Engaged/Im Gespräch, Qualified/Qualifiziert, Won/Gewonnen, Lost/Verloren) and a priority
   (A hot, B warm, C cold), and expand to interest, notes, contact data and attached follow-up
-  automations. Deleting a lead deletes its attached automations too.
+  automations. What counts as a lead and how one is graded is up to the user's skills and
+  memory. Deleting a lead deletes its attached automations too.
 
 Knowledge / Wissen
 - A file browser over the assistant's home folder: wiki/ (your long-term memory, one markdown

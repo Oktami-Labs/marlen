@@ -1,7 +1,6 @@
 import type { AccountColor, AgentCard, CardAccount } from "@marlen/shared";
 import { accountColor } from "@/lib/accounts";
 import { AttachmentsCard } from "./AttachmentsCard";
-import { BriefingCard } from "./BriefingCard";
 import { ChartCard } from "./ChartCard";
 import { ChoicesCard } from "./ChoicesCard";
 import { DelegationCard } from "./DelegationCard";
@@ -10,6 +9,7 @@ import { FormCard } from "./FormCard";
 import { LeadCard } from "./LeadCard";
 import { MailSourcesCard } from "./MailSourcesCard";
 import { MessageDraftCard } from "./MessageDraftCard";
+import { ReportCard } from "./ReportCard";
 import { SourcesCard } from "./SourcesCard";
 import { WikiNoteCard } from "./WikiNoteCard";
 
@@ -36,8 +36,8 @@ export function AgentCardView({ card, colors }: { card: AgentCard; colors?: Acco
       return <MessageDraftCard card={card} />;
     case "attachments":
       return <AttachmentsCard card={card} color={hex(card.account)} />;
-    case "briefing":
-      return <BriefingCard card={card} colors={colors} />;
+    case "report":
+      return <ReportCard card={card} colors={colors} />;
     case "choices":
       return <ChoicesCard card={card} colors={colors} />;
     case "sources":

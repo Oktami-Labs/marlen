@@ -75,6 +75,9 @@ export function ChatPanel({
 
   const isPage = layout === "page";
   const transcriptShown = (isPage || !historyOpen) && !runs.restoring && runs.messages.length > 0;
+  const emptyConversation =
+    (isPage || !historyOpen) && !runs.restoring && runs.messages.length === 0 && queue.length === 0;
+  const centerEmptyConversation = isPage && emptyConversation;
   const lastMessage = runs.messages[runs.messages.length - 1];
   const scroll = useFollowScroll(
     viewportRef,
@@ -325,13 +328,17 @@ export function ChatPanel({
 
   return (
     <div
-      className={cn("flex flex-1 min-h-0 flex-col gap-3 overflow-hidden", isPage && "thread-page")}
+      className={cn(
+        "relative flex min-h-0 flex-1 flex-col gap-3 overflow-hidden",
+        isPage && "thread-page",
+        centerEmptyConversation && "justify-center pb-10",
+      )}
     >
-      <div className="relative min-h-0 flex-1">
+      <div className={cn("relative min-h-0", centerEmptyConversation ? "flex-none" : "flex-1")}>
         <div
           ref={viewportRef}
           onScroll={scroll.onScroll}
-          className="h-full overflow-y-auto scroll-stable"
+          className={cn("overflow-y-auto scroll-stable", !centerEmptyConversation && "h-full")}
         >
           {/* In page mode the history rail is external, so the internal toggle is inert. */}
           {!isPage && historyOpen ? (
@@ -342,7 +349,12 @@ export function ChatPanel({
           ) : runs.restoring ? (
             <LoadingRow />
           ) : runs.messages.length === 0 && queue.length === 0 ? (
-            <div className="flex h-full items-center justify-center">
+            <div
+              className={cn(
+                "flex justify-center",
+                centerEmptyConversation ? "items-center py-8" : "h-full items-start pt-8",
+              )}
+            >
               {/* The assistant's presence, not a generic "nothing here": the
                 avatar sits lit and breathing, waiting to be spoken to. */}
               <div className="flex flex-col items-center gap-3 text-center">
@@ -421,54 +433,56 @@ export function ChatPanel({
         </Notice>
       )}
 
-      <div className="thread-column relative flex flex-col gap-1.5 rounded-2xl bg-surface-2 p-1.5 pl-4">
+      <div className="thread-column relative flex flex-col gap-1 rounded-2xl bg-surface-2 p-2">
         <SlashMenu {...slash} />
         <GroundingMenu {...grounding} colors={accountColors} />
         {composerRefs.refs.length > 0 && (
-          <RefChips
-            refs={composerRefs.refs}
-            colors={accountColors}
-            onRemove={composerRefs.remove}
-          />
+          <div className="px-2 pt-1">
+            <RefChips
+              refs={composerRefs.refs}
+              colors={accountColors}
+              onRemove={composerRefs.remove}
+            />
+          </div>
         )}
-        <div className="flex items-end gap-2">
-          <textarea
-            ref={textareaRef}
-            value={input}
-            onChange={(e) => setInput(e.target.value)}
-            onKeyDown={(e) => {
-              // The command menu owns its keys while it is open.
-              if (slash.onKeyDown(e)) {
-                e.preventDefault();
-                return;
-              }
-              if (grounding.onKeyDown(e)) {
-                e.preventDefault();
-                return;
-              }
-              if (e.key === "Escape" && runs.busy) {
-                e.preventDefault();
-                void runs.stop();
-                return;
-              }
-              if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
-              if (window.matchMedia("(pointer: coarse)").matches) return;
+        <textarea
+          ref={textareaRef}
+          value={input}
+          onChange={(e) => setInput(e.target.value)}
+          onKeyDown={(e) => {
+            // The command menu owns its keys while it is open.
+            if (slash.onKeyDown(e)) {
               e.preventDefault();
-              send();
-            }}
-            placeholder={t("chat.placeholder")}
-            rows={1}
-            className={cn(
-              "max-h-40 min-h-9 flex-1 resize-none overflow-y-auto bg-transparent py-2 text-base md:text-sm leading-relaxed [scrollbar-width:none] [-webkit-scrollbar]:hidden placeholder:text-muted-foreground focus:outline-none",
-              !input && "overflow-x-hidden whitespace-nowrap",
-            )}
-            aria-busy={runs.busy}
-          />
+              return;
+            }
+            if (grounding.onKeyDown(e)) {
+              e.preventDefault();
+              return;
+            }
+            if (e.key === "Escape" && runs.busy) {
+              e.preventDefault();
+              void runs.stop();
+              return;
+            }
+            if (e.key !== "Enter" || e.shiftKey || e.nativeEvent.isComposing) return;
+            if (window.matchMedia("(pointer: coarse)").matches) return;
+            e.preventDefault();
+            send();
+          }}
+          placeholder={t("chat.placeholder")}
+          rows={1}
+          className={cn(
+            "max-h-40 min-h-12 w-full resize-none overflow-y-auto bg-transparent px-2 py-2 text-base leading-relaxed [scrollbar-width:none] [-webkit-scrollbar]:hidden placeholder:text-muted-foreground focus:outline-none md:text-sm",
+            !input && "overflow-x-hidden whitespace-nowrap",
+          )}
+          aria-busy={runs.busy}
+        />
+        <div className="flex items-center gap-1">
           <Button
             type="button"
             variant="ghost"
             size="icon-sm"
-            className="mb-1 shrink-0"
+            className="shrink-0 rounded-xl"
             onClick={() => {
               grounding.start();
               focusComposer();
@@ -478,20 +492,21 @@ export function ChatPanel({
           >
             <Plus />
           </Button>
-          <ModelControl conversationId={runs.conversationId} className="mb-1 shrink-0" />
+          <ModelControl conversationId={runs.conversationId} className="shrink-0" />
           <VoiceInput
-            className="mb-1 shrink-0"
+            className="shrink-0"
             onTranscript={(text) => {
               setInput((current) => (current ? `${current.trimEnd()} ${text}` : text));
               focusComposer();
             }}
           />
+          <div className="min-w-2 flex-1" />
           {runs.busy && !input.trim() ? (
             <Button
               onClick={() => void runs.stop()}
               size="icon-sm"
               variant="secondary"
-              className="mb-1 shrink-0 rounded-xl"
+              className="shrink-0 rounded-xl"
               aria-label={t("chat.stop")}
               title={t("chat.stop")}
             >
@@ -502,7 +517,7 @@ export function ChatPanel({
               onClick={send}
               disabled={!input.trim()}
               size="icon-sm"
-              className="mb-1 shrink-0 rounded-xl"
+              className="shrink-0 rounded-xl"
               aria-label={runs.busy ? t("chat.queue.send") : t("chat.send")}
               title={runs.busy ? t("chat.queue.send") : undefined}
             >

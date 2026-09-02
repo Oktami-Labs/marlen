@@ -28,6 +28,22 @@ export function dueMs(todo: Todo): number | null {
   return todo.dueAt ? parseDue(todo.dueAt).at.getTime() : null;
 }
 
+/** An approval without a date has waited this long before it counts as missed. */
+const APPROVAL_PATIENCE_MS = 3 * DAY_MS;
+
+/**
+ * When an item needs the user, on the agenda's one time axis: its due time when
+ * set; for an undated approval the moment it was drafted, which lands it in
+ * Today until it has waited a few days and then under Missed; null for an
+ * undated todo, which is Anytime.
+ */
+export function agendaMs(todo: Todo, todayStart: number): number | null {
+  const due = dueMs(todo);
+  if (due !== null || todo.kind !== "approval") return due;
+  const drafted = new Date(todo.createdAt).getTime();
+  return Date.now() - drafted > APPROVAL_PATIENCE_MS ? drafted : Math.max(drafted, todayStart);
+}
+
 export function dueChip(
   dueAt: string,
   lang: string,

@@ -1,4 +1,5 @@
 import { type AppStatus, isLanguage, isSetupComplete } from "@marlen/shared";
+import { useQuery } from "@tanstack/react-query";
 import {
   ChevronLeft,
   ChevronRight,
@@ -13,7 +14,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Navigate, Route, Routes, useLocation, useNavigate } from "react-router-dom";
+import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
 import { NotFound } from "@/components/NotFound";
 import { SearchPalette } from "@/components/SearchPalette";
 import { Sidebar } from "@/components/Sidebar";
@@ -167,6 +168,11 @@ export default function App() {
   const [shortcutsOpen, setShortcutsOpen] = React.useState(false);
   const [historyOpen, setHistoryOpen] = React.useState(false);
   const [activeConversationId, setActiveConversationId] = React.useState<string | undefined>();
+  const activeConversationQuery = useQuery({
+    queryKey: ["conversations", "detail", activeConversationId],
+    queryFn: () => api.conversation(activeConversationId as string),
+    enabled: Boolean(activeConversationId),
+  });
   const [pendingFocusAccountId, setPendingFocusAccountId] = React.useState<string | null>(null);
   React.useEffect(() => {
     if (!activeConversationId) setPendingFocusAccountId(null);
@@ -185,6 +191,20 @@ export default function App() {
   const toggleTheme = React.useCallback(() => {
     setThemePref(theme === "dark" ? "light" : "dark");
   }, [theme, setThemePref]);
+  const settingsRoute = currentPath === "settings";
+  const dockedChatCollapsed = agentCollapsed || (settingsRoute && !chatOpen);
+  const toggleDockedChat = React.useCallback(() => {
+    if (settingsRoute) {
+      if (dockedChatCollapsed) {
+        setAgentCollapsed(false);
+        setChatOpen(true);
+      } else {
+        setChatOpen(false);
+      }
+      return;
+    }
+    setAgentCollapsed((collapsed) => !collapsed);
+  }, [dockedChatCollapsed, settingsRoute]);
   const {
     ref: chatWidthRef,
     width: chatWidth,
@@ -249,6 +269,12 @@ export default function App() {
     setHistoryQuery("");
   }, [onChatRoute]);
 
+  // Closing route-local drawers on navigation keeps them from covering the next view.
+  // biome-ignore lint/correctness/useExhaustiveDependencies: currentPath is the navigation signal.
+  React.useEffect(() => {
+    setChatOpen(false);
+  }, [currentPath]);
+
   React.useEffect(() => {
     localStorage.setItem("marlen-chat-history-collapsed", String(historyCollapsed));
   }, [historyCollapsed]);
@@ -268,7 +294,7 @@ export default function App() {
 
       if (mod && key === "b") {
         event.preventDefault();
-        if (event.shiftKey) setAgentCollapsed((value) => !value);
+        if (event.shiftKey) toggleDockedChat();
         else setSidebarCollapsed((value) => !value);
         return;
       }
@@ -285,7 +311,7 @@ export default function App() {
     };
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
-  }, [toggleTheme]);
+  }, [toggleDockedChat, toggleTheme]);
 
   const select = (next: string) => {
     withViewTransition(() => navigate(next === "home" ? "/" : `/${next}`));
@@ -321,6 +347,11 @@ export default function App() {
     : import.meta.env.DEV && currentPath === "showcase"
       ? SHOWCASE_NAV.title
       : t(`views.${view}.title`);
+  const chatTitle = onChatRoute
+    ? activeConversationId
+      ? (activeConversationQuery.data?.title ?? t("views.chat.title"))
+      : t("chat.newConversation")
+    : t("views.chat.title");
 
   return (
     <div ref={chatWidthRef} className="flex h-dvh overflow-hidden bg-sidebar">
@@ -369,7 +400,9 @@ export default function App() {
             <Menu />
           </HeaderIconButton>
           <div className="min-w-0 flex-1">
-            <h1 className="text-xl font-bold tracking-tight text-foreground">{pageTitle}</h1>
+            <h1 className="truncate text-xl font-bold tracking-tight text-foreground">
+              {pageTitle}
+            </h1>
           </div>
           <div className="flex items-center gap-2 shrink-0">
             <button
@@ -384,7 +417,7 @@ export default function App() {
             <HeaderIconButton
               label={t("search.openButton")}
               onClick={() => openSearch()}
-              className="shrink-0 @2xl:hidden"
+              className="hidden shrink-0 @md:inline-flex @2xl:hidden"
             >
               <Search />
             </HeaderIconButton>
@@ -395,10 +428,10 @@ export default function App() {
             >
               {theme === "dark" ? <Sun /> : <Moon />}
             </HeaderIconButton>
-            {!onChatRoute && agentCollapsed && (
+            {!onChatRoute && dockedChatCollapsed && (
               <HeaderIconButton
                 label={t("app.expandChat")}
-                onClick={() => setAgentCollapsed(false)}
+                onClick={toggleDockedChat}
                 className="hidden shrink-0 lg:inline-flex"
               >
                 <ChevronLeft />
@@ -428,11 +461,13 @@ export default function App() {
             className={cn(
               currentPath === "knowledge"
                 ? "min-h-0 w-full flex-1"
-                : // Home is the one two-column page, so its cap steps out of the
-                  // way as soon as the canvas can hold two columns.
-                  currentPath === "home"
-                  ? "mx-auto max-w-3xl @3xl:max-w-4xl @5xl:max-w-5xl"
-                  : "mx-auto max-w-3xl @6xl:max-w-4xl @7xl:max-w-5xl",
+                : currentPath === "settings"
+                  ? "w-full max-w-7xl"
+                  : // Home is the one two-column page, so its cap steps out of the
+                    // way as soon as the canvas can hold two columns.
+                    currentPath === "home"
+                    ? "mx-auto w-full max-w-3xl @3xl:max-w-4xl @5xl:max-w-6xl @7xl:max-w-7xl"
+                    : "mx-auto w-full max-w-3xl @5xl:max-w-4xl @6xl:max-w-5xl @7xl:max-w-6xl",
               import.meta.env.DEV && currentPath === "showcase" && "max-w-none",
             )}
           >
@@ -443,19 +478,7 @@ export default function App() {
                   path="/settings"
                   element={<SettingsPanel status={status} onStatusChanged={refreshStatus} />}
                 />
-                {/* Leads exist only alongside a connected onOffice CRM. While status
-                    is still loading nothing renders — redirecting then would kick a
-                    direct /leads visit home on every reload. */}
-                <Route
-                  path="/leads"
-                  element={
-                    status === null ? null : status.onofficeConfigured ? (
-                      <LeadsPanel />
-                    ) : (
-                      <Navigate to="/" replace />
-                    )
-                  }
-                />
+                <Route path="/leads" element={<LeadsPanel />} />
                 <Route path="/automations" element={<AutomationsPanel />} />
                 <Route path="/knowledge" element={<KnowledgePanel />} />
                 {ShowcasePanel && <Route path="/showcase" element={<ShowcasePanel />} />}
@@ -481,7 +504,7 @@ export default function App() {
       )}
 
       {onChatRoute && historyOpen && (
-        <Backdrop className="md:hidden" onClick={() => setHistoryOpen(false)} />
+        <Backdrop className="lg:hidden" onClick={() => setHistoryOpen(false)} />
       )}
 
       {/* biome-ignore lint/a11y/useSemanticElements: interactive splitter; <hr> cannot receive focus or contain the grip */}
@@ -497,7 +520,7 @@ export default function App() {
         tabIndex={0}
         className={cn(
           "group z-40 hidden w-2 shrink-0 cursor-col-resize touch-none items-center justify-center lg:flex",
-          (onChatRoute || agentCollapsed) && "lg:hidden",
+          (onChatRoute || dockedChatCollapsed) && "lg:hidden",
         )}
       >
         <div className="h-8 w-1 rounded-full bg-foreground/10 transition-colors group-hover:bg-foreground/30 group-active:bg-accent/60" />
@@ -510,14 +533,14 @@ export default function App() {
         className={cn(
           "flex flex-col min-h-0 min-w-0 overflow-hidden",
           onChatRoute
-            ? "static z-auto min-w-0 flex-1 translate-x-0 bg-background md:my-3 md:rounded-2xl"
+            ? "static z-auto min-w-0 flex-1 bg-background md:my-3 md:rounded-2xl"
             : cn(
                 "fixed inset-y-0 right-0 w-full max-w-sm lg:static lg:z-auto lg:max-w-none lg:translate-x-0",
                 // Width animation would make the panel trail the pointer during a drag.
                 chatResizing
                   ? "transition-none"
                   : "transition-[transform,width] duration-200 ease-out",
-                agentCollapsed ? "lg:w-0" : "lg:w-[var(--chat-width)]",
+                dockedChatCollapsed ? "lg:w-0" : "lg:w-[var(--chat-width)]",
                 chatOpen ? "z-50 translate-x-0" : "z-40 translate-x-full lg:translate-x-0",
               ),
         )}
@@ -525,47 +548,51 @@ export default function App() {
         <div
           className={cn(
             "flex min-h-0 min-w-0 flex-1 overflow-hidden pointer-events-auto",
-            onChatRoute ? "flex-row gap-4 p-4 sm:p-6" : "flex-col bg-sidebar",
+            onChatRoute ? "flex-row gap-3 p-3 sm:p-4" : "flex-col bg-sidebar",
             // Prevent text reflow while the panel opens and closes.
             !onChatRoute && "lg:w-[var(--chat-width)]",
           )}
         >
           {onChatRoute && (
-            <div
+            <aside
+              aria-label={t("chat.history")}
               className={cn(
-                "fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-background transition-transform duration-200 ease-out md:static md:z-auto md:w-64 md:translate-x-0",
-                historyOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0",
-                historyCollapsed && "md:hidden",
+                "fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-background transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-64 lg:translate-x-0 xl:w-72",
+                historyOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+                historyCollapsed && "lg:hidden",
               )}
             >
-              <div className="flex shrink-0 items-center gap-2.5 px-4 pb-3 pt-6">
+              <div className="flex shrink-0 items-center gap-2.5 px-3 pb-1 pt-4">
                 <p className="text-sm font-semibold tracking-tight">{t("chat.history")}</p>
-                <HeaderIconButton
-                  label={t("chat.newConversation")}
-                  onClick={() => {
-                    sendChatCommand({ kind: "new" });
-                    setHistoryOpen(false);
-                  }}
-                  className="ml-auto"
-                >
-                  <Plus />
-                </HeaderIconButton>
                 <HeaderIconButton
                   label={t("chat.collapseHistory")}
                   onClick={() => setHistoryCollapsed(true)}
-                  className="hidden md:inline-flex"
+                  className="ml-auto hidden lg:inline-flex"
                 >
                   <ChevronLeft />
                 </HeaderIconButton>
                 <HeaderIconButton
                   label={t("common.close")}
                   onClick={() => setHistoryOpen(false)}
-                  className="md:hidden"
+                  className="lg:hidden"
                 >
                   <X />
                 </HeaderIconButton>
               </div>
-              <div className="px-4 pb-2">
+              <div className="px-3 pb-1">
+                <Button
+                  variant="ghost"
+                  className="w-full justify-start px-3 text-foreground"
+                  onClick={() => {
+                    sendChatCommand({ kind: "new" });
+                    setHistoryOpen(false);
+                  }}
+                >
+                  <Plus />
+                  {t("chat.newConversation")}
+                </Button>
+              </div>
+              <div className="px-3 pb-2">
                 <SearchField
                   value={historyQuery}
                   onChange={setHistoryQuery}
@@ -582,7 +609,7 @@ export default function App() {
                   }}
                 />
               </div>
-            </div>
+            </aside>
           )}
 
           {/* This stable column always owns the ChatPanel instance.
@@ -595,7 +622,12 @@ export default function App() {
               onChatRoute && "rounded-2xl bg-surface",
             )}
           >
-            <div className="flex shrink-0 items-center gap-2.5 px-5 pb-4 pt-6">
+            <div
+              className={cn(
+                "flex shrink-0 items-center gap-2.5 px-5",
+                onChatRoute ? "py-4" : "pb-4 pt-6",
+              )}
+            >
               {/* Full-page tab has no app header, so mobile users still need a way into the nav drawer. */}
               {onChatRoute && (
                 <HeaderIconButton
@@ -611,7 +643,7 @@ export default function App() {
                 <HeaderIconButton
                   label={t("chat.showHistory")}
                   onClick={() => setHistoryCollapsed(false)}
-                  className="hidden shrink-0 md:inline-flex"
+                  className="hidden shrink-0 lg:inline-flex"
                 >
                   <ChevronRight />
                 </HeaderIconButton>
@@ -627,8 +659,18 @@ export default function App() {
                 />
               ) : (
                 <>
-                  <p className="shrink-0 text-sm font-semibold tracking-tight">
-                    {t("views.chat.title")}
+                  <p
+                    className="shrink-0 truncate text-sm font-semibold tracking-tight sm:min-w-0 sm:shrink"
+                    title={chatTitle}
+                  >
+                    {onChatRoute ? (
+                      <>
+                        <span className="sm:hidden">{t("views.chat.title")}</span>
+                        <span className="hidden sm:inline">{chatTitle}</span>
+                      </>
+                    ) : (
+                      chatTitle
+                    )}
                   </p>
                   <FocusChip
                     conversationId={activeConversationId}
@@ -661,21 +703,21 @@ export default function App() {
               <HeaderIconButton
                 label={t("chat.newConversation")}
                 onClick={() => sendChatCommand({ kind: "new" })}
-                className={cn(onChatRoute && "md:hidden")}
+                className={cn(onChatRoute && "lg:hidden")}
               >
                 <Plus />
               </HeaderIconButton>
               <HeaderIconButton
                 label={t("chat.history")}
                 onClick={() => setHistoryOpen((open) => !open)}
-                className={cn(historyOpen && "text-foreground", onChatRoute && "md:hidden")}
+                className={cn(historyOpen && "text-foreground", onChatRoute && "lg:hidden")}
               >
                 <History />
               </HeaderIconButton>
               {!onChatRoute && (
                 <HeaderIconButton
                   label={t("app.collapseChat")}
-                  onClick={() => setAgentCollapsed(true)}
+                  onClick={toggleDockedChat}
                   className="hidden lg:inline-flex"
                 >
                   <ChevronRight />
@@ -728,7 +770,7 @@ export default function App() {
       </Dialog>
       <Toaster />
       <CursorTooltip />
-      <SearchPalette onofficeConfigured={Boolean(status?.onofficeConfigured)} />
+      <SearchPalette />
       <AttachmentViewer />
     </div>
   );

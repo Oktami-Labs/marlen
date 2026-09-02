@@ -5,7 +5,6 @@ import { recordLearnRun } from "../../db/learnRuns.js";
 import { getTimezoneSetting } from "../../db/settings.js";
 import { runExtractionSweep } from "./extractor.js";
 import { runMatchSweep } from "./matcher.js";
-import { runTriageLearning } from "./triage.js";
 
 const log = moduleLogger("learn");
 
@@ -28,12 +27,6 @@ export async function runLearningSweep(reason: "boot" | "scheduled"): Promise<vo
   try {
     matched = (await runMatchSweep()).matched;
     const extracted = await runExtractionSweep();
-    const triage = await runTriageLearning();
-    if (triage.updated) {
-      log.info({ decisions: triage.decisions }, "triage feedback memory updated");
-    } else if (triage.protected) {
-      log.info("triage feedback memory left untouched after a user edit or deletion");
-    }
     await recordLearnRun({
       reason,
       status: "ok",

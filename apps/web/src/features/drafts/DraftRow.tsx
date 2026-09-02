@@ -1,4 +1,4 @@
-import type { EmailDraft } from "@marlen/shared";
+import type { Todo, TodoRef } from "@marlen/shared";
 import { ChevronRight, Send, Trash2 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -10,37 +10,43 @@ import { Button } from "@/components/ui/button";
 import { HoverActions } from "@/components/ui/hover-actions";
 import { SentRow } from "@/components/ui/list-row";
 import { NewDot } from "@/features/home/seen";
+import { ApprovalNote } from "@/features/home/TodoRow";
 import { recipientNames, splitAddresses } from "@/lib/addresses";
 import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { errorMessage, rowTransition, withViewTransition } from "@/lib/utils";
 
-/** One draft in the approval list; click opens it on its own screen to read and edit. */
+/** The agenda item wrapping an email draft. */
+export type EmailApproval = Todo & { ref: Extract<TodoRef, { kind: "email_draft" }> };
+
+/** One email draft awaiting approval on the agenda; click opens it on its own screen to read and edit. */
 export function DraftRow({
-  accountId,
-  account,
+  todo,
+  color,
   markAccount,
-  draft,
   dateLabel,
   onOpen,
-  onDeleted,
+  onChanged,
   onError,
   isNew,
+  onAnswer,
 }: {
-  accountId: string;
-  /** The inbox this draft sits in; its address is what a thread reads as "me". */
-  account: { name: string; color?: string };
-  /** Set when more than one inbox is in the list: marks the row with its account's dot. */
+  todo: EmailApproval;
+  /** The inbox's colour; the row wears it as a dot only when more than one inbox is in the list. */
+  color?: string;
   markAccount?: boolean;
-  draft: EmailDraft;
   dateLabel: (iso: string) => string;
   onOpen: () => void;
-  onDeleted: () => void;
+  /** The draft was sent or discarded: the agenda refetches without waiting on the event debounce. */
+  onChanged: () => void;
   onError: (message: string | null) => void;
   /** Drafted since the user last looked, fronts the subject with the new dot. */
   isNew?: boolean;
+  onAnswer: (label: string) => void;
 }) {
   const { t } = useTranslation();
+  const { ref } = todo;
+  const subject = todo.title || t("drafts.noSubject");
   // True right after a successful send, the row shows a brief "Sent" state
   // until the drafts SSE topic fires and the parent list refetch removes it.
   const [sent, setSent] = React.useState(false);
@@ -52,9 +58,10 @@ export function DraftRow({
     send: async () => {
       onError(null);
       try {
-        await api.sendDraft(accountId, draft.id);
+        await api.sendDraft(ref.accountId, ref.draftId);
         withViewTransition(() => setSent(true));
         toast.success(t("drafts.sentToast"));
+        onChanged();
         return true;
       } catch (err) {
         onError(errorMessage(err));
@@ -64,9 +71,9 @@ export function DraftRow({
     discard: async () => {
       onError(null);
       try {
-        await api.deleteDraft(accountId, draft.id);
+        await api.deleteDraft(ref.accountId, ref.draftId);
         withViewTransition(() => setDiscarded(true));
-        onDeleted();
+        onChanged();
         return true;
       } catch (err) {
         onError(errorMessage(err));
@@ -76,16 +83,16 @@ export function DraftRow({
   });
 
   // The row fronts the person the draft goes to, as a mail client does.
-  const to = splitAddresses(draft.to);
-  const recipients = recipientNames(to, account.name, t("mail.me"));
+  const to = splitAddresses(ref.to);
+  const recipients = recipientNames(to, ref.account, t("mail.me"));
 
   if (discarded) return null;
 
   if (sent) {
     return (
       <SentRow
-        id={draft.id}
-        title={draft.subject || t("drafts.noSubject")}
+        id={todo.id}
+        title={subject}
         subtitle={recipients.join(", ")}
         label={t("drafts.sent")}
       />
@@ -93,10 +100,7 @@ export function DraftRow({
   }
 
   return (
-    <div
-      className="surface surface-hover group scroll-mt-4 rounded-lg"
-      style={rowTransition(draft.id)}
-    >
+    <div className="surface-hover group scroll-mt-4 rounded-md" style={rowTransition(todo.id)}>
       <div className="flex w-full flex-wrap items-center gap-2 px-2.5 py-2.5">
         <button
           type="button"
@@ -104,30 +108,28 @@ export function DraftRow({
           className="flex min-w-0 flex-1 basis-full items-center gap-2 text-left @md:basis-0"
         >
           {markAccount && (
-            <span className="shrink-0" data-tooltip={account.name}>
-              <AccountDot color={account.color} className="block h-2 w-2" />
-              <span className="sr-only">{account.name}</span>
+            <span className="shrink-0" data-tooltip={ref.account}>
+              <AccountDot color={color} className="block h-2 w-2" />
+              <span className="sr-only">{ref.account}</span>
             </span>
           )}
           <AvatarMark name={recipients[0] ?? ""} tone="tint-accent" size="sm" />
           <div className="min-w-0 flex-1">
             <p className="flex items-center gap-1.5 text-sm font-medium">
               {isNew && <NewDot />}
-              <span className="truncate">{draft.subject || t("drafts.noSubject")}</span>
+              <span className="truncate">{subject}</span>
             </p>
             {/* The time shares the meta line, not the subject's: the subject is
                 why the row exists and gets the whole width. */}
             <div className="flex items-baseline gap-2">
-              <RecipientLine kind="to" addresses={to} self={account.name}>
-                {draft.snippet && (
-                  <span className="text-muted-foreground/70"> · {draft.snippet}</span>
-                )}
+              <RecipientLine kind="to" addresses={to} self={ref.account}>
+                {ref.snippet && <span className="text-muted-foreground/70"> · {ref.snippet}</span>}
               </RecipientLine>
               <time
-                dateTime={draft.date}
-                className="ml-auto shrink-0 font-mono text-2xs tabular-nums text-muted-foreground"
+                dateTime={todo.createdAt}
+                className="ml-auto shrink-0 text-2xs tabular-nums text-muted-foreground"
               >
-                {dateLabel(draft.date)}
+                {dateLabel(todo.createdAt)}
               </time>
             </div>
           </div>
@@ -136,7 +138,10 @@ export function DraftRow({
           {/* Refining is secondary to the row's own decision, so it stays out
               of the way until the row is hovered. */}
           <HoverActions className="gap-1">
-            <RefineInChatButton conversationId={draft.conversationId} subject={draft.subject} />
+            <RefineInChatButton
+              conversationId={todo.conversationId ?? undefined}
+              subject={todo.title}
+            />
           </HoverActions>
           <Button
             variant="ghost"
@@ -173,6 +178,8 @@ export function DraftRow({
           </Button>
         </div>
       </div>
+
+      <ApprovalNote todo={todo} disabled={actions.busy} onAnswer={onAnswer} />
 
       <DraftActionDialog
         pending={actions.pending}

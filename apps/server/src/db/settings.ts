@@ -141,6 +141,10 @@ const accountVoicesSetting = jsonArraySetting<AccountVoice>(ACCOUNT_VOICES_SETTI
 
 export const getAccountVoices = accountVoicesSetting.get;
 
+export async function clearAccountVoices(): Promise<void> {
+  await accountVoicesSetting.set([]);
+}
+
 // Serializes patchAccountVoice calls: the voices live as one JSON array under
 // one key, so two interleaved read-modify-write cycles would each write the
 // array as they read it, erasing the other account's update.

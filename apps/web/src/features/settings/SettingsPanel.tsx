@@ -1,19 +1,27 @@
-import { type AppStatus, isLanguage, LANGUAGE_LABELS, SUPPORTED_LANGUAGES } from "@marlen/shared";
+import {
+  type AppStatus,
+  isLanguage,
+  isSetupComplete,
+  LANGUAGE_LABELS,
+  SUPPORTED_LANGUAGES,
+} from "@marlen/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import {
+  Cable,
   Check,
-  DatabaseBackup,
+  Database,
   Download,
-  Info,
-  Mail,
+  type LucideIcon,
+  ShieldCheck,
   SlidersHorizontal,
-  Sparkles,
   TriangleAlert,
 } from "lucide-react";
 import * as React from "react";
 import { Trans, useTranslation } from "react-i18next";
+import { useSearchParams } from "react-router-dom";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
+import { Card } from "@/components/ui/card";
 import { ErrorBanner, LoadingRow } from "@/components/ui/feedback";
 import { Label } from "@/components/ui/label";
 import { Section } from "@/components/ui/section-header";
@@ -33,10 +41,108 @@ import { desktopBridge } from "@/lib/desktop";
 import { rememberLanguage } from "@/lib/i18n";
 import { type QuickActionMode, useQuickActionMode } from "@/lib/quickActions";
 import { toast } from "@/lib/toast";
-import { type ThemePref, useTheme } from "@/lib/useTheme";
-import { errorMessage } from "@/lib/utils";
+import { useTheme } from "@/lib/useTheme";
+import { cn, errorMessage, withViewTransition } from "@/lib/utils";
+
+const SETTINGS_VIEWS = [
+  { id: "general", icon: SlidersHorizontal },
+  { id: "connections", icon: Cable },
+  { id: "permissions", icon: ShieldCheck },
+  { id: "data", icon: Database },
+] as const satisfies readonly { id: string; icon: LucideIcon }[];
+type SettingsView = (typeof SETTINGS_VIEWS)[number]["id"];
+
+function isSettingsView(value: string | null): value is SettingsView {
+  return SETTINGS_VIEWS.some((view) => view.id === value);
+}
 
 export function SettingsPanel({
+  status,
+  onStatusChanged,
+}: {
+  status: AppStatus | null;
+  onStatusChanged?: () => void;
+}) {
+  const { t } = useTranslation();
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedView = searchParams.get("section");
+  const defaultView: SettingsView =
+    status !== null && !isSetupComplete(status) ? "connections" : "general";
+  const view = isSettingsView(requestedView) ? requestedView : defaultView;
+
+  React.useEffect(() => {
+    if (isSettingsView(requestedView) || status === null) return;
+    setSearchParams({ section: defaultView }, { replace: true });
+  }, [defaultView, requestedView, setSearchParams, status]);
+
+  const selectView = (next: SettingsView) => {
+    if (next === view) return;
+    withViewTransition(() => setSearchParams({ section: next }));
+  };
+
+  const content =
+    view === "general" ? (
+      <GeneralSettings />
+    ) : view === "connections" ? (
+      <ConnectionSettings status={status} onStatusChanged={onStatusChanged} />
+    ) : view === "permissions" ? (
+      <FileAccessSection index={0} />
+    ) : (
+      <DataSettings />
+    );
+
+  return (
+    <div
+      data-testid="settings-workspace"
+      className="grid gap-6 pt-2 @3xl:grid-cols-[11rem_minmax(0,1fr)] @3xl:gap-10"
+    >
+      <nav
+        aria-label={t("settings.nav.label")}
+        className="hidden self-start @3xl:sticky @3xl:top-2 @3xl:flex @3xl:flex-col @3xl:gap-1"
+      >
+        {SETTINGS_VIEWS.map(({ id, icon: Icon }) => {
+          const active = id === view;
+          return (
+            <button
+              key={id}
+              type="button"
+              aria-current={active ? "page" : undefined}
+              onClick={() => selectView(id)}
+              className={cn(
+                "relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
+                "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
+                active
+                  ? "bg-accent/10 text-accent"
+                  : "text-muted-foreground hover:bg-accent/[0.08] hover:text-foreground",
+              )}
+            >
+              <Icon aria-hidden className="h-4 w-4 shrink-0" />
+              <span>{t(`settings.nav.${id}`)}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      <Select
+        id="settings-category"
+        aria-label={t("settings.nav.label")}
+        className="@3xl:hidden"
+        value={view}
+        onChange={(next) => {
+          if (isSettingsView(next)) selectView(next);
+        }}
+        options={SETTINGS_VIEWS.map(({ id }) => ({
+          value: id,
+          label: t(`settings.nav.${id}`),
+        }))}
+      />
+
+      <div className="@container min-w-0 @3xl:col-start-2 @3xl:row-start-1">{content}</div>
+    </div>
+  );
+}
+
+function ConnectionSettings({
   status,
   onStatusChanged,
 }: {
@@ -88,11 +194,10 @@ export function SettingsPanel({
   })();
 
   return (
-    <div className="flex flex-col gap-10 pt-4">
+    <div className="flex flex-col gap-10">
       <Section
         index={0}
         className="animate-in-up"
-        icon={<Sparkles />}
         title={t("settings.sections.ai.title")}
         aside={
           status &&
@@ -109,52 +214,49 @@ export function SettingsPanel({
       >
         <div className="flex flex-col gap-5">
           <Providers providers={providers} onChanged={refresh} />
-          <ModelPicker connectedIds={connectedIds} onSaved={refresh} />
+          <Card padding="md">
+            <ModelPicker connectedIds={connectedIds} onSaved={refresh} />
+          </Card>
         </div>
       </Section>
 
       <Section
         index={1}
         className="animate-in-up"
-        icon={<Mail />}
         title={t("settings.sections.accounts.title")}
         aside={accountsChip}
       >
         <ConnectionsPanel onStatusChanged={() => void refresh()} />
       </Section>
+    </div>
+  );
+}
 
-      <FileAccessSection index={2} />
+function GeneralSettings() {
+  const { t } = useTranslation();
+  return (
+    <Section index={0} className="animate-in-up" title={t("settings.sections.preferences.title")}>
+      <Card padding="sm" className="flex flex-col gap-1">
+        <AppearanceRow />
+        <LanguageRow />
+        <TimezoneRow />
+        <QuickActionsRow />
+        <LaunchAtLoginRow />
+      </Card>
+    </Section>
+  );
+}
 
-      <Section
-        index={3}
-        className="animate-in-up"
-        icon={<SlidersHorizontal />}
-        title={t("settings.sections.preferences.title")}
-      >
-        <div className="flex flex-col gap-2">
-          <AppearanceRow />
-          <LanguageRow />
-          <TimezoneRow />
-          <QuickActionsRow />
-          <LaunchAtLoginRow />
-        </div>
+function DataSettings() {
+  const { t } = useTranslation();
+  return (
+    <div className="flex flex-col gap-10">
+      <Section index={0} className="animate-in-up" title={t("settings.sections.data.title")}>
+        <Card padding="sm">
+          <DataExportRow />
+        </Card>
       </Section>
-
-      <Section
-        index={4}
-        className="animate-in-up"
-        icon={<DatabaseBackup />}
-        title={t("settings.sections.data.title")}
-      >
-        <DataExportRow />
-      </Section>
-
-      <Section
-        index={5}
-        className="animate-in-up"
-        icon={<Info />}
-        title={t("settings.sections.about.title")}
-      >
+      <Section index={1} className="animate-in-up" title={t("settings.sections.about.title")}>
         <AboutPanel />
       </Section>
     </div>
@@ -164,7 +266,12 @@ export function SettingsPanel({
 function DataExportRow() {
   const { t } = useTranslation();
   return (
-    <SettingRow label={t("settings.export.label")} description={t("settings.export.description")}>
+    <SettingRow
+      bare
+      className="rounded-lg px-2 py-2.5"
+      label={t("settings.export.label")}
+      description={t("settings.export.description")}
+    >
       <Button variant="secondary" size="sm" onClick={() => api.downloadDataExport()}>
         <Download />
         {t("settings.export.cta")}
@@ -174,16 +281,25 @@ function DataExportRow() {
 }
 
 function useSaveState() {
-  const { i18n } = useTranslation();
   const [state, setState] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = React.useState<string | null>(null);
+  const resetTimer = React.useRef<number | null>(null);
+
+  React.useEffect(
+    () => () => {
+      if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
+    },
+    [],
+  );
+
   const run = async (save: () => Promise<void>) => {
+    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
     setState("saving");
     setError(null);
     try {
       await save();
       setState("saved");
-      toast.success(i18n.t("common.saved"));
+      resetTimer.current = window.setTimeout(() => setState("idle"), 1800);
     } catch (err) {
       setState("error");
       setError(errorMessage(err));
@@ -217,7 +333,14 @@ function PreferenceRow({
 }) {
   const { t } = useTranslation();
   return (
-    <SettingRow htmlFor={id} label={label} description={description} error={error}>
+    <SettingRow
+      bare
+      htmlFor={id}
+      label={label}
+      description={description}
+      error={error}
+      className="rounded-lg px-2 py-2.5"
+    >
       {saving ? (
         <Spinner className="h-3.5 w-3.5 text-muted-foreground" />
       ) : saved ? (
@@ -229,7 +352,7 @@ function PreferenceRow({
       <Select
         id={id}
         aria-label={label}
-        className="w-40 sm:w-52"
+        className="w-full @md:w-52"
         value={value}
         onChange={onChange}
         options={options}
@@ -249,7 +372,9 @@ function AppearanceRow() {
       label={t("settings.appearance.label")}
       description={t("settings.appearance.description")}
       value={pref}
-      onChange={(value) => setPref(value as ThemePref)}
+      onChange={(value) => {
+        if (value === "light" || value === "dark" || value === "system") setPref(value);
+      }}
       options={[
         { value: "light", label: t("settings.appearance.light") },
         { value: "dark", label: t("settings.appearance.dark") },
@@ -381,19 +506,50 @@ function TimezoneRow() {
 function QuickActionsRow() {
   const { t } = useTranslation();
   const [mode, setMode] = useQuickActionMode();
+  const choices: { value: QuickActionMode; label: string }[] = [
+    { value: "send", label: t("settings.sections.quickActions.send") },
+    { value: "prefill", label: t("settings.sections.quickActions.prefill") },
+  ];
 
   return (
-    <PreferenceRow
-      id="settings-quick-actions"
+    <SettingRow
+      bare
       label={t("settings.sections.quickActions.title")}
       description={t("settings.sections.quickActions.description")}
-      value={mode}
-      onChange={(value) => setMode(value as QuickActionMode)}
-      options={[
-        { value: "send", label: t("settings.sections.quickActions.send") },
-        { value: "prefill", label: t("settings.sections.quickActions.prefill") },
-      ]}
-    />
+      className="rounded-lg px-2 py-2.5"
+    >
+      <fieldset className="flex w-full min-w-0 rounded-lg border-0 bg-surface-2 p-1 @md:w-auto">
+        <legend className="sr-only">{t("settings.sections.quickActions.title")}</legend>
+        {choices.map((choice) => {
+          const selected = choice.value === mode;
+          return (
+            <label
+              key={choice.value}
+              className="relative min-w-0 flex-1 cursor-pointer @md:flex-none"
+            >
+              <input
+                type="radio"
+                name="settings-quick-actions"
+                value={choice.value}
+                checked={selected}
+                onChange={() => setMode(choice.value)}
+                className="peer sr-only"
+              />
+              <span
+                className={cn(
+                  "flex h-7 items-center justify-center whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-surface-2",
+                  selected
+                    ? "bg-primary text-primary-foreground"
+                    : "text-muted-foreground hover:text-foreground",
+                )}
+              >
+                {choice.label}
+              </span>
+            </label>
+          );
+        })}
+      </fieldset>
+    </SettingRow>
   );
 }
 
@@ -424,9 +580,11 @@ function LaunchAtLoginRow() {
 
   return (
     <SettingRow
+      bare
       htmlFor="settings-launch-at-login"
       label={t("settings.launchAtLogin.label")}
       description={t("settings.launchAtLogin.description")}
+      className="rounded-lg px-2 py-2.5"
     >
       <Switch
         id="settings-launch-at-login"
@@ -491,7 +649,7 @@ function ModelPicker({
 
   return (
     <div className="flex flex-col gap-4">
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="flex flex-col gap-4">
         <div className="flex flex-col gap-1.5">
           <Label htmlFor="settings-provider">{t("settings.provider")}</Label>
           <Select

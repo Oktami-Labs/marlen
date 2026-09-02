@@ -16,15 +16,30 @@ const SIZE = {
 export function GroupLabel({
   as: Tag = "h3",
   size = "md",
+  count,
   className,
   children,
 }: {
   as?: "h3" | "h4" | "p" | "span";
   size?: keyof typeof SIZE;
+  /** How many rows the group holds; shown from two up, a one over one visible row says nothing. */
+  count?: number;
   className?: string;
   children: React.ReactNode;
 }) {
   return (
-    <Tag className={cn("uppercase text-muted-foreground", SIZE[size], className)}>{children}</Tag>
+    <Tag
+      className={cn(
+        "uppercase text-muted-foreground",
+        SIZE[size],
+        count !== undefined && "flex items-center gap-1.5",
+        className,
+      )}
+    >
+      {children}
+      {count !== undefined && count > 1 && (
+        <span className="text-2xs tabular-nums text-muted-foreground/70">{count}</span>
+      )}
+    </Tag>
   );
 }

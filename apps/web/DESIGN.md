@@ -81,18 +81,28 @@ clean call sites; when you add one, add it to this list.
   assistant's round mark chip fronting assistant turns and the empty chat;
   `active` breathes its bloom while the turn is live. It sits above the turn's
   prose, which is a plain full-width block: only the user's message is a bubble.
-- **Icon tiles:** `IconChip`, the tinted square fronting section titles and
-  palette rows; it sizes the icon.
+- **Icon tiles:** `IconChip`, the tinted square fronting palette rows and
+  typed list rows; it sizes the icon. Never on a section title.
 - **Section titles:** `SectionTitle` (`ui/section-header.tsx`) for every
-  top-level page section; `SectionHeader`/`Section` for settings/setup pages.
+  top-level page section: plain text, with the section's meta and icon
+  actions in the trailing slot; `SectionHeader`/`Section` for settings/setup
+  pages.
 - **Headers:** page and settings-section headers contain only the title plus
   relevant status or actions. Do not add a subtitle or description line. Put
   necessary guidance beside the control or state it explains.
 - **Group labels:** `GroupLabel`, the uppercase muted overline over a group of
-  rows; `sm` for dense meta lists.
+  rows; `sm` for dense meta lists. Its `count` shows from two rows up: a one
+  over one visible row says nothing.
 - **Settings rows:** `SettingRow`, with label and description left and control right. Use `bare`
-  inside a raised card, `ListRow`-raised otherwise. Settings auto-save; secrets
-  save on Enter/blur. The Pipedream credentials form is the one verify exception.
+  inside a raised card, `ListRow`-raised otherwise. A related group is one card
+  of bare rows, never a card per row. Below the row's container breakpoint, the
+  control moves under the copy instead of squeezing it. Separate settings never
+  share a horizontal row, even when the canvas is wide. Settings auto-save;
+  secrets save on Enter/blur. The Pipedream credentials form is the one verify exception.
+- **Settings navigation:** four or more distinct settings jobs use a URL-backed
+  left rail. Below the rail breakpoint, replace it with one compact category
+  selector. Setup links open the relevant category; switching categories must
+  survive reload and browser back/forward.
 - **Menu/picker rows:** `OptionRow`, with a leading mark, truncated label, optional
   detail and trailing slot.
 - **Scrollable pickers:** `ScrollEdges`, which keeps the native scrollbar and adds
@@ -131,7 +141,9 @@ sink. Standalone rises, tucked-inside sinks. That alternation is the whole model
 
 Never stack `surface` on `surface`. Sibling rows on the canvas each rise; rows
 *inside* a grouped card stay bare. Raised holds recessed holds raised is the max
-depth.
+depth. A Home section is one raised panel holding plain rows with their group
+labels inside (`surface-hover` on the row), never a card per row: five cards
+under five overlines is what makes a short list read as clutter.
 
 A neutral control's fill is relative to what is behind it, and this is automatic
 via derived variables (`--surface-2-fill`, `--secondary-fill`). Use
@@ -156,9 +168,9 @@ canvas to read over either.
   skip-link. Not a CTA fill.
 - **Type tints on icon chips**, one tone per type, chip only, never the row
   background: accent = email draft, emerald = outbound message, amber =
-  needs-attention, neutral = schedule/log/to-dos. Section title chips reuse
-  them but are never amber: a section stays neutral even when its rows are
-  overdue. Urgency reads from the rows, not from the heading.
+  needs-attention, neutral = schedule/log/to-dos. Urgency reads from the rows
+  and their group label, never from a section title, and it is said once: an
+  urgent tier heading is not repeated as a badge or a triangle on its rows.
 - **Semantic colors are muted pastels**, status only: emerald = success, amber =
   attention/paused, red = destructive/error. One token per colour is both the
   tint fill and the text on it (`.tint-*`), so each is set dark enough to clear
@@ -170,8 +182,10 @@ canvas to read over either.
 
 ## Type
 
-- **Geist Sans** for UI, **Geist Mono** for schedules, model ids, codes,
-  timestamps (plus `tabular-nums`).
+- **Geist Sans** for UI, **Geist Mono** for schedules, model ids, codes, and
+  the work log's time gutter (plus `tabular-nums`). A date or count on an
+  ordinary row stays in the sans, `tabular-nums`: mono on every row is a
+  second texture the page does not need.
 - Hierarchy is weight and color, not size jumps. Section titles are
   `text-sm font-semibold`, descriptions `text-xs`/`text-sm text-muted-foreground`.
 - The ladder is `text-3xs` (10, tiny marks), `text-2xs` (11, meta/overline),
@@ -268,12 +282,18 @@ read as one idea.
 ## Layout
 
 - Lead with macro-whitespace; sections separate by `gap-8`/`gap-10`, not rules.
-- Content column is constrained: `max-w-3xl` for settings-style pages, stepping to
-  `max-w-4xl`/`max-w-5xl` via container queries. The canvas decides, not the
-  viewport, since the sidebar and chat panel eat variable width. Home is the one
+- Content columns are constrained according to the job. Settings uses a
+  leading-aligned `max-w-7xl` workspace because its chat panel starts closed;
+  its rail stays at the leading edge and its content remains one vertical
+  reading column at every width. Other pages start at `max-w-3xl` and relax to
+  `max-w-6xl` on large canvases. Home can reach `max-w-7xl`. The canvas decides,
+  not the viewport, since the sidebar and chat panel eat variable width. Home is the one
   two-column page (what waits on you, what the agent does itself): it steps up
   from `@3xl` instead, so the second column appears as soon as the canvas can
-  hold two rows rather than only on a wide display.
+  hold two rows rather than only on a wide display. The agenda is one time
+  axis: Missed, the days ahead, Anytime. Every kind of item sits on it, a
+  draft awaiting approval under the day it was drafted; never a group per
+  kind, which would wedge a second axis into the first.
 - Chrome frames the canvas: the nav rail, chat column, and the frame behind the
   working canvas are `sidebar`. On desktop the grey canvas is inset and rounded
   (`rounded-2xl`); on mobile it runs edge to edge.

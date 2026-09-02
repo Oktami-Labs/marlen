@@ -207,7 +207,7 @@ export function StorageTab() {
 
 /**
  * A static replay of a chat turn, same markup ChatPanel uses, so the user
- * bubble, tool chips and cards all re-theme with the Theme Lab sliders. The briefing
+ * bubble, tool chips and cards all re-theme with the Theme Lab sliders. The report
  * card's row actions still post into the real chat panel; the panel forces
  * prefill mode while this page is mounted so nothing fires a live agent turn.
  */

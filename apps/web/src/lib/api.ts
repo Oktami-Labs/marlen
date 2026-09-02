@@ -8,12 +8,13 @@ import type {
   AppStatus,
   Automation,
   AutomationRun,
-  AutomationSuggestion,
   ChatMessage,
   ChatStreamEvent,
   ConnectedAccount,
   ConnectTokenResponse,
   Conversation,
+  ConversationListResponse,
+  ConversationType,
   DraftProposalStatusResult,
   EmailDraftDetail,
   EmailRef,
@@ -244,10 +245,9 @@ export const api = {
     get<{ run: RunFeedItem | null; automation: Automation | null }>("/api/runs/pinned"),
   missedRuns: () => get<{ items: MissedAutomation[] }>("/api/runs/missed"),
   runMissed: () => http<{ started: MissedAutomation[] }>("POST", "/api/runs/catch-up"),
-  handleBriefingItem: (runId: string, accountId: string, threadId: string) =>
-    http<{ ok: boolean }>("POST", `/api/runs/${encodeURIComponent(runId)}/briefing-items/handled`, {
-      accountId,
-      threadId,
+  handleReportItem: (runId: string, key: string) =>
+    http<{ ok: boolean }>("POST", `/api/runs/${encodeURIComponent(runId)}/report-items/handled`, {
+      key,
     }),
   drafts: (opts?: { refresh?: boolean }) =>
     get<AccountDrafts[]>(`/api/drafts${opts?.refresh ? "?refresh=1" : ""}`),
@@ -289,13 +289,16 @@ export const api = {
     get<DraftStatusResult>(
       `/api/drafts/${encodeURIComponent(accountId)}/${encodeURIComponent(draftId)}/status`,
     ),
-  conversations: (params: { q?: string; limit?: number; offset?: number } = {}) => {
+  conversations: (
+    params: { q?: string; type?: ConversationType; limit?: number; offset?: number } = {},
+  ) => {
     const search = new URLSearchParams();
     if (params.q) search.set("q", params.q);
+    if (params.type) search.set("type", params.type);
     if (params.limit !== undefined) search.set("limit", String(params.limit));
     if (params.offset !== undefined) search.set("offset", String(params.offset));
     const qs = search.toString();
-    return get<{ items: Conversation[]; total: number }>(`/api/conversations${qs ? `?${qs}` : ""}`);
+    return get<ConversationListResponse>(`/api/conversations${qs ? `?${qs}` : ""}`);
   },
   conversation: (id: string) => get<Conversation>(`/api/conversations/${encodeURIComponent(id)}`),
   conversationMessages: (id: string) =>
@@ -338,11 +341,6 @@ export const api = {
     http<{ ok: boolean }>("POST", `/api/automations/${encodeURIComponent(id)}/run`),
   automationRuns: (id: string) =>
     get<AutomationRun[]>(`/api/automations/${encodeURIComponent(id)}/runs`),
-  automationSuggestions: () => get<AutomationSuggestion[]>("/api/automations/suggestions"),
-  acceptAutomationSuggestion: (id: string) =>
-    http<Automation>("POST", `/api/automations/suggestions/${encodeURIComponent(id)}/accept`),
-  dismissAutomationSuggestion: (id: string) =>
-    http<{ ok: boolean }>("POST", `/api/automations/suggestions/${encodeURIComponent(id)}/dismiss`),
 
   leads: (status?: LeadStatus) =>
     get<Lead[]>(`/api/leads${status ? `?status=${encodeURIComponent(status)}` : ""}`),
@@ -373,6 +371,7 @@ export const api = {
       dueAt?: string | null;
       position?: number;
       linkedAutomationId?: string | null;
+      answer?: string;
     },
   ) => http<Todo>("PATCH", `/api/todos/${encodeURIComponent(id)}`, patch),
 

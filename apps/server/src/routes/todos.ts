@@ -28,6 +28,7 @@ const patchBody = Type.Object({
   dueAt: Type.Optional(Type.Union([Type.String(), Type.Null()])),
   position: Type.Optional(Type.Number()),
   linkedAutomationId: Type.Optional(Type.Union([Type.String(), Type.Null()])),
+  answer: Type.Optional(Type.String()),
 });
 
 export const todosRoutes: FastifyPluginAsyncTypebox = async (app) => {

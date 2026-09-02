@@ -2,6 +2,9 @@ import type { ConnectedAccount, EmailDraft } from "@marlen/shared";
 import { emitServerEvent } from "../core/events.js";
 import { moduleLogger } from "../core/logger.js";
 import { createFetchCache } from "../core/utils/fetchCache.js";
+import { JobLoop } from "../core/utils/jobs.js";
+import { listAccounts, pipedreamConfigured } from "../integrations/pipedream/connect.js";
+import { syncFetchedDrafts } from "../services/approvals.js";
 import { getDraftProvider } from "./providers.js";
 
 /**
@@ -29,9 +32,16 @@ function providerFor(account: ConnectedAccount) {
   return provider;
 }
 
-/** Deduped live fetch; the result lands in the cache only if no invalidate ran while it was in flight (`stored` reports which). */
-function fetchDrafts(account: ConnectedAccount) {
-  return cache.fetch(account.id, () => providerFor(account).listDrafts(account));
+/**
+ * Deduped live fetch; the result lands in the cache only if no invalidate ran
+ * while it was in flight (`stored` reports which). A stored list is the
+ * mailbox's current truth, so it also updates the agenda's approvals, whoever
+ * asked for it: the UI, the agent's draft tools, or the refresh loop.
+ */
+async function fetchDrafts(account: ConnectedAccount) {
+  const result = await cache.fetch(account.id, () => providerFor(account).listDrafts(account));
+  if (result.stored) syncFetchedDrafts(account, result.value);
+  return result;
 }
 
 /** Background refresh for one account; never throws, so a failure leaves the stale entry in place. */
@@ -84,4 +94,31 @@ export function invalidateDraftsCache(accountId: string): void {
 export function draftsMutated(accountId: string): void {
   invalidateDraftsCache(accountId);
   emitServerEvent("drafts");
+}
+
+/**
+ * Keeps every draft account's list no older than this without a request:
+ * the agenda's email approvals ride on each fetch, and an automation that
+ * drafts while Home is closed must still reach the agent's own todo list.
+ */
+const REFRESH_INTERVAL_MS = 5 * 60_000;
+
+async function refreshAllOnce(): Promise<void> {
+  if (!(await pipedreamConfigured())) return;
+  const accounts = (await listAccounts()).filter((a) => getDraftProvider(a.app) !== null);
+  await Promise.allSettled(accounts.map((account) => listDraftsCached(account)));
+}
+
+const refresh = new JobLoop({
+  name: "drafts-refresh",
+  run: refreshAllOnce,
+  intervalMs: REFRESH_INTERVAL_MS,
+});
+
+export function startDraftsRefresh(): void {
+  refresh.start();
+}
+
+export function stopDraftsRefresh(): void {
+  refresh.stop();
 }

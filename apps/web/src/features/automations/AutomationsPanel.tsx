@@ -16,22 +16,18 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { Automation, AutomationSuggestion } from "@marlen/shared";
+import type { Automation } from "@marlen/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { CalendarClock, Menu, Plus, Sparkles } from "lucide-react";
+import { CalendarClock, Menu, Plus } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useLocation, useNavigate } from "react-router-dom";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
-import { DisclosureToggle } from "@/components/ui/disclosure-toggle";
 import { EmptyState } from "@/components/ui/empty-state";
-import { IconChip } from "@/components/ui/icon-chip";
 import { Skeleton } from "@/components/ui/skeleton";
 import { AutomationCard } from "@/features/automations/AutomationCard";
 import { AutomationFormDialog } from "@/features/automations/AutomationFormDialog";
-import { scheduleLabel } from "@/features/automations/schedule";
 import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { cn, midpoint, rowTransition, stagger } from "@/lib/utils";
@@ -43,31 +39,20 @@ export function AutomationsPanel() {
   const queryClient = useQueryClient();
   const location = useLocation();
   const navigate = useNavigate();
-  const [{ flashSuggestions, focusAutomation }] = React.useState(() => {
-    const state = location.state as {
-      focusSuggestions?: boolean;
-      focusAutomation?: string;
-    } | null;
-    return {
-      flashSuggestions: Boolean(state?.focusSuggestions),
-      focusAutomation: state?.focusAutomation ?? null,
-    };
+  const [focusAutomation] = React.useState(() => {
+    const state = location.state as { focusAutomation?: string } | null;
+    return state?.focusAutomation ?? null;
   });
   React.useEffect(() => {
-    if (flashSuggestions || focusAutomation) navigate(location.pathname, { replace: true });
-  }, [flashSuggestions, focusAutomation, navigate, location.pathname]);
+    if (focusAutomation) navigate(location.pathname, { replace: true });
+  }, [focusAutomation, navigate, location.pathname]);
   const automationsQuery = useQuery({
     queryKey: ["automations", "list"],
     queryFn: () => api.automations(),
   });
-  const suggestionsQuery = useQuery({
-    queryKey: ["automations", "suggestions"],
-    queryFn: () => api.automationSuggestions(),
-  });
   const automations = automationsQuery.data ?? [];
-  const suggestions = suggestionsQuery.data ?? [];
-  const loading = automationsQuery.isPending || suggestionsQuery.isPending;
-  const loadError = automationsQuery.error ?? suggestionsQuery.error;
+  const loading = automationsQuery.isPending;
+  const loadError = automationsQuery.error;
   React.useEffect(() => {
     if (loadError) toast.error(loadError);
   }, [loadError]);
@@ -132,31 +117,6 @@ export function AutomationsPanel() {
           onChanged={refreshAutomations}
         />
       ) : null}
-
-      {suggestions.length > 0 && (
-        <div className="mb-3 flex flex-col gap-3">
-          <div className="flex items-center gap-2">
-            <IconChip size="sm">
-              <Sparkles />
-            </IconChip>
-            <div>
-              <h2 className="text-sm font-semibold tracking-tight">
-                {t("automations.suggestions.title")}
-              </h2>
-              <p className="text-xs text-muted-foreground">{t("automations.suggestions.hint")}</p>
-            </div>
-          </div>
-          {suggestions.map((suggestion, i) => (
-            <div key={suggestion.id} className="animate-in-up" style={stagger(i)}>
-              <SuggestionCard
-                suggestion={suggestion}
-                flash={flashSuggestions}
-                onDecided={refreshAutomations}
-              />
-            </div>
-          ))}
-        </div>
-      )}
 
       {loading ? (
         <div className="flex flex-col gap-3">
@@ -251,67 +211,5 @@ function SortableAutomationRow({ id, children }: { id: string; children: React.R
       </button>
       {children}
     </div>
-  );
-}
-
-function SuggestionCard({
-  suggestion,
-  flash,
-  onDecided,
-}: {
-  suggestion: AutomationSuggestion;
-  flash: boolean;
-  onDecided: () => Promise<void>;
-}) {
-  const { t, i18n } = useTranslation();
-  const [busy, setBusy] = React.useState(false);
-  const [showInstruction, setShowInstruction] = React.useState(false);
-
-  const label = scheduleLabel(suggestion.schedule, t, i18n.language);
-  const scheduleText = label ?? t("automations.customSchedule");
-
-  const decide = async (action: "accept" | "dismiss") => {
-    setBusy(true);
-    try {
-      if (action === "accept") await api.acceptAutomationSuggestion(suggestion.id);
-      else await api.dismissAutomationSuggestion(suggestion.id);
-      await onDecided();
-    } catch (err) {
-      toast.error(err);
-      setBusy(false);
-    }
-  };
-
-  return (
-    <Card padding="lg" className={cn(flash && "flash-accent")}>
-      <div className="flex flex-wrap items-center gap-2 text-base font-semibold tracking-tight">
-        <IconChip size="sm">
-          <Sparkles />
-        </IconChip>
-        {suggestion.name}
-        <Badge variant="muted" className="text-2xs" title={scheduleText}>
-          {scheduleText}
-        </Badge>
-      </div>
-      <p className="mt-1 text-sm text-muted-foreground">{suggestion.rationale}</p>
-      <div className="mt-2">
-        <DisclosureToggle open={showInstruction} onToggle={() => setShowInstruction((v) => !v)}>
-          {t("automations.suggestions.showInstruction")}
-        </DisclosureToggle>
-        {showInstruction && (
-          <p className="mt-2 whitespace-pre-wrap rounded-lg bg-surface-2 p-3 text-xs text-muted-foreground">
-            {suggestion.instruction}
-          </p>
-        )}
-      </div>
-      <div className="mt-3 flex items-center justify-end gap-2">
-        <Button variant="ghost" size="sm" onClick={() => void decide("dismiss")} disabled={busy}>
-          {t("automations.suggestions.dismiss")}
-        </Button>
-        <Button variant="secondary" size="sm" onClick={() => void decide("accept")} loading={busy}>
-          {t("automations.suggestions.accept")}
-        </Button>
-      </div>
-    </Card>
   );
 }

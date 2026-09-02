@@ -19,18 +19,27 @@ export async function automationExists(id: string): Promise<boolean> {
 
 /**
  * Apply a todo update, then fire its linked automation if this update just
- * completed it (open→done). The PATCH route and the update_todo tool both go
- * through here, so completion behaves the same however it happens. The run is
- * fire-and-forget and manual, like "Run now": the human's tick authorizes it
- * (bypassing the paused gate); a missing/deleted target no-ops in the runner.
+ * completed it (open→done), or answered an approval, which stays open until
+ * its draft is sent or discarded. The PATCH route and the update_todo tool
+ * both go through here, so completion behaves the same however it happens.
+ * The run is fire-and-forget and manual, like "Run now": the human's tick
+ * authorizes it (bypassing the paused gate); a missing/deleted target no-ops
+ * in the runner.
  */
 export async function applyTodoUpdate(id: string, update: TodoUpdate): Promise<Todo | null> {
   if (update.linkedAutomationId && !(await automationExists(update.linkedAutomationId))) {
     throw badRequest("no automation with this id");
   }
   const before = await getTodo(id);
+  if (before?.kind === "approval" && (update.title !== undefined || update.status !== undefined)) {
+    throw badRequest(
+      "an approval's title and status follow its draft: edit, send or discard the draft instead",
+    );
+  }
   const todo = await updateTodo(id, update);
-  if (todo?.linkedAutomationId && before?.status !== "done" && todo.status === "done") {
+  const completed = before?.status !== "done" && todo?.status === "done";
+  const answered = todo?.kind === "approval" && !before?.answer && Boolean(todo.answer);
+  if (todo?.linkedAutomationId && (completed || answered)) {
     const automationId = todo.linkedAutomationId;
     // requestRun queues (never drops) and hands the run the todo it fired for.
     requestRun(automationId, {
@@ -38,6 +47,8 @@ export async function applyTodoUpdate(id: string, update: TodoUpdate): Promise<T
       todoId: todo.id,
       title: todo.title,
       body: todo.body,
+      ...(todo.answer ? { answer: todo.answer } : {}),
+      ...(todo.ref ? { ref: todo.ref } : {}),
     }).catch((error) =>
       log.error(error, `linked automation ${automationId} for todo ${todo.id} failed`),
     );

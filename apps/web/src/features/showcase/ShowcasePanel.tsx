@@ -113,7 +113,7 @@ export function ShowcasePanel() {
     return () => window.removeEventListener("hashchange", onHashChange);
   }, []);
 
-  // BriefingCard's row actions post into the real chat panel, which App keeps
+  // ReportCard's row actions post into the real chat panel, which App keeps
   // mounted beside every route, a curious click here would otherwise fire a
   // live agent turn. Force prefill while the gallery is open so it only fills
   // the composer. `pagehide` covers a refresh, which skips the unmount path.

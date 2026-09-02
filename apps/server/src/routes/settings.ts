@@ -22,7 +22,6 @@ import {
 } from "../db/settings.js";
 import { rescheduleNightlyLearn } from "../email/learn/service.js";
 import { rescheduleAll } from "../services/automations/scheduler.js";
-import { rescheduleNightlySuggest } from "../services/automations/suggest.js";
 import { fetchInlineImage } from "../services/signatureImage.js";
 
 const languageBody = Type.Object({ language: Type.String() });
@@ -119,7 +118,6 @@ export const settingsRoutes: FastifyPluginAsyncTypebox = async (app) => {
     // node-cron captures timezone when each task is created.
     await rescheduleAll();
     await rescheduleNightlyLearn();
-    await rescheduleNightlySuggest();
     resetSessions();
     return { timezone };
   });

@@ -6,7 +6,6 @@ import { loadOnOfficeTools } from "../integrations/onoffice/tools.js";
 import { buildWhatsAppTools } from "../integrations/whatsapp/tools.js";
 import { appHelpTool } from "./appHelpTool.js";
 import { automationManageTools, automationReadTools } from "./automationTools.js";
-import { buildComposeBriefingTool } from "./briefingTool.js";
 import type { SessionCapabilities } from "./capabilities.js";
 import { presentChartTool } from "./chartTool.js";
 import { presentChoicesTool } from "./choicesTool.js";
@@ -23,6 +22,7 @@ import { getThinkingLevel, resolveActiveModel } from "./llm/registry.js";
 import { buildMailReadTools } from "./mailTools.js";
 import { streamViaModelRegistry } from "./oneShot.js";
 import { buildSystemPrompt } from "./prompt.js";
+import { buildPublishReportTool } from "./reportTool.js";
 import { buildTodoTools } from "./todoTools.js";
 import { voiceLearnTool } from "./voiceLearn.js";
 import { webFetchTool } from "./webFetchTool.js";
@@ -83,16 +83,17 @@ export async function buildAgent(
         // Unattended content cannot create or alter standing prompts.
         ...(caps.interactive ? automationManageTools : []),
         ...automationReadTools,
-        ...(caps.interactive ? [buildConversationSearchTool(conversationId)] : []),
+        buildConversationSearchTool(conversationId),
+        ...leadTools,
         // Lead deletion stays interactive because it cascades to automations.
-        ...(caps.onOffice.configured ? leadTools : []),
-        ...(caps.onOffice.configured && caps.interactive ? [leadDeleteTool] : []),
+        ...(caps.interactive ? [leadDeleteTool] : []),
         ...buildTodoTools(conversationId),
         buildDelegateTool(toolset.readTools, mailReadTools),
         ...(caps.interactive ? [voiceLearnTool] : []),
-        buildComposeBriefingTool(toolSessionId),
+        buildPublishReportTool(toolSessionId),
+        // A question needs someone there to answer; a chart reads the same on Home.
         ...(caps.interactive ? [presentChoicesTool, presentFormTool] : []),
-        ...(caps.interactive ? [presentChartTool] : []),
+        presentChartTool,
       ],
       messages: history,
     },

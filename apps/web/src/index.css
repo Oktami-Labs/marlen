@@ -221,13 +221,10 @@
     border-radius: var(--radius);
   }
   .surface-hover {
-    transition:
-      background-color 0.15s ease,
-      transform 0.15s ease;
+    transition: background-color 0.15s ease;
   }
   .surface-hover:hover {
     background: color-mix(in oklch, var(--surface-2) 35%, var(--surface));
-    transform: translateY(-1px);
   }
   .surface-pop {
     background: var(--surface);
@@ -921,9 +918,6 @@
   .animate-in-up,
   .animate-in-down {
     animation: none;
-  }
-  .surface-hover:hover {
-    transform: none;
   }
   .scroll-edge {
     transition: none;

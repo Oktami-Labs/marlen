@@ -1,7 +1,6 @@
 import { mkdtemp, readdir, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
-import { eq } from "drizzle-orm";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 let wikiDir: string;
@@ -189,61 +188,5 @@ describe("wiki", () => {
     expect(page?.type).toBeNull();
     expect(page?.accountId).toBeNull();
     expect(page?.contactId).toBeNull();
-  });
-
-  it("learns from accepted or discarded briefing drafts without overwriting user edits", async () => {
-    const { db, schema } = await import("../../src/db/index.js");
-    const createdAt = "2026-09-01T08:00:00.000Z";
-    for (let index = 1; index <= 3; index += 1) {
-      const threadId = `triage-thread-${index}`;
-      await db.insert(schema.automationThreadStates).values({
-        automationId: "morning-briefing",
-        accountId: "account-1",
-        threadId,
-        messageId: `message-${index}`,
-        itemJson: JSON.stringify({
-          threadId,
-          sender: "Sender",
-          subject: "Question",
-          gist: "question → reply",
-          priority: "reply",
-        }),
-        disposition: "handled",
-        lastReportedAt: createdAt,
-        updatedAt: createdAt,
-      });
-      await db.insert(schema.draftProposals).values({
-        id: `triage-proposal-${index}`,
-        accountId: "account-1",
-        threadId,
-        status: "discarded",
-        createdAt,
-        updatedAt: createdAt,
-      });
-    }
-
-    const { runTriageLearning } = await import("../../src/email/learn/triage.js");
-    expect(await runTriageLearning()).toMatchObject({ decisions: 3, updated: true });
-    const learned = (await list()).find((page) => page.id === "triage-feedback");
-    expect(learned).toMatchObject({ type: "triage", pinned: true });
-    expect(learned?.content).toMatch(/reply:.*3/);
-
-    await db
-      .update(schema.automationThreadStates)
-      .set({ lastReportedAt: "2026-09-01T09:00:00.000Z" })
-      .where(eq(schema.automationThreadStates.threadId, "triage-thread-1"));
-    expect(await runTriageLearning()).toMatchObject({ decisions: 2, updated: true });
-    const refreshed = (await list()).find((page) => page.id === "triage-feedback");
-    expect(refreshed?.content).toMatch(/reply:.*2/);
-
-    const custom = "Meine eigene Triage-Regel bleibt maßgeblich.";
-    const edit = await app.inject({
-      method: "PUT",
-      url: "/api/wiki/triage-feedback",
-      payload: { content: custom, baseRevision: refreshed?.revision },
-    });
-    expect(edit.statusCode).toBe(200);
-    expect(await runTriageLearning()).toMatchObject({ updated: false, protected: true });
-    expect((await list()).find((page) => page.id === "triage-feedback")?.content).toBe(custom);
   });
 });

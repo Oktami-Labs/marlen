@@ -1,5 +1,5 @@
 import type { SeenState } from "@marlen/shared";
-import { ne } from "drizzle-orm";
+import { ne, sql } from "drizzle-orm";
 import { emitServerEvent } from "../core/events.js";
 import { db, schema } from "./index.js";
 
@@ -32,6 +32,18 @@ export async function markSeen(keys: string[]): Promise<void> {
     .insert(schema.seenMarks)
     .values(clean.map((key) => ({ key, seenAt })))
     .onConflictDoNothing();
+  emitServerEvent("seen");
+}
+
+/** Move the floor back to `to` (never forward), so items after it read as new. */
+export async function lowerSeenFloor(to: string): Promise<void> {
+  await db
+    .insert(schema.seenMarks)
+    .values({ key: FLOOR_KEY, seenAt: to })
+    .onConflictDoUpdate({
+      target: schema.seenMarks.key,
+      set: { seenAt: sql`min(${schema.seenMarks.seenAt}, excluded.seen_at)` },
+    });
   emitServerEvent("seen");
 }
 

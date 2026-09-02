@@ -16,6 +16,7 @@ apps/e2e/test-results/
 apps/e2e/playwright-report/
 apps/e2e/blob-report/
 .playwright-cli/
+output/
 .claude/settings.local.json
 .DS_Store
 *.log

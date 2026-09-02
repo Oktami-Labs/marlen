@@ -150,15 +150,28 @@ export interface ConnectTokenResponse {
   expiresAt: string;
 }
 
+export type ConversationType = "chat" | "automation";
+
 export interface Conversation {
   id: string;
   title: string;
-  type?: "chat" | "automation";
+  type?: ConversationType;
   createdAt: string;
   running?: boolean;
   focusAccountId?: string | null;
   focusThreadId?: string | null;
   focusThreadSubject?: string | null;
+}
+
+export type ConversationListItem = Conversation & {
+  type: ConversationType;
+  preview: string | null;
+  updatedAt: string;
+};
+
+export interface ConversationListResponse {
+  items: ConversationListItem[];
+  total: number;
 }
 
 export interface ChatToolCall {
@@ -239,19 +252,16 @@ export interface Automation {
   nextRunAt?: string | null;
 }
 
-export interface AutomationSuggestion {
-  id: string;
-  name: string;
-  instruction: string;
-  schedule: string;
-  rationale: string;
-  status: "pending" | "accepted" | "dismissed";
-  createdAt: string;
-  decidedAt: string | null;
-}
-
 export type RunTrigger =
-  | { kind: "todo"; todoId: string; title: string; body: string }
+  | {
+      kind: "todo";
+      todoId: string;
+      title: string;
+      body: string;
+      answer?: string;
+      /** The draft an answered approval is about, so the run can act on it. */
+      ref?: TodoRef;
+    }
   | { kind: "mail"; accountNames: string[] }
   | { kind: "catchUp"; dueAt: string };
 
@@ -575,15 +585,49 @@ export interface CreatedDraft {
 
 export type TodoStatus = "open" | "done" | "dismissed";
 
+/** One answer the user can give a todo with a single click. */
+export interface TodoOption {
+  label: string;
+  detail?: string;
+}
+
+/**
+ * What an agenda row is. A "todo" is the agent's or the user's own item; an
+ * "approval" wraps a draft awaiting the user's send, filed and closed by the
+ * draft's own store, so its title and status follow the draft.
+ */
+export type TodoKind = "todo" | "approval";
+
+/** The draft an approval wraps, snapshotted for the row; the draft stays the source of truth. */
+export type TodoRef =
+  | {
+      kind: "email_draft";
+      accountId: string;
+      account: string;
+      draftId: string;
+      to: string;
+      webUrl: string;
+      snippet?: string;
+    }
+  | { kind: "outbound"; outboundId: string; channel: string; targetLabel: string; body: string };
+
 export interface Todo {
   id: string;
+  kind: TodoKind;
+  /** Set on an approval, null on a todo. */
+  ref: TodoRef | null;
   title: string;
+  /** The agent's note; on an approval, its question about the draft. */
   body: string;
   status: TodoStatus;
   dueAt: string | null;
   position: number;
   conversationId: string | null;
   linkedAutomationId: string | null;
+  /** A closed set of answers; empty for a plain todo. */
+  options: TodoOption[];
+  /** The option the user chose when completing it. */
+  answer: string | null;
   createdAt: string;
   updatedAt: string;
 }

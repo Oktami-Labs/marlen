@@ -44,9 +44,23 @@ export default defineConfig({
   projects: [
     {
       name: "desktop",
-      grepInvert: /@mobile/,
+      grepInvert: /@mobile|@demo/,
       use: { ...devices["Desktop Chrome"], viewport: { width: 1440, height: 900 } },
     },
+    // Seeded flows recorded for people to watch (`pnpm demo`), never part of the suite.
+    ...(process.env.DEMO
+      ? [
+          {
+            name: "demo",
+            grep: /@demo/,
+            use: {
+              ...devices["Desktop Chrome"],
+              viewport: { width: 1720, height: 1000 },
+              video: { mode: "on" as const, size: { width: 1720, height: 1000 } },
+            },
+          },
+        ]
+      : []),
     {
       // The layout swaps below `md`: the sidebar becomes a drawer and the chat
       // a slide-over. Only tests tagged @mobile run here.

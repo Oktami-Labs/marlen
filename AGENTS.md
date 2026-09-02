@@ -35,6 +35,10 @@ before touching `apps/web`.
 - `pnpm --filter @marlen/server test` / `pnpm --filter @marlen/web test`: Vitest per package
 - `pnpm test:e2e`: build the web app and run Playwright in isolated worker
   environments
+- `pnpm seed:demo`: fill the dev instance with the demo persona (every panel
+  has data); `--reset --yes` empties all content first, settings and
+  credentials stay. Seed lives in `apps/server/src/services/demo/`; the e2e
+  `seeded` fixture option boots a worker on the same data
 - `pnpm lint:fix`: Biome; `pnpm knip`: dead-export check (keep it green)
 - pnpm only, never npm/yarn (the desktop build's internal npm install into
   `build/app` is the packaging exception)

@@ -27,7 +27,7 @@ export interface DraftSnapshotInput {
   to: string[];
   cc?: string[];
   bcc?: string[];
-  /** The body exactly as written to the provider (post-humanize). */
+  /** The body exactly as written to the provider. */
   body: string;
 }
 

@@ -1,5 +1,5 @@
 import type { AgentTool } from "@earendil-works/pi-agent-core";
-import type { Todo } from "@marlen/shared";
+import type { Todo, TodoOption } from "@marlen/shared";
 import { Type } from "@sinclair/typebox";
 import { createTodo, listTodos } from "../db/todos.js";
 import { applyTodoUpdate, automationExists } from "../services/todos.js";
@@ -18,10 +18,40 @@ const dueAtSchema = Type.String({
     "agenda (overdue items surface at the top). Omit for an anytime todo.",
 });
 
+const optionsSchema = Type.Array(
+  Type.Object({
+    label: Type.String({ minLength: 1, description: "Two or three words, the button text." }),
+    detail: Type.Optional(Type.String({ description: "One line shown on hover." })),
+  }),
+  {
+    minItems: 2,
+    maxItems: 4,
+    description:
+      "For a decision with a closed set of answers: each renders as a button on the todo. " +
+      "Choosing one completes the todo, records the answer, and, with linkedAutomationId, " +
+      "starts that automation with the answer in its prompt. From an automation, pass your own " +
+      "automation id to continue with the user's answer in a later run.",
+  },
+);
+
+function optionsLine(options: TodoOption[]): string {
+  return options.map((option) => option.label).join(" / ");
+}
+
+/** What an approval wraps, for the model: the draft's channel, recipient and account. */
+function refLine(todo: Todo): string {
+  const ref = todo.ref;
+  if (!ref) return "";
+  if (ref.kind === "email_draft") {
+    return ` — approval of email draft ${ref.draftId} to ${ref.to} in ${ref.account}`;
+  }
+  return ` — approval of ${ref.channel} draft ${ref.outboundId} to ${ref.targetLabel}`;
+}
+
 /** Renders a todo with the id the maintenance tools need. */
 function todoLine(todo: Todo): string {
   return [
-    `- [${todo.id}] ${todo.title} — ${todo.status}${todo.dueAt ? ` — due ${todo.dueAt}` : ""}${todo.linkedAutomationId ? ` — runs ${todo.linkedAutomationId} when done` : ""}`,
+    `- [${todo.id}] ${todo.title} — ${todo.status}${refLine(todo)}${todo.dueAt ? ` — due ${todo.dueAt}` : ""}${todo.linkedAutomationId ? ` — runs ${todo.linkedAutomationId} when ${todo.kind === "approval" ? "answered" : "done"}` : ""}${todo.options.length > 0 ? ` — options: ${optionsLine(todo.options)}` : ""}${todo.answer ? ` — answered: ${todo.answer}` : ""}`,
     ...(todo.body ? [`  ${todo.body}`] : []),
   ].join("\n");
 }
@@ -30,9 +60,9 @@ const listTodosTool: AgentTool = tool({
   name: "list_todos",
   label: "List todos",
   description:
-    `The user's todo list — everything you filed for them to do or decide, each with its id. ` +
-    `Call this before touching an existing todo (to get its id) or to check what is still open. ` +
-    `Filter by status.`,
+    `The user's home agenda — everything filed for them to do or decide, each with its id, plus ` +
+    `every draft awaiting their approval as an "approval" item. Call this before touching an ` +
+    `existing item (to get its id) or to check what is still open. Filter by status.`,
   params: { status: Type.Optional(statusSchema) },
   execute: async ({ status }) => {
     const todos = await listTodos({ status });
@@ -47,10 +77,13 @@ const updateTodoTool: AgentTool = tool({
   name: "update_todo",
   label: "Update todo",
   description:
-    `Maintain a todo you filed — pass its id (from list_todos) and only what changes. Rewrite ` +
+    `Maintain an agenda item — pass its id (from list_todos) and only what changes. Rewrite ` +
     `the title/body as things move, set status "done" when it is finished, or "dismissed" to ` +
     `drop it. This is how a later run keeps a standing todo current instead of filing a new one. ` +
-    `Track finer-grained progress in the body text, not as separate todos.`,
+    `Track finer-grained progress in the body text, not as separate todos. On an approval the ` +
+    `title and status follow the draft (edit, send or discard the draft instead), but you can ` +
+    `put your question about it in body, offer answers as options, set when it should be ` +
+    `decided with dueAt, and link an automation that runs with the user's answer.`,
   params: {
     id: Type.String({ description: "The todo id (from list_todos)." }),
     title: Type.Optional(Type.String()),
@@ -61,6 +94,7 @@ const updateTodoTool: AgentTool = tool({
         description: "Automation id to run the moment the user completes this todo; null unlinks.",
       }),
     ),
+    options: Type.Optional(optionsSchema),
     status: Type.Optional(statusSchema),
   },
   catchToText: true,
@@ -89,7 +123,8 @@ export function buildTodoTools(conversationId: string | undefined): AgentTool[] 
       `(leave a draft), or a prospect (record a lead). One todo per action; details go in body. ` +
       `Pass a stable 'key' from a recurring source so re-runs reuse the one open todo instead of ` +
       `piling up copies. Pass 'linkedAutomationId' to fire an automation the moment the user ` +
-      `ticks this done, chaining their action into the next agent step.`,
+      `ticks this done, chaining their action into the next agent step. A question with a few ` +
+      `possible answers takes 'options': the user answers with one click.`,
     params: {
       title: Type.String({
         description:
@@ -118,9 +153,10 @@ export function buildTodoTools(conversationId: string | undefined): AgentTool[] 
             "schedule-less automation first, then pass its id here. Omit for a plain todo.",
         }),
       ),
+      options: Type.Optional(optionsSchema),
     },
     catchToText: true,
-    execute: async ({ title, body, dueAt, key, linkedAutomationId }) => {
+    execute: async ({ title, body, dueAt, key, linkedAutomationId, options }) => {
       if (linkedAutomationId && !(await automationExists(linkedAutomationId))) {
         return textResult(
           `No automation with id ${linkedAutomationId}. Create it first with automation_create ` +
@@ -133,6 +169,7 @@ export function buildTodoTools(conversationId: string | undefined): AgentTool[] 
         dueAt,
         key,
         linkedAutomationId,
+        options,
         conversationId,
       });
       if (!created) {

@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
-import type { ChatStreamEvent, Conversation } from "@marlen/shared";
+import type { ChatStreamEvent, Conversation, ConversationListResponse } from "@marlen/shared";
 import { Type } from "@sinclair/typebox";
 import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
 import { parseStoredCards } from "../agent/cards.js";
@@ -30,6 +30,7 @@ import { openSse } from "./sse.js";
 
 const conversationsQuery = Type.Object({
   q: Type.Optional(Type.String()),
+  type: Type.Optional(Type.Union([Type.Literal("chat"), Type.Literal("automation")])),
   limit: Type.Optional(Type.Integer({ minimum: 1 })),
   offset: Type.Optional(Type.Integer({ minimum: 0 })),
 });
@@ -68,43 +69,107 @@ const messageMatchStmt = lazyStatement(`
   WHERE messages_fts MATCH ?
 `);
 
+const conversationActivity = db
+  .select({
+    conversationId: schema.messages.conversationId,
+    updatedAt: sql<string>`max(${schema.messages.createdAt})`.as("updated_at"),
+  })
+  .from(schema.messages)
+  .groupBy(schema.messages.conversationId)
+  .as("conversation_activity");
+
+const rankedUserMessages = db
+  .select({
+    conversationId: schema.messages.conversationId,
+    preview:
+      sql<string>`trim(substr(replace(replace(${schema.messages.content}, char(13), ' '), char(10), ' '), 1, 160))`.as(
+        "preview",
+      ),
+    rank: sql<number>`row_number() over (
+      partition by ${schema.messages.conversationId}
+      order by ${schema.messages.createdAt} desc, ${schema.messages.id} desc
+    )`.as("message_rank"),
+  })
+  .from(schema.messages)
+  .where(eq(schema.messages.role, "user"))
+  .as("ranked_user_messages");
+
+const lastActivityAt = sql<string>`coalesce(
+  ${conversationActivity.updatedAt},
+  ${schema.conversations.createdAt}
+)`;
+
+const conversationPreview = sql<string | null>`case
+  when ${schema.conversations.type} = 'chat' then ${rankedUserMessages.preview}
+  else null
+end`;
+
 export const chatRoutes: FastifyPluginAsyncTypebox = async (app) => {
-  app.get("/api/conversations", { schema: { querystring: conversationsQuery } }, async (req) => {
-    const q = req.query.q?.trim();
-    const limit = Math.min(req.query.limit ?? 50, 200);
-    const offset = req.query.offset ?? 0;
+  app.get(
+    "/api/conversations",
+    { schema: { querystring: conversationsQuery } },
+    async (req): Promise<ConversationListResponse> => {
+      const q = req.query.q?.trim();
+      const limit = Math.min(req.query.limit ?? 50, 200);
+      const offset = req.query.offset ?? 0;
 
-    // Empty FTS syntax falls back to title matching.
-    const pattern = q ? likeContains(q) : undefined;
-    const ftsMatch = q ? buildFtsMatch(q, "AND") : null;
-    const matchedConversationIds = ftsMatch
-      ? (messageMatchStmt().all(ftsMatch) as { conversationId: string }[]).map(
-          (row) => row.conversationId,
+      // Empty FTS syntax falls back to title matching.
+      const pattern = q ? likeContains(q) : undefined;
+      const ftsMatch = q ? buildFtsMatch(q, "AND") : null;
+      const matchedConversationIds = ftsMatch
+        ? (messageMatchStmt().all(ftsMatch) as { conversationId: string }[]).map(
+            (row) => row.conversationId,
+          )
+        : [];
+      const searchWhere = pattern
+        ? or(
+            likePattern(schema.conversations.title, pattern),
+            ...(matchedConversationIds.length > 0
+              ? [inArray(schema.conversations.id, matchedConversationIds)]
+              : []),
+          )
+        : undefined;
+      const typeWhere = req.query.type ? eq(schema.conversations.type, req.query.type) : undefined;
+      const where = and(typeWhere, searchWhere);
+
+      const itemsQuery = db
+        .select({
+          id: schema.conversations.id,
+          title: schema.conversations.title,
+          type: schema.conversations.type,
+          focusAccountId: schema.conversations.focusAccountId,
+          focusThreadId: schema.conversations.focusThreadId,
+          focusThreadSubject: schema.conversations.focusThreadSubject,
+          createdAt: schema.conversations.createdAt,
+          updatedAt: lastActivityAt.as("updated_at"),
+          preview: conversationPreview,
+        })
+        .from(schema.conversations)
+        .leftJoin(
+          conversationActivity,
+          eq(conversationActivity.conversationId, schema.conversations.id),
         )
-      : [];
-    const where = pattern
-      ? or(
-          likePattern(schema.conversations.title, pattern),
-          ...(matchedConversationIds.length > 0
-            ? [inArray(schema.conversations.id, matchedConversationIds)]
-            : []),
-        )
-      : undefined;
+        .leftJoin(
+          rankedUserMessages,
+          and(
+            eq(rankedUserMessages.conversationId, schema.conversations.id),
+            eq(rankedUserMessages.rank, 1),
+          ),
+        );
+      const items = await (where ? itemsQuery.where(where) : itemsQuery)
+        .orderBy(desc(lastActivityAt), desc(schema.conversations.createdAt))
+        .limit(limit)
+        .offset(offset);
 
-    const itemsQuery = db.select().from(schema.conversations);
-    const items = await (where ? itemsQuery.where(where) : itemsQuery)
-      .orderBy(desc(schema.conversations.createdAt))
-      .limit(limit)
-      .offset(offset);
+      const totalQuery = db.select({ count: sql<number>`count(*)` }).from(schema.conversations);
+      const [totalRow] = await (where ? totalQuery.where(where) : totalQuery);
 
-    const totalQuery = db.select({ count: sql<number>`count(*)` }).from(schema.conversations);
-    const [totalRow] = await (where ? totalQuery.where(where) : totalQuery);
-
-    return {
-      items: items.map((item) => ({ ...item, running: isTurnInFlight(item.id) })),
-      total: Number(totalRow?.count ?? 0),
-    };
-  });
+      return {
+        items: items.map((item) => ({ ...item, running: isTurnInFlight(item.id) })),
+        total: Number(totalRow?.count ?? 0),
+      };
+    },
+  );
 
   app.get(
     "/api/conversations/:id",

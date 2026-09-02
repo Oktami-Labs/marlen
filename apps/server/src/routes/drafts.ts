@@ -3,26 +3,25 @@ import type {
   AccountDrafts,
   ConnectedAccount,
   DraftProposalStatusResult,
-  EmailDraft,
   EmailDraftDetail,
   KeepDraftProposalResult,
 } from "@marlen/shared";
 import { Type } from "@sinclair/typebox";
-import { isTurnInFlight } from "../agent/turnRecorder.js";
 import { badRequest, notFound, toProviderError, upstreamError } from "../core/errors.js";
 import { errorMessage } from "../core/utils/util.js";
 import { getDraftProposal, settleDraftProposal } from "../db/draftProposalStore.js";
-import {
-  appendDraftVersion,
-  getDraftConversationLinks,
-  getDraftStatus,
-  markDraftStatus,
-} from "../db/draftStore.js";
+import { appendDraftVersion, getDraftStatus, markDraftStatus } from "../db/draftStore.js";
+import { closeApproval } from "../db/todos.js";
 import { listDraftsCached } from "../email/draftsCache.js";
 import { type DraftProvider, getDraftProvider } from "../email/providers.js";
 import { accountSignatureHtml, detachAccountSignature, outgoingBody } from "../email/signature.js";
 import { splitAddressList } from "../email/textUtils.js";
 import { listAccounts, pipedreamConfigured } from "../integrations/pipedream/connect.js";
+import {
+  emailApprovalKey,
+  finalizeDrafts,
+  syncEmailApprovalsInBackground,
+} from "../services/approvals.js";
 import { keepDraftProposal } from "../services/draftProposals.js";
 
 async function findDraftAccount(
@@ -33,27 +32,6 @@ async function findDraftAccount(
   if (!account) return null;
   const provider = getDraftProvider(account.app);
   return provider ? { account, provider } : null;
-}
-
-/**
- * Attach each agent draft's conversation for the refine button. Every mailbox
- * draft belongs in the approval list: automation-born ones directly, chat-born
- * ones because they only exist once the user explicitly kept their proposal.
- */
-async function attachConversationLinks(byAccount: AccountDrafts[]): Promise<AccountDrafts[]> {
-  const draftIds = byAccount.flatMap((a) => a.drafts.map((d) => d.id));
-  if (draftIds.length === 0) return byAccount;
-
-  const byDraftId = await getDraftConversationLinks(draftIds);
-  if (byDraftId.size === 0) return byAccount;
-
-  return byAccount.map((account) => ({
-    ...account,
-    drafts: account.drafts.map((draft): EmailDraft => {
-      const conversationId = byDraftId.get(draft.id);
-      return conversationId ? { ...draft, conversationId } : draft;
-    }),
-  }));
 }
 
 const draftsQuery = Type.Object({ refresh: Type.Optional(Type.String()) });
@@ -101,16 +79,11 @@ export const draftRoutes: FastifyPluginAsyncTypebox = async (app) => {
           }
         }),
       );
-      // A draft whose conversation still has a turn running may yet be
-      // rewritten by it; withhold it until the turn ends (endTurn re-emits
-      // "drafts"), so only final versions reach the approval list.
-      const linked = await attachConversationLinks(byAccount);
-      return linked.map((account) => ({
-        ...account,
-        drafts: account.drafts.filter(
-          (draft) => !draft.conversationId || !isTurnInFlight(draft.conversationId),
-        ),
-      }));
+      const final = await finalizeDrafts(byAccount);
+      // The cache syncs the agenda on every provider fetch; syncing the served
+      // list too catches a draft a just-ended turn stopped withholding.
+      syncEmailApprovalsInBackground(final);
+      return final;
     },
   );
 
@@ -151,11 +124,15 @@ export const draftRoutes: FastifyPluginAsyncTypebox = async (app) => {
         if (!found) throw notFound("account not found");
         await found.provider.deleteDraft(found.account, req.params.draftId);
         // Best-effort: the provider delete already succeeded, so report success
-        // even if the local snapshot mark fails.
+        // even if the local snapshot mark or the agenda row fails.
         await markDraftStatus(req.params.accountId, req.params.draftId, "discarded").catch(
           (error: unknown) =>
             req.log.warn({ err: error }, "marking draft snapshot discarded failed"),
         );
+        await closeApproval(
+          emailApprovalKey(req.params.accountId, req.params.draftId),
+          "dismissed",
+        ).catch((error: unknown) => req.log.warn({ err: error }, "closing the approval failed"));
         return { ok: true };
       } catch (error) {
         throw toProviderError(error, "draft not found");
@@ -189,6 +166,10 @@ export const draftRoutes: FastifyPluginAsyncTypebox = async (app) => {
         ).catch((error: unknown) =>
           req.log.warn({ err: error }, "marking draft snapshot sent failed"),
         );
+        await closeApproval(
+          emailApprovalKey(req.params.accountId, req.params.draftId),
+          "done",
+        ).catch((error: unknown) => req.log.warn({ err: error }, "closing the approval failed"));
         return { ok: true };
       } catch (error) {
         throw toProviderError(error, "draft not found");
@@ -253,8 +234,7 @@ export const draftRoutes: FastifyPluginAsyncTypebox = async (app) => {
     },
   );
 
-  // Saved exactly as typed; the humanizer runs only in the agent's create-draft
-  // tool. When the draft carried the account signature (the detail GET detached
+  // Saved exactly as typed. When the draft carried the account signature (the detail GET detached
   // it, so the edited text is prose only), the new body is re-wrapped above the
   // same signature, an in-app edit never strips, doubles, or de-styles it.
   app.patch(

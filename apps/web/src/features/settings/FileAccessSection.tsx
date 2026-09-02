@@ -1,19 +1,14 @@
 import type { FileAccessSettings } from "@marlen/shared";
-import { Eye, HardDrive, SquarePen, TerminalSquare } from "lucide-react";
+import { Eye, SquarePen, TerminalSquare } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
+import { Card } from "@/components/ui/card";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Section } from "@/components/ui/section-header";
 import { ArmedSwitchRow } from "@/features/connections/AccountPermissions";
 import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";
-
-/**
- * The assistant's filesystem grants: three armed switches, read, write,
- * run commands, each whole-filesystem, mirroring the per-account permission
- * editor's confirm-to-arm / instant-disarm flow. Grants auto-save on change.
- */
 
 const rowIcon = "h-4 w-4 shrink-0 text-muted-foreground";
 
@@ -34,7 +29,6 @@ export function FileAccessSection({ index }: { index: number }) {
       .catch(toast.error);
   }, []);
 
-  /** Reports whether the write landed, so an armed grant only closes its dialog on success. */
   const persist = async (next: FileAccessSettings) => {
     setSaving(true);
     try {
@@ -101,47 +95,62 @@ export function FileAccessSection({ index }: { index: number }) {
   };
 
   const armedLabels = grants
-    ? GRANT_KEYS.filter((key) => grants[key]).map((key) =>
-        t(`settings.fileAccess.${key}.badge` as const),
-      )
+    ? (["read", "write"] as const)
+        .filter((key) => grants[key])
+        .map((key) => t(`settings.fileAccess.${key}.badge` as const))
     : [];
-  const chip = !grants ? null : armedLabels.length > 0 ? (
+  const chip = !grants ? null : grants.bash ? (
+    <Badge variant="warning">{t("settings.fileAccess.fullAccess")}</Badge>
+  ) : armedLabels.length > 0 ? (
     <Badge variant="warning">{armedLabels.join(" · ")}</Badge>
   ) : (
-    <Badge variant="muted">{t("settings.fileAccess.chipOff")}</Badge>
+    <Badge variant="muted">{t("settings.fileAccess.homeOnly")}</Badge>
   );
 
   return (
     <Section
       index={index}
       className="animate-in-up"
-      icon={<HardDrive />}
       title={t("settings.fileAccess.title")}
       aside={chip}
     >
-      <div className="flex flex-col gap-2">
+      <Card padding="sm" className="flex flex-col gap-1">
         {grants &&
-          GRANT_KEYS.map((key) => (
-            <ArmedSwitchRow
-              key={key}
-              switchId={`file-access-${key}`}
-              icon={copy[key].icon}
-              title={copy[key].title}
-              armed={grants[key]}
-              statusOn={copy[key].on}
-              statusOff={copy[key].off}
-              disabled={saving}
-              onToggle={(next) =>
-                next ? setConfirmKey(key) : void persist({ ...grants, [key]: false })
-              }
-            />
-          ))}
-      </div>
+          GRANT_KEYS.map((key) => {
+            const includedWithCommands = key !== "bash" && grants.bash;
+            return (
+              <ArmedSwitchRow
+                bare
+                key={key}
+                switchId={`file-access-${key}`}
+                icon={copy[key].icon}
+                title={copy[key].title}
+                armed={grants[key] || includedWithCommands}
+                statusOn={
+                  includedWithCommands
+                    ? t("settings.fileAccess.includedWithCommands")
+                    : copy[key].on
+                }
+                statusOff={copy[key].off}
+                disabled={saving || includedWithCommands}
+                onToggle={(next) =>
+                  next ? setConfirmKey(key) : void persist({ ...grants, [key]: false })
+                }
+              />
+            );
+          })}
+      </Card>
       <ConfirmDialog
         open={confirmKey !== null}
         onOpenChange={(next) => !confirmBusy && !next && setConfirmKey(null)}
         title={confirmKey ? copy[confirmKey].confirmTitle : ""}
-        description={confirmKey ? copy[confirmKey].confirmBody : ""}
+        description={
+          confirmKey
+            ? `${copy[confirmKey].confirmBody}${
+                confirmKey === "bash" ? ` ${t("settings.fileAccess.commandsOverride")}` : ""
+              }`
+            : ""
+        }
         confirmLabel={confirmKey ? copy[confirmKey].confirmCta : ""}
         busy={confirmBusy}
         onConfirm={confirmArm}

@@ -7,6 +7,86 @@
  * new shape). Step 1 uses IF NOT EXISTS so it can adopt pre-existing tables at
  * user_version 0. No downgrade path: db/index.ts refuses a newer database.
  */
+
+/** Step 40: a briefing tier's heading in the app language, for cards migrated to report sections. */
+function briefingTierLabel(priority: string): string {
+  const language = "(SELECT value FROM settings WHERE key = 'app.language')";
+  return `CASE WHEN ${language} = 'en'
+    THEN CASE ${priority} WHEN 'urgent' THEN 'Urgent' WHEN 'reply' THEN 'Awaiting your reply'
+      WHEN 'action' THEN 'Needs action' WHEN 'waiting' THEN 'Waiting for reply' ELSE 'FYI' END
+    ELSE CASE ${priority} WHEN 'urgent' THEN 'Dringend' WHEN 'reply' THEN 'Antwort ausstehend'
+      WHEN 'action' THEN 'Zu tun' WHEN 'waiting' THEN 'Warte auf Antwort' ELSE 'Zur Kenntnis' END
+  END`;
+}
+
+/** Step 40: one briefing item (a JSON text expression) in report-item shape. */
+function briefingItemAsReportItem(v: string): string {
+  const accountId = `json_extract(${v}, '$.accountId')`;
+  const threadId = `json_extract(${v}, '$.threadId')`;
+  const subject = `coalesce(json_extract(${v}, '$.subject'), '')`;
+  const priority = `coalesce(json_extract(${v}, '$.priority'), 'fyi')`;
+  return `json_object(
+    'key', CASE WHEN ${accountId} IS NULL THEN 'title:' || ${subject}
+      ELSE 'email:' || ${accountId} || char(10) || ${threadId} END,
+    'ref', json(CASE WHEN ${accountId} IS NULL THEN json_object('kind', 'none')
+      ELSE json_object('kind', 'email', 'accountId', ${accountId}, 'threadId', ${threadId},
+        'messageId', json_extract(${v}, '$.messageId'),
+        'sender', coalesce(json_extract(${v}, '$.sender'), ''),
+        'senderEmail', json_extract(${v}, '$.senderEmail'),
+        'receivedAt', json_extract(${v}, '$.receivedAt'),
+        'webUrl', json_extract(${v}, '$.webUrl')) END),
+    'title', ${subject},
+    'gist', coalesce(json_extract(${v}, '$.gist'), ''),
+    'deadline', json_extract(${v}, '$.deadline'),
+    'draftId', json_extract(${v}, '$.draftId'),
+    'needsUser', json(CASE WHEN ${priority} IN ('urgent', 'reply', 'action', 'waiting')
+      THEN 'true' ELSE 'false' END),
+    'handled', json(CASE WHEN json_extract(${v}, '$.handled') = 1 THEN 'true' ELSE 'false' END),
+    'change', json_extract(${v}, '$.change'),
+    'since', json_extract(${v}, '$.since')
+  )`;
+}
+
+/** Step 40: every stored briefing card in a cards column becomes a report card. */
+function briefingCardsAsReports(table: string): string {
+  const items = `json_each(json_extract(entry.value, '$.card.items')) AS i`;
+  const priority = `coalesce(json_extract(i.value, '$.priority'), 'fyi')`;
+  return `UPDATE ${table} SET cards = (
+    SELECT json_group_array(json(
+      CASE WHEN json_extract(entry.value, '$.card.kind') = 'briefing' THEN json_set(
+        json_remove(entry.value, '$.card.items', '$.card.rollups'),
+        '$.card.kind', 'report',
+        '$.card.sections', json((
+          SELECT json_group_array(json(sec.value)) FROM (
+            SELECT json_object(
+              'label', ${briefingTierLabel("p.key")},
+              'collapsed', json(CASE WHEN p.key = 'fyi' THEN 'true' ELSE 'false' END),
+              'items', json((
+                SELECT json_group_array(json(${briefingItemAsReportItem("i.value")}))
+                FROM ${items} WHERE ${priority} = p.key
+              ))) AS value, p.ord AS ord
+            FROM (SELECT 'urgent' AS key, 0 AS ord UNION ALL SELECT 'reply', 1
+              UNION ALL SELECT 'action', 2 UNION ALL SELECT 'waiting', 3
+              UNION ALL SELECT 'fyi', 4) AS p
+            WHERE EXISTS (SELECT 1 FROM ${items} WHERE ${priority} = p.key)
+            UNION ALL
+            SELECT json_object(
+              'label', json_extract(r.value, '$.label'),
+              'collapsed', json('true'),
+              'items', json((
+                SELECT json_group_array(json(${briefingItemAsReportItem("i.value")}))
+                FROM json_each(json_extract(r.value, '$.items')) AS i
+              ))) AS value, 10 + r.key AS ord
+            FROM json_each(json_extract(entry.value, '$.card.rollups')) AS r
+            ORDER BY ord
+          ) AS sec
+        ))
+      ) ELSE entry.value END
+    ))
+    FROM json_each(${table}.cards) AS entry
+  ) WHERE cards LIKE '%"briefing"%';`;
+}
+
 export const SCHEMA_STEPS: readonly string[] = [
   // 1: base schema (chat, automations, settings, memories, library, draft links, mailbox mirror).
   `
@@ -618,5 +698,89 @@ export const SCHEMA_STEPS: readonly string[] = [
   `
     ALTER TABLE automation_runs ADD COLUMN conversation_id TEXT NOT NULL DEFAULT '';
     UPDATE automation_runs SET conversation_id = id;
+  `,
+  // 37: a briefing item knows when it first entered the report, so a carried
+  // item can say how long it has waited.
+  `
+    ALTER TABLE automation_thread_states ADD COLUMN first_reported_at TEXT NOT NULL DEFAULT '';
+    UPDATE automation_thread_states SET first_reported_at = last_reported_at;
+  `,
+  // 38: a todo can be a decision: a closed set of answers the user picks with
+  // one click, and the answer they gave.
+  `
+    ALTER TABLE todos ADD COLUMN options TEXT NOT NULL DEFAULT '[]';
+    ALTER TABLE todos ADD COLUMN answer TEXT;
+  `,
+  // 39: a draft awaiting approval is an agenda item too, so the agent can
+  // annotate, schedule and ask on it like on a todo; its ref names the draft.
+  // Open outbound drafts get their row here; mailbox drafts get theirs from
+  // the first drafts sync, which reads the live list.
+  `
+    ALTER TABLE todos ADD COLUMN kind TEXT NOT NULL DEFAULT 'todo';
+    ALTER TABLE todos ADD COLUMN ref TEXT;
+    INSERT INTO todos (id, kind, ref, title, status, position, conversation_id, dedupe_key, created_at, updated_at)
+    SELECT
+      lower(hex(randomblob(16))),
+      'approval',
+      json_object('kind', 'outbound', 'outboundId', id, 'channel', channel, 'targetLabel', target_label, 'body', body),
+      CASE WHEN target_label <> '' THEN target_label ELSE channel END,
+      'open',
+      CAST(strftime('%s', 'now') AS INTEGER) * 1000,
+      conversation_id,
+      'approval:outbound:' || id,
+      created_at,
+      strftime('%Y-%m-%dT%H:%M:%fZ', 'now')
+    FROM outbound_drafts
+    WHERE status = 'open';
+  `,
+  // 40: a briefing is one shape of report. Thread states become report items
+  // keyed by the item's identity, and stored briefing cards become report
+  // cards whose tiers are sections named in the app language.
+  `
+    CREATE TABLE automation_report_items (
+      automation_id TEXT NOT NULL,
+      item_key TEXT NOT NULL,
+      change_key TEXT NOT NULL DEFAULT '',
+      section_label TEXT NOT NULL DEFAULT '',
+      item_json TEXT NOT NULL,
+      disposition TEXT NOT NULL,
+      first_reported_at TEXT NOT NULL DEFAULT '',
+      last_reported_at TEXT NOT NULL,
+      handled_at TEXT,
+      updated_at TEXT NOT NULL,
+      PRIMARY KEY (automation_id, item_key)
+    );
+    CREATE INDEX idx_automation_report_items_disposition
+      ON automation_report_items(automation_id, disposition, updated_at);
+    INSERT INTO automation_report_items (automation_id, item_key, change_key, section_label,
+      item_json, disposition, first_reported_at, last_reported_at, handled_at, updated_at)
+    SELECT s.automation_id,
+      'email:' || s.account_id || char(10) || s.thread_id,
+      s.message_id,
+      ${briefingTierLabel("json_extract(s.item_json, '$.priority')")},
+      ${briefingItemAsReportItem(
+        "json_set(s.item_json, '$.accountId', s.account_id, '$.threadId', s.thread_id)",
+      )},
+      s.disposition, s.first_reported_at, s.last_reported_at, s.handled_at, s.updated_at
+    FROM automation_thread_states AS s;
+    DROP TABLE automation_thread_states;
+    ${briefingCardsAsReports("automation_runs")}
+    ${briefingCardsAsReports("messages")}
+  `,
+  // 41: automation suggestions are to-dos filed by a default automation now.
+  // Pending ones become to-dos; decided ones were dedup context only.
+  `
+    INSERT INTO todos (id, title, body, status, position, dedupe_key, created_at, updated_at)
+    SELECT 'automation-suggestion-' || id,
+      'Automation vorschlagen: ' || name,
+      rationale || char(10) || char(10) ||
+        CASE WHEN (SELECT value FROM settings WHERE key = 'app.language') = 'en'
+          THEN 'Schedule (cron): ' ELSE 'Zeitplan (Cron): ' END || schedule ||
+        char(10) || char(10) ||
+        CASE WHEN (SELECT value FROM settings WHERE key = 'app.language') = 'en'
+          THEN 'Instruction:' ELSE 'Anweisung:' END || char(10) || instruction,
+      'open', 0, 'automation-suggestion:' || lower(name), created_at, created_at
+    FROM automation_suggestions WHERE status = 'pending';
+    DROP TABLE automation_suggestions;
   `,
 ];

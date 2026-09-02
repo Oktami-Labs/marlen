@@ -1,10 +1,6 @@
 import {
   type AgentCard,
   type AttachmentItem,
-  BRIEFING_PRIORITIES,
-  type BriefingItem,
-  type BriefingPriority,
-  type BriefingRollup,
   type CardAccount,
   CHART_KINDS,
   CHART_TONES,
@@ -22,6 +18,9 @@ import {
   type LeadCardData,
   type MailSearchHit,
   type MessageCard,
+  type ReportItem,
+  type ReportRef,
+  type ReportSection,
   type SourceItem,
   splitPage,
   type WikiDiffRow,
@@ -270,117 +269,128 @@ function parseChoicesCard(details: Record<string, unknown>): CardOf<"choices"> |
   return buildChoicesCard(details.question, options);
 }
 
-export function isBriefingPriority(value: unknown): value is BriefingPriority {
-  return typeof value === "string" && (BRIEFING_PRIORITIES as readonly string[]).includes(value);
+function parseReportRef(value: unknown): ReportRef | undefined {
+  if (!isRecord(value)) return undefined;
+  switch (value.kind) {
+    case "email": {
+      const { accountId, threadId, messageId, sender, senderEmail, receivedAt, webUrl } = value;
+      if (
+        !isNonEmptyString(accountId) ||
+        !isNonEmptyString(threadId) ||
+        !isNonEmptyString(sender)
+      ) {
+        return undefined;
+      }
+      return {
+        kind: "email",
+        accountId,
+        threadId,
+        ...(isNonEmptyString(messageId) ? { messageId } : {}),
+        sender,
+        ...(isNonEmptyString(senderEmail) ? { senderEmail } : {}),
+        ...(isNonEmptyString(receivedAt) ? { receivedAt } : {}),
+        ...(isNonEmptyString(webUrl) ? { webUrl } : {}),
+      };
+    }
+    case "url":
+      return isNonEmptyString(value.url) ? { kind: "url", url: value.url } : undefined;
+    case "none":
+      return { kind: "none" };
+    default:
+      return undefined;
+  }
 }
 
-/** `accountId` and `webUrl` must come from resolved server values, not model data. */
-export function coerceBriefingItem(
-  value: unknown,
-  accountId: string | undefined,
-  webUrl: string | undefined,
-): BriefingItem | undefined {
-  if (!isRecord(value)) return undefined;
-  const {
-    threadId,
-    messageId,
-    sender,
-    senderEmail,
-    subject,
-    gist,
-    priority,
-    deadline,
-    receivedAt,
-    draftId,
-    handled,
-  } = value;
-  if (
-    !isNonEmptyString(threadId) ||
-    !isNonEmptyString(sender) ||
-    !isNonEmptyString(subject) ||
-    !isNonEmptyString(gist)
-  ) {
-    return undefined;
+export function reportItemKey(ref: ReportRef, title: string): string {
+  switch (ref.kind) {
+    case "email":
+      return `email:${ref.accountId}\n${ref.threadId}`;
+    case "url":
+      return `url:${ref.url}`;
+    case "none":
+      return `title:${title}`;
+    default: {
+      const _exhaustive: never = ref;
+      return _exhaustive;
+    }
   }
+}
+
+/** `ref` must come from resolved server values, not model data. */
+export function coerceReportItem(value: unknown, ref: ReportRef): ReportItem | undefined {
+  if (!isRecord(value)) return undefined;
+  const { title, gist, deadline, draftId, needsUser, handled, change, since } = value;
+  if (!isNonEmptyString(title) || !isNonEmptyString(gist)) return undefined;
   return {
-    threadId,
-    ...(isNonEmptyString(messageId) ? { messageId } : {}),
-    ...(accountId ? { accountId } : {}),
-    sender,
-    ...(isNonEmptyString(senderEmail) ? { senderEmail } : {}),
-    subject,
+    key: reportItemKey(ref, title),
+    ref,
+    title,
     gist,
-    priority: isBriefingPriority(priority) ? priority : "fyi",
     ...(isNonEmptyString(deadline) ? { deadline } : {}),
-    ...(isNonEmptyString(receivedAt) ? { receivedAt } : {}),
     ...(isNonEmptyString(draftId) ? { draftId } : {}),
-    ...(webUrl ? { webUrl } : {}),
+    ...(needsUser === true ? { needsUser: true } : {}),
     ...(handled === true ? { handled: true } : {}),
+    ...(change === "new" || change === "updated" || change === "carried" ? { change } : {}),
+    ...(isNonEmptyString(since) ? { since } : {}),
   };
 }
 
-function parseBriefingItem(value: unknown): BriefingItem | undefined {
+function parseReportItem(value: unknown): ReportItem | undefined {
   if (!isRecord(value)) return undefined;
-  const accountId = isNonEmptyString(value.accountId) ? value.accountId : undefined;
-  const webUrl = isNonEmptyString(value.webUrl) ? value.webUrl : undefined;
-  return coerceBriefingItem(value, accountId, webUrl);
+  const ref = parseReportRef(value.ref);
+  return ref ? coerceReportItem(value, ref) : undefined;
 }
 
-export function coerceBriefingRollup(
+/** A section with nothing in it is not rendered; the model's empty tiers vanish here. */
+export function coerceReportSection(
   value: unknown,
-  items: BriefingItem[],
-): BriefingRollup | undefined {
+  items: ReportItem[],
+): ReportSection | undefined {
   if (!isRecord(value)) return undefined;
   if (!isNonEmptyString(value.label) || items.length === 0) return undefined;
-  return { label: value.label, items };
+  return { label: value.label, ...(value.collapsed === true ? { collapsed: true } : {}), items };
 }
 
-function parseBriefingRollup(value: unknown): BriefingRollup | undefined {
+function parseReportSection(value: unknown): ReportSection | undefined {
   if (!isRecord(value)) return undefined;
   const items = Array.isArray(value.items)
-    ? value.items.map(parseBriefingItem).filter((i): i is BriefingItem => i !== undefined)
+    ? value.items.map(parseReportItem).filter((i): i is ReportItem => i !== undefined)
     : [];
-  return coerceBriefingRollup(value, items);
+  return coerceReportSection(value, items);
 }
 
-export interface BriefingCardInput {
+export interface ReportCardInput {
   headline?: string;
   periodLabel?: string;
   accounts?: CardAccount[];
-  items: BriefingItem[];
-  rollups?: BriefingRollup[];
+  sections: ReportSection[];
   scanned?: number;
 }
 
-export function buildBriefingCard(input: BriefingCardInput): CardOf<"briefing"> {
+export function buildReportCard(input: ReportCardInput): CardOf<"report"> {
   return {
-    kind: "briefing",
+    kind: "report",
     ...(input.headline ? { headline: input.headline } : {}),
     ...(input.periodLabel ? { periodLabel: input.periodLabel } : {}),
     ...(input.accounts && input.accounts.length > 0 ? { accounts: input.accounts } : {}),
-    items: input.items,
-    ...(input.rollups && input.rollups.length > 0 ? { rollups: input.rollups } : {}),
+    sections: input.sections,
     ...(input.scanned !== undefined ? { scanned: input.scanned } : {}),
   };
 }
 
-function parseBriefingCard(details: Record<string, unknown>): CardOf<"briefing"> | undefined {
-  if (!Array.isArray(details.items)) return undefined;
-  const items = details.items
-    .map(parseBriefingItem)
-    .filter((i): i is BriefingItem => i !== undefined);
+function parseReportCard(details: Record<string, unknown>): CardOf<"report"> | undefined {
+  if (!Array.isArray(details.sections)) return undefined;
+  const sections = details.sections
+    .map(parseReportSection)
+    .filter((s): s is ReportSection => s !== undefined);
   const accountsList = Array.isArray(details.accounts)
     ? details.accounts.map(parseCardAccount).filter((a): a is CardAccount => a !== undefined)
     : undefined;
-  const rollups = Array.isArray(details.rollups)
-    ? details.rollups.map(parseBriefingRollup).filter((r): r is BriefingRollup => r !== undefined)
-    : undefined;
-  return buildBriefingCard({
+  return buildReportCard({
     headline: isString(details.headline) ? details.headline : undefined,
     periodLabel: isString(details.periodLabel) ? details.periodLabel : undefined,
     accounts: accountsList,
-    items,
-    rollups,
+    sections,
     scanned: typeof details.scanned === "number" ? details.scanned : undefined,
   });
 }
@@ -671,7 +681,7 @@ const CARD_PARSERS: {
   message_draft: (details) => parseMessageDraftCard(details),
   attachments: parseAttachmentsCard,
   choices: parseChoicesCard,
-  briefing: parseBriefingCard,
+  report: parseReportCard,
   sources: (details) => parseSourcesCard(details),
   mail_sources: (details) => parseMailSourcesCard(details),
   form: (details) => parseFormCard(details),

@@ -45,9 +45,8 @@ function actionOf(mcpToolName: string): string {
 
 /**
  * Send and reply actions Marlen's own draft tool replaces for an app whose
- * DraftProvider can send: the account's signature and the humanizer pass are
- * applied where a draft is saved, so a provider action that dispatches mail on
- * its own is a second path around both. Sending is create-draft with
+ * DraftProvider can send: the account's signature is applied where a draft is
+ * saved, so a provider action that dispatches mail on its own is a path around it. Sending is create-draft with
  * send=true; forwarding, which has no local equivalent, keeps its action.
  */
 const SUBSTITUTED_SEND_VERBS = /^(send|reply)(-|$)/;

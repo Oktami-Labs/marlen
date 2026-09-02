@@ -1,17 +1,10 @@
-import type { AccountColor, AgentCard, Automation, RunFeedItem, RunStep } from "@marlen/shared";
-import {
-  CalendarClock,
-  ChevronDown,
-  ChevronRight,
-  Clock,
-  Newspaper,
-  RefreshCw,
-} from "lucide-react";
+import type { AccountColor, Automation, RunFeedItem, RunStep } from "@marlen/shared";
+import { CalendarClock, ChevronDown, ChevronRight, Newspaper, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
 import { AgentCardView } from "@/components/cards";
-import { BriefingCard } from "@/components/cards/BriefingCard";
+import { ReportCard } from "@/components/cards/ReportCard";
 import { OpenRunInChatButton } from "@/components/OpenRunInChatButton";
 import { RunTriggerBadge } from "@/components/RunTriggerBadge";
 import { Button } from "@/components/ui/button";
@@ -22,20 +15,13 @@ import { GroupLabel } from "@/components/ui/group-label";
 import { Markdown } from "@/components/ui/markdown";
 import { SectionTitle } from "@/components/ui/section-header";
 import { upcomingRuns } from "@/features/home/agenda";
+import { findReportCard, homeCards } from "@/features/home/BriefingSection";
 import { NewDot, runSeenKey, type Seen } from "@/features/home/seen";
 import { api } from "@/lib/api";
 import { dayLabel, isToday, timeLabel } from "@/lib/dates";
 import type { View } from "@/lib/nav";
 import { toast } from "@/lib/toast";
 import { cn, stagger, toggleRowProps } from "@/lib/utils";
-
-type BriefingCardData = Extract<AgentCard, { kind: "briefing" }>;
-
-/** The run's structured briefing card, when its turn composed one. */
-export function findBriefingCard(run: RunFeedItem): BriefingCardData | undefined {
-  const match = run.cards?.find((c) => c.card.kind === "briefing");
-  return match ? (match.card as BriefingCardData) : undefined;
-}
 
 /** Runs that finished since the user last looked; Home counts these as new. */
 export function freshRuns(runs: RunFeedItem[] | null, seen: Seen): RunFeedItem[] {
@@ -44,10 +30,10 @@ export function freshRuns(runs: RunFeedItem[] | null, seen: Seen): RunFeedItem[]
   );
 }
 
-/** The run's one-line gist: the briefing's own headline, else the result's first
+/** The run's one-line gist: the report's own headline, else the result's first
  *  line, minus the colon a line like "Run finished:" ends on. */
-export function runSummary(run: RunFeedItem): string {
-  const headline = findBriefingCard(run)?.headline;
+function runSummary(run: RunFeedItem): string {
+  const headline = findReportCard(run)?.headline;
   if (headline) return headline;
   const first = run.result
     .split("\n")
@@ -60,10 +46,9 @@ export function runSummary(run: RunFeedItem): string {
  * "Marlene arbeitet": everything the agent does without the user, on one spine
  * that reads like the day: today's finished runs in the order they happened,
  * the run in flight with its live tool trail, then what is scheduled next. A
- * row unfolds into the run's own output (its briefing card, else the result
- * and cards), which is why this section replaces the separate briefing hero,
- * results, and activity log. The status line carries the counts; this header
- * repeats none of them.
+ * row unfolds into the run's own output (its report card, else the result
+ * and cards). The report the briefing section shows is not on this spine;
+ * Home hands this section the feed without it.
  */
 export function WorkSection({
   runs,
@@ -71,9 +56,6 @@ export function WorkSection({
   colors,
   onNavigate,
   seen,
-  openRunId,
-  focusRunId,
-  onToggleRun,
 }: {
   /** Null while the first fetch is in flight. */
   runs: RunFeedItem[] | null;
@@ -81,21 +63,12 @@ export function WorkSection({
   colors: AccountColor[];
   onNavigate: (view: View) => void;
   seen: Seen;
-  /** The one unfolded row; Home owns it so the status line can open the briefing. */
-  openRunId: string | null;
-  /** The row the status line just opened: it scrolls into view and flashes once. */
-  focusRunId: string | null;
-  onToggleRun: (runId: string | null) => void;
 }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const [showEarlier, setShowEarlier] = React.useState(false);
-  // A briefing from an earlier day lives behind the disclosure; opening it
-  // from the status line has to unfold that first or the row stays hidden.
-  const focusEarlier = (runs ?? []).some((run) => run.id === focusRunId && !isToday(run.startedAt));
-  React.useEffect(() => {
-    if (focusEarlier) setShowEarlier(true);
-  }, [focusEarlier]);
+  const [openRunId, setOpenRunId] = React.useState<string | null>(null);
+  const toggleRun = (runId: string) => setOpenRunId((open) => (open === runId ? null : runId));
 
   const running = (runs ?? []).filter((run) => run.status === "running");
   const finished = (runs ?? []).filter((run) => run.status !== "running");
@@ -154,8 +127,7 @@ export function WorkSection({
             colors={colors}
             seen={seen}
             open={openRunId === run.id}
-            focus={focusRunId === run.id}
-            onToggle={() => onToggleRun(openRunId === run.id ? null : run.id)}
+            onToggle={() => toggleRun(run.id)}
             onNavigate={onNavigate}
           />
         ))}
@@ -197,8 +169,7 @@ export function WorkSection({
                         colors={colors}
                         seen={seen}
                         open={openRunId === run.id}
-                        focus={focusRunId === run.id}
-                        onToggle={() => onToggleRun(openRunId === run.id ? null : run.id)}
+                        onToggle={() => toggleRun(run.id)}
                         onNavigate={onNavigate}
                       />
                     ))}
@@ -220,7 +191,7 @@ export function WorkSection({
 
 function Head() {
   const { t } = useTranslation();
-  return <SectionTitle icon={Clock} tone="tint-neutral" title={t("home.workTitle")} />;
+  return <SectionTitle title={t("home.workTitle")} />;
 }
 
 function groupByDay(runs: RunFeedItem[], lang: string): Map<string, RunFeedItem[]> {
@@ -342,7 +313,7 @@ function ScheduledRow({
 
 /**
  * A finished run: gist on one line, unfolding into the run's own output. The
- * body is the briefing card when its turn composed one, else the result prose
+ * body is the report card when its turn published one, else the result prose
  * plus the turn's other cards as siblings, never nested in this panel's surface.
  */
 function FinishedRow({
@@ -352,7 +323,6 @@ function FinishedRow({
   colors,
   seen,
   open,
-  focus,
   onToggle,
   onNavigate,
 }: {
@@ -362,23 +332,15 @@ function FinishedRow({
   colors: AccountColor[];
   seen: Seen;
   open: boolean;
-  /** Opened from the status line: scroll here and play the arrival flash. */
-  focus: boolean;
   onToggle: () => void;
   onNavigate: (view: View) => void;
 }) {
   const { t } = useTranslation();
   const [retrying, setRetrying] = React.useState(false);
-  const ref = React.useRef<HTMLDivElement | null>(null);
-  React.useEffect(() => {
-    if (focus) ref.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [focus]);
   const failed = run.status === "error";
-  const briefing = findBriefingCard(run);
-  const cards = (run.cards ?? []).filter(
-    ({ card }) => card.kind !== "email_draft" && card.kind !== "message_draft",
-  );
-  const expandable = !!briefing || !!run.result || cards.length > 0;
+  const report = findReportCard(run);
+  const cards = homeCards(run);
+  const expandable = !!report || !!run.result || cards.length > 0;
   const isNew = seen.isNew(runSeenKey(run.id), run.startedAt);
 
   const toggle = () => {
@@ -399,7 +361,7 @@ function FinishedRow({
   };
 
   return (
-    <div ref={ref} className={cn("rounded-md", focus && "flash-accent")}>
+    <div className="rounded-md">
       <div
         className={cn(
           "animate-in-up flex items-start gap-2.5 rounded-md p-2.5",
@@ -455,16 +417,14 @@ function FinishedRow({
 
       {open && (
         <div className="flex flex-col gap-3 px-2.5 pb-3 pt-1">
-          {briefing ? (
-            <BriefingCard card={briefing} colors={colors} runId={run.id} bare />
+          {report ? (
+            <ReportCard card={report} colors={colors} runId={run.id} bare />
           ) : (
             run.result && <Markdown content={run.result} className="text-sm text-foreground/90" />
           )}
-          {/* Sibling blocks, never nested in this panel's surface (DESIGN.md). */}
-          {!briefing &&
-            cards.map(({ toolCallId, card }) => (
-              <AgentCardView key={toolCallId} card={card} colors={colors} />
-            ))}
+          {cards.map(({ toolCallId, card }) => (
+            <AgentCardView key={toolCallId} card={card} colors={colors} />
+          ))}
         </div>
       )}
     </div>

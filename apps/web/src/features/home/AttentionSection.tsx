@@ -16,17 +16,9 @@ import {
   verticalListSortingStrategy,
 } from "@dnd-kit/sortable";
 import { CSS } from "@dnd-kit/utilities";
-import type { AccountColor, AccountDrafts, Automation, EmailDraft, Todo } from "@marlen/shared";
+import type { AccountColor, AccountDrafts, Automation, Todo } from "@marlen/shared";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import {
-  ChevronRight,
-  CircleCheck,
-  ListTodo,
-  Menu,
-  Plus,
-  Sparkles,
-  TriangleAlert,
-} from "lucide-react";
+import { CheckCheck, CircleCheck, Menu, Plus } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -36,20 +28,13 @@ import { DisclosureToggle } from "@/components/ui/disclosure-toggle";
 import { EmptyState } from "@/components/ui/empty-state";
 import { ErrorBanner, LoadingRow } from "@/components/ui/feedback";
 import { GroupLabel } from "@/components/ui/group-label";
-import { IconChip } from "@/components/ui/icon-chip";
 import { Input } from "@/components/ui/input";
 import { SectionTitle } from "@/components/ui/section-header";
 import { Select } from "@/components/ui/select";
 import { DraftRow } from "@/features/drafts/DraftRow";
-import { DAY_MS, dayIso, dueMs, startOfDayMs } from "@/features/home/agenda";
+import { agendaMs, DAY_MS, dayIso, startOfDayMs } from "@/features/home/agenda";
 import { OutboundRow } from "@/features/home/OutboundRow";
-import {
-  draftSeenKey,
-  outboundSeenKey,
-  type Seen,
-  SeenOnInteract,
-  todoSeenKey,
-} from "@/features/home/seen";
+import { type Seen, SeenOnInteract, todoSeenKey } from "@/features/home/seen";
 import { DoneTodoRow, TodoRow, useTodoPatch } from "@/features/home/TodoRow";
 import { accountColor } from "@/lib/accounts";
 import { api } from "@/lib/api";
@@ -62,25 +47,23 @@ const OVERDUE = "overdue";
 const ANYTIME = "anytime";
 const dayGroupId = (ms: number) => `day:${ms}`;
 
-/** Draft rows shown per account before the disclosure unfolds the rest. */
-const DRAFTS_VISIBLE = 4;
-
 type Group = {
   id: string;
   heading: string;
   overdue: boolean;
   droppable: boolean;
-  /** The sortable todos, in display order. */
+  /** The sortable items, in display order. */
   todos: Todo[];
 };
 
 /**
- * "Zu erledigen", everything waiting on the user: overdue todos, every draft
- * awaiting approval (email and outbound channels), then the days ahead and
- * undated todos last. What the agent does by itself is the work column's
- * business, never this one's. Drag a todo onto another day to reschedule, or
- * onto "Anytime" to undate it; mutations are optimistic and the "todos" server
- * event reconciles the cache.
+ * "Zu erledigen", everything waiting on the user on one time axis: what was
+ * missed, then the days ahead, then undated todos. Todos, decisions and
+ * drafts awaiting approval are one list (kind tells the row apart); an
+ * undated approval counts as due the day it was drafted, so it sits under
+ * Today until it has waited a few days. Drag an item onto another day to
+ * reschedule, or onto "Anytime" to undate it; mutations are optimistic and
+ * the "todos" server event reconciles the cache.
  */
 export function AttentionSection({
   automations,
@@ -90,9 +73,10 @@ export function AttentionSection({
   onDraftsChanged,
   onNavigate,
   seen,
+  newCount,
 }: {
   automations: Automation[] | null;
-  /** Email provider drafts; null while the (slow, live-mailbox) fetch is in flight. */
+  /** The connected inboxes and their live drafts; null while the (slow, live-mailbox) fetch is in flight. Read for the account filter and per-inbox errors; the rows come from the todos list. */
   drafts: AccountDrafts[] | null;
   colors: AccountColor[];
   /** Opens one draft on the reading screen that replaces this panel. */
@@ -101,27 +85,21 @@ export function AttentionSection({
   onDraftsChanged: () => void;
   onNavigate: (view: View) => void;
   seen: Seen;
+  /** Items filed since the user last looked, page-wide; lights the mark-all-seen action. */
+  newCount: number;
 }) {
   const { t, i18n } = useTranslation();
   const lang = i18n.language;
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
+  const _navigate = useNavigate();
   const [adding, setAdding] = React.useState(false);
   const [showDone, setShowDone] = React.useState(false);
-  /** Account id, or "all", narrows the approvals block only. */
+  /** Account id, or "all", narrows the email approvals only. */
   const [accountFilter, setAccountFilter] = React.useState("all");
   const [rowError, setRowError] = React.useState<string | null>(null);
 
   const todosQuery = useQuery({ queryKey: ["todos"], queryFn: () => api.todos("open") });
   const doneQuery = useQuery({ queryKey: ["todos", "done"], queryFn: () => api.todos("done") });
-  const outboundQuery = useQuery({
-    queryKey: ["outbound", "open"],
-    queryFn: () => api.outbound("open"),
-  });
-  const suggestionsQuery = useQuery({
-    queryKey: ["automations", "suggestions"],
-    queryFn: () => api.automationSuggestions(),
-  });
   const patch = useTodoPatch();
 
   const sensors = useSensors(
@@ -130,30 +108,48 @@ export function AttentionSection({
   );
 
   const todos = todosQuery.data ?? [];
-  // Most-recently completed first; reopening returns a todo to the open agenda.
-  const done = [...(doneQuery.data ?? [])].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
+  // Sent drafts close as done too, but only a todo can be reopened from the history.
+  const done = (doneQuery.data ?? [])
+    .filter((td) => td.kind === "todo")
+    .sort((a, b) => b.updatedAt.localeCompare(a.updatedAt));
   const restoreTodo = (id: string) =>
     patch(id, { status: "open" }, (list) => list.filter((td) => td.id !== id), {
       key: ["todos", "done"],
     });
   const todayStart = startOfDayMs(new Date());
 
-  // Partition todos into overdue / dated-by-day / anytime.
-  const overdueTodos = todos
+  // With one mailbox connected a color says nothing, so the dots and the filter
+  // that reads as their legend both appear only from the second one on.
+  const inboxes = drafts ?? [];
+  const manyAccounts = inboxes.length > 1;
+  const visible = todos.filter(
+    (td) =>
+      accountFilter === "all" ||
+      td.ref?.kind !== "email_draft" ||
+      td.ref.accountId === accountFilter,
+  );
+
+  // Partition onto the time axis: missed / dated-by-day / anytime.
+  const at = new Map(visible.map((td) => [td.id, agendaMs(td, todayStart)] as const));
+  const dayOf = (td: Todo) => {
+    const ms = at.get(td.id) ?? null;
+    return ms === null ? null : startOfDayMs(new Date(ms));
+  };
+  const byTime = (a: Todo, b: Todo) => (at.get(a.id) ?? 0) - (at.get(b.id) ?? 0);
+  const overdueTodos = visible
     .filter((td) => {
-      const at = dueMs(td);
-      return at !== null && startOfDayMs(new Date(at)) < todayStart;
+      const day = dayOf(td);
+      return day !== null && day < todayStart;
     })
-    .sort((a, b) => (dueMs(a) as number) - (dueMs(b) as number));
-  const anytimeTodos = todos.filter((td) => dueMs(td) === null);
-  const datedTodos = todos.filter((td) => {
-    const at = dueMs(td);
-    return at !== null && startOfDayMs(new Date(at)) >= todayStart;
+    .sort(byTime);
+  const anytimeTodos = visible.filter((td) => dayOf(td) === null);
+  const datedTodos = visible.filter((td) => {
+    const day = dayOf(td);
+    return day !== null && day >= todayStart;
   });
 
-  // Day buckets keyed by local day-start ms.
   const dayKeys = new Set<number>();
-  for (const td of datedTodos) dayKeys.add(startOfDayMs(new Date(dueMs(td) as number)));
+  for (const td of datedTodos) dayKeys.add(dayOf(td) as number);
 
   const dayHeading = (ms: number): string => {
     if (ms === todayStart) return t("home.todosToday");
@@ -172,15 +168,12 @@ export function AttentionSection({
     });
   }
   for (const ms of [...dayKeys].sort((a, b) => a - b)) {
-    const dayTodos = datedTodos
-      .filter((td) => startOfDayMs(new Date(dueMs(td) as number)) === ms)
-      .sort((a, b) => (dueMs(a) as number) - (dueMs(b) as number));
     groups.push({
       id: dayGroupId(ms),
       heading: dayHeading(ms),
       overdue: false,
       droppable: true,
-      todos: dayTodos,
+      todos: datedTodos.filter((td) => dayOf(td) === ms).sort(byTime),
     });
   }
   if (anytimeTodos.length > 0) {
@@ -193,26 +186,11 @@ export function AttentionSection({
     });
   }
 
-  const outbound = outboundQuery.data ?? [];
-  const emailGroups = drafts ?? [];
-  const visibleEmailGroups = emailGroups
-    .filter((a) => accountFilter === "all" || a.accountId === accountFilter)
-    .filter((a) => a.drafts.length > 0 || a.error);
-  const approvalsCount = outbound.length + emailGroups.reduce((n, a) => n + a.drafts.length, 0);
-  const hasApprovals = approvalsCount > 0 || drafts === null || emailGroups.some((a) => a.error);
-  // With one mailbox connected a color says nothing, so the dots and the filter
-  // that reads as their legend both appear only from the second one on.
-  const manyAccounts = emailGroups.length > 1;
-
   // Approvals wear how long they have waited once that is longer than a few days.
   const dateLabel = (iso: string) => waitingLabel(iso, lang);
 
-  const suggestions = suggestionsQuery.data ?? [];
-  const loaded = !!todosQuery.data && drafts !== null && !!outboundQuery.data;
-  const allClear =
-    loaded &&
-    todos.length + approvalsCount + suggestions.length === 0 &&
-    !emailGroups.some((a) => a.error);
+  const loaded = !!todosQuery.data && drafts !== null;
+  const allClear = loaded && todos.length === 0 && !inboxes.some((a) => a.error);
 
   const groupOfTodo = new Map<string, Group>();
   for (const g of groups) for (const td of g.todos) groupOfTodo.set(td.id, g);
@@ -268,6 +246,67 @@ export function AttentionSection({
     );
   };
 
+  // An approval's answer records and, when linked, fires the automation; the
+  // row stays until its draft is sent or discarded.
+  const answerApproval = (todo: Todo) => (answer: string) =>
+    patch(
+      todo.id,
+      { answer },
+      (list) => list.map((td) => (td.id === todo.id ? { ...td, answer } : td)),
+      { transition: false },
+    );
+  const approvalChanged = () => {
+    void queryClient.invalidateQueries({ queryKey: ["todos"] });
+    onDraftsChanged();
+  };
+
+  const renderRow = (todo: Todo, overdue: boolean, isNew?: boolean) => {
+    if (todo.kind === "approval" && todo.ref?.kind === "email_draft") {
+      const ref = todo.ref;
+      return (
+        <DraftRow
+          todo={{ ...todo, ref }}
+          color={accountColor(colors, ref.accountId)}
+          markAccount={manyAccounts}
+          dateLabel={dateLabel}
+          onOpen={() => onOpenDraft(ref.accountId, ref.draftId)}
+          onChanged={approvalChanged}
+          onError={setRowError}
+          isNew={isNew}
+          onAnswer={answerApproval(todo)}
+        />
+      );
+    }
+    if (todo.kind === "approval" && todo.ref?.kind === "outbound") {
+      return (
+        <OutboundRow
+          todo={{ ...todo, ref: todo.ref }}
+          dateLabel={dateLabel}
+          onChanged={approvalChanged}
+          onError={setRowError}
+          isNew={isNew}
+          onAnswer={answerApproval(todo)}
+        />
+      );
+    }
+    return (
+      <TodoRow
+        todo={todo}
+        overdue={overdue}
+        lang={lang}
+        todayStart={todayStart}
+        onPatch={patch}
+        automations={automations}
+        isNew={isNew}
+        onOpenChat={
+          todo.conversationId
+            ? () => openConversationInChat(todo.conversationId as string, () => onNavigate("chat"))
+            : undefined
+        }
+      />
+    );
+  };
+
   const renderGroup = (group: Group) => (
     <GroupBlock key={group.id} group={group}>
       <SortableContext
@@ -282,25 +321,7 @@ export function AttentionSection({
             createdAt={todo.createdAt}
           >
             {(isNew) => (
-              <SortableTodoRow id={todo.id}>
-                <TodoRow
-                  todo={todo}
-                  overdue={group.overdue}
-                  lang={lang}
-                  todayStart={todayStart}
-                  onPatch={patch}
-                  automations={automations}
-                  isNew={isNew}
-                  onOpenChat={
-                    todo.conversationId
-                      ? () =>
-                          openConversationInChat(todo.conversationId as string, () =>
-                            onNavigate("chat"),
-                          )
-                      : undefined
-                  }
-                />
-              </SortableTodoRow>
+              <SortableRow id={todo.id}>{renderRow(todo, group.overdue, isNew)}</SortableRow>
             )}
           </SeenOnInteract>
         ))}
@@ -308,24 +329,20 @@ export function AttentionSection({
     </GroupBlock>
   );
 
-  // One flat list of approvals: every row already names its own channel and
-  // recipient, so the zone needs no per-channel or per-account heading, the
-  // account chips carry the colors, and each row wears the matching dot.
-  const approvalsZone = hasApprovals && (
-    <div className="flex flex-col gap-3">
-      <div className="flex items-center gap-3">
-        <GroupLabel>{t("home.approvalsGroup")}</GroupLabel>
+  return (
+    <section className="flex flex-col gap-3">
+      <SectionTitle title={t("home.attentionTitle")}>
         {manyAccounts && (
           <Select
             id="draft-account"
             value={accountFilter}
             onChange={setAccountFilter}
             aria-label={t("home.approvalsFilterAccount")}
-            className="ml-auto w-auto max-w-64"
+            className="mr-1 w-auto max-w-48"
             options={[
               { value: "all", label: t("home.approvalsAllAccounts") },
               // The dot per option is the legend for the dots the rows wear.
-              ...emailGroups.map((a) => ({
+              ...inboxes.map((a) => ({
                 value: a.accountId,
                 label: a.account,
                 mark: (
@@ -335,53 +352,17 @@ export function AttentionSection({
             ]}
           />
         )}
-      </div>
-      {drafts === null ? (
-        <LoadingRow />
-      ) : (
-        <div className="flex flex-col gap-2">
-          {accountFilter === "all" &&
-            outbound.map((draft, i) => (
-              <SeenOnInteract
-                key={draft.id}
-                seen={seen}
-                itemKey={outboundSeenKey(draft.id)}
-                createdAt={draft.createdAt}
-                className="animate-in-up"
-                style={stagger(i)}
-              >
-                {(isNew) => (
-                  <OutboundRow
-                    draft={draft}
-                    dateLabel={dateLabel}
-                    isNew={isNew}
-                    onChanged={() => void queryClient.invalidateQueries({ queryKey: ["outbound"] })}
-                    onError={setRowError}
-                  />
-                )}
-              </SeenOnInteract>
-            ))}
-          {visibleEmailGroups.map((account) => (
-            <AccountDraftGroup
-              key={account.accountId}
-              account={account}
-              color={accountColor(colors, account.accountId)}
-              markAccount={manyAccounts}
-              dateLabel={dateLabel}
-              onOpenDraft={onOpenDraft}
-              onChanged={onDraftsChanged}
-              onError={setRowError}
-              seen={seen}
-            />
-          ))}
-        </div>
-      )}
-    </div>
-  );
-
-  return (
-    <section className="flex flex-col gap-3">
-      <SectionTitle icon={ListTodo} tone="tint-neutral" title={t("home.attentionTitle")}>
+        {newCount > 0 && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            aria-label={t("home.markAllSeen")}
+            data-tooltip={t("home.markAllSeen")}
+            onClick={seen.seeAll}
+          >
+            <CheckCheck />
+          </Button>
+        )}
         <Button
           variant="ghost"
           size="icon-xs"
@@ -393,72 +374,59 @@ export function AttentionSection({
         </Button>
       </SectionTitle>
       {rowError && <ErrorBanner>{rowError}</ErrorBanner>}
-      {!todosQuery.data && <LoadingRow />}
-      <DndContext
-        sensors={sensors}
-        collisionDetection={closestCenter}
-        onDragStart={(e) => {
-          setDragId(String(e.active.id));
-          setDropCross(false);
-        }}
-        onDragCancel={() => setDragId(null)}
-        onDragEnd={onDragEnd}
-      >
-        <div className="flex flex-col gap-6">
-          {groups.filter((g) => g.overdue).map(renderGroup)}
-          {suggestions.length > 0 && (
-            <button
-              type="button"
-              // Router state (not onNavigate) so the panel can flash the cards on arrival.
-              onClick={() => navigate("/automations", { state: { focusSuggestions: true } })}
-              className="surface surface-hover flex items-center gap-2 rounded-lg px-2.5 py-2 text-left text-sm"
-            >
-              <IconChip size="sm">
-                <Sparkles />
-              </IconChip>
-              <span className="min-w-0 truncate">
-                {t("home.suggestionsWaiting", { count: suggestions.length })}
-              </span>
-              <ChevronRight className="ml-auto h-3.5 w-3.5 shrink-0 text-muted-foreground" />
-            </button>
-          )}
-          {approvalsZone}
-          {groups.filter((g) => !g.overdue).map(renderGroup)}
-          {adding && (
-            <AddTodoRow seen={seen} onClose={() => setAdding(false)} onError={setRowError} />
-          )}
-          {allClear && !adding && (
-            <EmptyState icon={CircleCheck} description={t("home.attentionEmpty")} />
-          )}
-        </div>
-        <DragOverlay dropAnimation={dropCross ? null : undefined}>
-          {draggedTodo && (
-            <TodoRow
-              todo={draggedTodo}
-              overdue={groupOfTodo.get(draggedTodo.id)?.overdue ?? false}
-              lang={lang}
-              todayStart={todayStart}
-              onPatch={patch}
-              automations={automations}
-            />
-          )}
-        </DragOverlay>
-      </DndContext>
-      {done.length > 0 && (
-        <div className="flex flex-col gap-2">
-          <DisclosureToggle open={showDone} onToggle={() => setShowDone((v) => !v)}>
-            {t("home.todosDone", { count: done.length })}
-          </DisclosureToggle>
-          {showDone && (
-            <div className="flex flex-col gap-2">
-              {done.map((td, i) => (
-                <div key={td.id} className="animate-in-up" style={stagger(i)}>
-                  <DoneTodoRow todo={td} onRestore={() => restoreTodo(td.id)} />
-                </div>
-              ))}
-            </div>
-          )}
-        </div>
+      {inboxes
+        .filter((a) => a.error)
+        .map((a) => (
+          <ErrorBanner key={a.accountId}>{a.error}</ErrorBanner>
+        ))}
+      {!todosQuery.data ? (
+        <LoadingRow />
+      ) : (
+        <DndContext
+          sensors={sensors}
+          collisionDetection={closestCenter}
+          onDragStart={(e) => {
+            setDragId(String(e.active.id));
+            setDropCross(false);
+          }}
+          onDragCancel={() => setDragId(null)}
+          onDragEnd={onDragEnd}
+        >
+          {/* One raised panel holding plain rows, the work log's shape: never a card per item (DESIGN.md). */}
+          <div className="surface flex flex-col gap-0.5 rounded-lg p-1.5">
+            {groups.map(renderGroup)}
+            {adding && (
+              <AddTodoRow seen={seen} onClose={() => setAdding(false)} onError={setRowError} />
+            )}
+            {allClear && !adding && (
+              <EmptyState
+                surface={false}
+                icon={CircleCheck}
+                description={t("home.attentionEmpty")}
+              />
+            )}
+            {done.length > 0 && (
+              <div className="flex flex-col gap-0.5 pt-1">
+                <DisclosureToggle open={showDone} onToggle={() => setShowDone((v) => !v)}>
+                  {t("home.todosDone", { count: done.length })}
+                </DisclosureToggle>
+                {showDone &&
+                  done.map((td, i) => (
+                    <div key={td.id} className="animate-in-up" style={stagger(i)}>
+                      <DoneTodoRow todo={td} onRestore={() => restoreTodo(td.id)} />
+                    </div>
+                  ))}
+              </div>
+            )}
+          </div>
+          <DragOverlay dropAnimation={dropCross ? null : undefined}>
+            {draggedTodo && (
+              <div className="surface rounded-md">
+                {renderRow(draggedTodo, groupOfTodo.get(draggedTodo.id)?.overdue ?? false)}
+              </div>
+            )}
+          </DragOverlay>
+        </DndContext>
       )}
     </section>
   );
@@ -527,77 +495,9 @@ function AddTodoRow({
   );
 }
 
-/** One email account's drafts: capped rows behind a disclosure. */
-function AccountDraftGroup({
-  account,
-  color,
-  markAccount,
-  dateLabel,
-  onOpenDraft,
-  onChanged,
-  onError,
-  seen,
-}: {
-  account: AccountDrafts;
-  color?: string;
-  /** Marks each row with this account's dot, set only when the list holds more than one inbox. */
-  markAccount: boolean;
-  dateLabel: (iso: string) => string;
-  onOpenDraft: (accountId: string, draftId: string) => void;
-  onChanged: () => void;
-  onError: (message: string | null) => void;
-  seen: Seen;
-}) {
-  const { t } = useTranslation();
-  const [showAll, setShowAll] = React.useState(false);
-
-  const visible = showAll ? account.drafts : account.drafts.slice(0, DRAFTS_VISIBLE);
-  const hidden = account.drafts.length - visible.length;
-
-  return (
-    <div className="flex flex-col gap-2">
-      {account.error ? (
-        <ErrorBanner>{account.error}</ErrorBanner>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {visible.map((draft: EmailDraft, i: number) => (
-            <SeenOnInteract
-              key={draft.id}
-              seen={seen}
-              itemKey={draftSeenKey(account.accountId, draft.id)}
-              createdAt={draft.date}
-              className="animate-in-up"
-              style={stagger(i)}
-            >
-              {(isNew) => (
-                <DraftRow
-                  accountId={account.accountId}
-                  account={{ name: account.account, color }}
-                  markAccount={markAccount}
-                  draft={draft}
-                  dateLabel={dateLabel}
-                  onOpen={() => onOpenDraft(account.accountId, draft.id)}
-                  onDeleted={onChanged}
-                  onError={onError}
-                  isNew={isNew}
-                />
-              )}
-            </SeenOnInteract>
-          ))}
-          {account.drafts.length > DRAFTS_VISIBLE && (
-            <DisclosureToggle open={showAll} onToggle={() => setShowAll((v) => !v)}>
-              {showAll ? t("home.showLess") : t("home.approvalsShowMore", { count: hidden })}
-            </DisclosureToggle>
-          )}
-        </div>
-      )}
-    </div>
-  );
-}
-
 /** Sortable wrapper: gutter drag handle left of the row, dimmed as the in-list
  *  placeholder while its DragOverlay copy follows the pointer. */
-function SortableTodoRow({ id, children }: { id: string; children: React.ReactNode }) {
+function SortableRow({ id, children }: { id: string; children: React.ReactNode }) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -629,12 +529,17 @@ function SortableTodoRow({ id, children }: { id: string; children: React.ReactNo
 function GroupBlock({ group, children }: { group: Group; children: React.ReactNode }) {
   const { setNodeRef, isOver } = useDroppable({ id: group.id, disabled: !group.droppable });
   return (
-    <div ref={setNodeRef} className={cn("flex flex-col gap-2 rounded-lg", isOver && "bg-accent/5")}>
-      <GroupLabel className={cn("flex items-center gap-1.5", group.overdue && "text-warning")}>
-        {group.overdue && <TriangleAlert className="h-3.5 w-3.5" />}
+    <div
+      ref={setNodeRef}
+      className={cn("flex flex-col gap-0.5 rounded-md pt-2 first:pt-0.5", isOver && "bg-accent/5")}
+    >
+      <GroupLabel
+        count={group.todos.length}
+        className={cn("px-2.5 pb-1", group.overdue && "text-warning")}
+      >
         {group.heading}
       </GroupLabel>
-      <div className="flex flex-col gap-2">{children}</div>
+      {children}
     </div>
   );
 }

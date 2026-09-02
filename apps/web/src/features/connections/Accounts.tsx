@@ -415,11 +415,16 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
   };
 
   return (
-    <div className="flex flex-col gap-3">
+    <div className="@container flex flex-col gap-3">
       <div className="flex flex-col gap-2">
-        <div className="flex items-center justify-between gap-4 pb-2">
+        <div className="flex flex-col items-stretch gap-3 pb-2 @md:flex-row @md:items-center @md:justify-between">
           <h3 className="text-sm font-semibold tracking-tight">{t("connections.emailAccounts")}</h3>
-          <Button size="sm" onClick={() => setPickerOpen((open) => !open)} loading={busy !== null}>
+          <Button
+            size="sm"
+            className="w-full @md:w-auto"
+            onClick={() => setPickerOpen((open) => !open)}
+            loading={busy !== null}
+          >
             <Plus />
             {t("connections.addAccount")}
           </Button>
@@ -556,7 +561,7 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
             </div>
           )
         ) : accounts.length === 0 && !onOffice?.configured && !whatsApp?.linked ? (
-          <EmptyState icon={Inbox} description={t("connections.noAccounts")} />
+          <EmptyState icon={Inbox} description={t("connections.noAccounts")} className="py-8" />
         ) : (
           <div className="flex flex-col gap-4">
             {accountGroups.map(([label, groupAccounts]) => (
@@ -572,8 +577,8 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
                       className="animate-in-up flex flex-col gap-1.5"
                       style={{ ...stagger(flat), zIndex: accounts.length - flat }}
                     >
-                      <ListRow className="relative">
-                        <div className="flex min-w-0 items-center gap-3">
+                      <ListRow className="@container relative flex-wrap">
+                        <div className="flex min-w-0 flex-1 basis-full items-center gap-3 @md:basis-0">
                           {colorsQuery.data ? (
                             <ColorPicker
                               color={colorFor(account.id)?.hex ?? UNASSIGNED_ACCOUNT_COLOR}
@@ -585,7 +590,7 @@ export function Accounts({ onChanged }: { onChanged?: () => void }) {
                           <AppIcon src={account.imgSrc} />
                           <p className="min-w-0 truncate text-sm font-medium">{account.name}</p>
                         </div>
-                        <div className="flex items-center gap-2">
+                        <div className="ml-auto flex items-center gap-2">
                           <VoiceLearnBadge account={account} />
                           {!account.healthy && (
                             <Badge variant="destructive">{t("connections.unhealthy")}</Badge>

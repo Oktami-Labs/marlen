@@ -15,8 +15,8 @@
       "ignoreDependencies": ["@tiptap/pm"]
     },
     "apps/server": {
-      "entry": ["test/**/*.test.ts"],
-      "project": ["src/**/*.ts", "test/**/*.ts"],
+      "entry": ["test/**/*.test.ts", "scripts/*.ts"],
+      "project": ["src/**/*.ts", "test/**/*.ts", "scripts/*.ts"],
       // pino transports are resolved as strings (require.resolve in
       // logger.ts), invisible to import analysis.
       "ignoreDependencies": ["pino-roll", "pino-pretty"]
@@ -33,8 +33,10 @@
       "project": ["src/**/*.ts", "scripts/**/*.mjs"]
     },
     "apps/e2e": {
-      "entry": ["tests/**/*.spec.ts"],
-      "project": ["src/**/*.ts", "tests/**/*.ts"]
+      "entry": ["tests/**/*.spec.ts", "scripts/*.mjs"],
+      "project": ["src/**/*.ts", "tests/**/*.ts", "scripts/*.mjs"],
+      // The demo recorder shells out to ffmpeg when it is installed.
+      "ignoreBinaries": ["ffmpeg"]
     },
     "packages/shared": {
       "project": ["src/**/*.ts"]

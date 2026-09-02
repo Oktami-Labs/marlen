@@ -86,7 +86,8 @@
   "chat": {
     "newConversation": "New conversation",
     "history": "History",
-    "noConversations": "No conversations yet.",
+    "noConversations": "No chats yet.",
+    "noAutomationRuns": "No automation runs yet.",
     "untitled": "(untitled)",
     "thinking": "Thinking...",
     "memoryUsed": "Memory in context",
@@ -98,7 +99,7 @@
     "stop": "Stop the reply",
     "jumpToLatest": "Jump to the latest message",
     "resize": "Resize chat panel",
-    "searchPlaceholder": "Conversations",
+    "searchPlaceholder": "Search conversations…",
     "noSearchResults": "No matches.",
     "collapseHistory": "Collapse history",
     "showHistory": "Show history",
@@ -106,14 +107,13 @@
     "automations": "Automations",
     "groupToday": "Today",
     "groupYesterday": "Yesterday",
-    "groupThisWeek": "This week",
-    "groupEarlier": "Earlier",
     "loadMore": "Load more",
     "runsMore_one": "Show 1 older run",
     "runsMore_other": "Show {{count}} older runs",
     "runsLess": "Show less",
     "rename": "Rename",
     "delete": "Delete",
+    "moreActions": "More conversation actions",
     "deleteConfirmTitle": "Delete this conversation?",
     "deleteConfirmBody": "This permanently deletes the conversation and its messages.",
     "rateLimited": {
@@ -222,38 +222,27 @@
         "open": "Open",
         "download": "Download"
       },
-      "briefing": {
-        "label": "Briefing",
+      "report": {
+        "label": "Report",
         "itemCount_one": "{{count}} item",
         "itemCount_other": "{{count}} items",
         "empty": "Nothing needs you right now.",
         "draftReady": "Draft ready",
-        "draftReply": "Draft reply",
+        "draftReply": "Draft a reply",
         "reviewDraft": "Review draft",
         "askAbout": "Ask about this",
         "markHandled": "Mark as done",
-        "showMore_one": "Show {{count}} more",
-        "showMore_other": "Show {{count}} more",
-        "draftReplyPrompt": "Draft a reply to {{sender}}'s email \"{{subject}}\" in {{account}} (thread {{threadId}}). The briefing summarized it as: {{gist}}",
-        "draftReplyPromptNoAccount": "Draft a reply to {{sender}}'s email \"{{subject}}\" (thread {{threadId}}). The briefing summarized it as: {{gist}}",
+        "draftReplyPrompt": "Draft a reply or follow-up to {{sender}} on the email \"{{subject}}\" in {{account}} (thread {{threadId}}). The report summarized it as: {{gist}}",
         "reviewDraftPrompt": "Show me the draft you wrote for {{sender}}'s email \"{{subject}}\" (thread {{threadId}}, draft {{draftId}}) so I can review it.",
-        "askAboutPrompt": "In this morning's briefing you flagged {{sender}}'s email \"{{subject}}\" (thread {{threadId}}), \"{{gist}}\". What is this about, and does anything need me?",
-        "groups": {
-          "urgent": "Urgent",
-          "reply": "Awaiting your reply",
-          "action": "Needs action",
-          "fyi": "FYI"
-        },
+        "askAboutPrompt": "In your report you flagged {{sender}}'s email \"{{subject}}\" (thread {{threadId}}), \"{{gist}}\". What is this about, and does anything need me?",
+        "askAboutItemPrompt": "In your report you listed \"{{title}}\": {{gist}}. What is this about, and does anything need me?",
         "stats": {
-          "reply_one": "{{count}} needs a reply",
-          "reply_other": "{{count}} need a reply",
-          "draftsReady_one": "{{count}} draft ready",
-          "draftsReady_other": "{{count}} drafts ready",
           "scanned_one": "{{count}} reviewed",
           "scanned_other": "{{count}} reviewed"
         },
-        "rolledUp_one": "Rolled up · {{count}} message",
-        "rolledUp_other": "Rolled up · {{count}} messages"
+        "newMessage": "new message",
+        "updated": "updated",
+        "since": "since {{when}}"
       },
       "sources": {
         "badge": "Sources",
@@ -530,24 +519,18 @@
     "missedRun": "Run now",
     "missedRunning": "Running…",
     "newMark": "New",
-    "newCount_one": "1 new item",
-    "newCount_other": "{{count}} new items",
     "markAllSeen": "Mark all seen",
     "triggerCatchUp": "Caught up",
     "triggerCatchUpDetail": "Catch-up run for the slot due {{when}}, covering everything since the previous run.",
     "triggerTodo": "From a to-do",
     "triggerTodoDetail": "Started when you completed the to-do \"{{title}}\".",
+    "triggerTodoAnswerDetail": "Started with your answer \"{{answer}}\" to the to-do \"{{title}}\".",
     "triggerMail": "New mail",
     "triggerMailDetail": "Started by new mail in {{accounts}}.",
     "attentionTitle": "To do",
     "attentionEmpty": "All clear. New tasks and approvals show up here.",
-    "approvalsGroup": "To approve",
-    "suggestionsWaiting_one": "{{count}} suggested automation to review",
-    "suggestionsWaiting_other": "{{count}} suggested automations to review",
     "approvalsAllAccounts": "All accounts",
     "approvalsFilterAccount": "Filter by account",
-    "approvalsShowMore_one": "Show 1 more",
-    "approvalsShowMore_other": "Show {{count}} more",
     "showLess": "Show less",
     "outboundSentToast": "Message sent.",
     "todosOverdue": "Missed",
@@ -584,26 +567,17 @@
     "createAutomation": "Create an automation",
     "viewAutomations": "View automations",
     "deletedAutomation": "Deleted automation",
-    "briefingUrgent_one": "{{count}} urgent",
-    "briefingUrgent_other": "{{count}} urgent",
     "openInChat": "Open in chat",
-    "greetingMorning": "Good morning.",
-    "greetingDay": "Hello.",
-    "greetingEvening": "Good evening.",
-    "statusClear": "Nothing waits on you",
-    "statusNeeds_one": "One thing waits on you",
-    "statusNeeds_other": "{{count}} things wait on you",
-    "statusMine_one": "one I handle myself",
-    "statusMine_other": "{{count}} I handle myself",
-    "statusBriefing": "{{name}}, {{when}}: {{headline}}",
-    "statusOpenBriefing": "Open briefing",
+    "briefingTitle": "Briefing",
+    "briefingRefresh": "Refresh",
     "workTitle": "Marlene is working",
     "workNow": "now",
     "workStarting": "Starting…",
     "workStepRunning": "running",
     "workUpNext": "Up next",
     "workScheduled": "Scheduled",
-    "workFailed": "Failed."
+    "workFailed": "Failed.",
+    "todosAnswered": "Answer: {{answer}}"
   },
   "drafts": {
     "noSubject": "(no subject)",
@@ -709,13 +683,6 @@
       "running": "running",
       "success": "success",
       "error": "error"
-    },
-    "suggestions": {
-      "title": "Suggested automations",
-      "hint": "Patterns from your recent chats, accept one to schedule it, or dismiss it and it won't come back.",
-      "accept": "Add automation",
-      "dismiss": "Dismiss",
-      "showInstruction": "Show instruction"
     }
   },
   "leads": {
@@ -788,7 +755,6 @@
       "deal": "Deals",
       "style": "Writing style",
       "skill": "Skills",
-      "triage": "Triage learning",
       "account": "Account knowledge",
       "general": "General"
     },
@@ -881,6 +847,13 @@
     "offlineBody": "Checking connection to Marlene's server every few seconds, this will pick up automatically once it's back."
   },
   "settings": {
+    "nav": {
+      "label": "Settings sections",
+      "general": "General",
+      "connections": "Connections",
+      "permissions": "Permissions",
+      "data": "Data & app"
+    },
     "sections": {
       "ai": {
         "title": "AI & model",
@@ -909,9 +882,9 @@
       },
       "quickActions": {
         "title": "Quick actions",
-        "description": "What buttons like \"Draft reply\" do: send the request right away, or put it in the chat box so you can edit it first.",
-        "send": "Send immediately",
-        "prefill": "Edit before sending"
+        "description": "Choose whether shortcut buttons run the request or open it in chat for review.",
+        "send": "Run now",
+        "prefill": "Review in chat"
       }
     },
     "appearance": {
@@ -942,7 +915,7 @@
       "license": "License",
       "licenseValue": "Proprietary, all rights reserved",
       "github": "GitHub",
-      "viewOnGithub": "View on GitHub",
+      "technicalDetails": "Technical details",
       "reportIssue": "Report an issue",
       "check": "Check for updates",
       "upToDate": "You're on the latest version",
@@ -953,9 +926,9 @@
       "manual": "Version {{version}} is available, download it to install"
     },
     "provider": "Provider",
-    "model": "Model",
+    "model": "Default model",
     "signInFirst": "Sign in to a provider above, then choose its model here.",
-    "usingModel": "Using <model>{{model}}</model>",
+    "usingModel": "Default model: <model>{{model}}</model>",
     "loadingProviders": "Loading providers…",
     "addApiKey": "Add API key",
     "addApiKeyTitle": "Add an API key",
@@ -976,8 +949,11 @@
     "enterCodeAt": "Enter this code at <uri>{{uri}}</uri>",
     "loginInputPlaceholder": "Paste the code / redirect URL if it doesn't finish…",
     "fileAccess": {
-      "title": "File access",
-      "chipOff": "No access",
+      "title": "Computer access",
+      "homeOnly": "Marlene folder only",
+      "fullAccess": "Full access",
+      "includedWithCommands": "Included with full computer access.",
+      "commandsOverride": "Shell commands can read and change files regardless of the separate file controls.",
       "read": {
         "title": "Read files",
         "badge": "Read",
@@ -997,13 +973,13 @@
         "confirmCta": "Allow writing files"
       },
       "bash": {
-        "title": "Run commands",
-        "badge": "Commands",
-        "on": "May run shell commands as you (bash) when you ask it to.",
-        "off": "Cannot run any commands.",
-        "confirmTitle": "Allow the AI to run commands?",
+        "title": "Full computer access",
+        "badge": "Full access",
+        "on": "May run shell commands as you, including commands that read or change any file.",
+        "off": "Cannot run shell commands.",
+        "confirmTitle": "Allow full computer access?",
         "confirmBody": "Once on, the assistant can run real shell commands as you, with everything your user account can do. Instructions hidden in an email you receive could try to trigger harmful ones. Only arm this if you understand that risk. You can turn it off anytime.",
-        "confirmCta": "Allow running commands"
+        "confirmCta": "Allow full access"
       }
     }
   },

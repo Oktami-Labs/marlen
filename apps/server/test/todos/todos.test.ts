@@ -6,6 +6,7 @@ import Database from "better-sqlite3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 let store: typeof import("../../src/db/todos.js");
+let outbound: typeof import("../../src/db/outboundStore.js");
 let manage: typeof import("../../src/services/automations/manage.js");
 let app: Awaited<ReturnType<typeof import("../../src/app.js").buildApp>>;
 
@@ -14,8 +15,15 @@ beforeAll(async () => {
   process.env.AGENT_HOME_PATH = join(scratch, "Marlen");
   process.env.DATABASE_PATH = join(scratch, "test.db");
   store = await import("../../src/db/todos.js");
+  outbound = await import("../../src/db/outboundStore.js");
   manage = await import("../../src/services/automations/manage.js");
   app = await (await import("../../src/app.js")).buildApp();
+  const { registerOutboundChannel } = await import("../../src/services/outbound/registry.js");
+  registerOutboundChannel("test-channel", {
+    label: "Test",
+    isArmed: async () => false,
+    send: async () => ({ sentRef: "sent-1" }),
+  });
   // buildApp wires no turn runner (that happens at boot); a fake lets a linked
   // automation's run complete without a real LLM.
   const { registerTurnRunner } = await import("../../src/services/automations/turnRunner.js");
@@ -28,6 +36,11 @@ afterAll(async () => {
 
 const listOpen = async (): Promise<Todo[]> =>
   (await app.inject({ method: "GET", url: "/api/todos?status=open" })).json<Todo[]>();
+const listDone = async (): Promise<Todo[]> =>
+  (await app.inject({ method: "GET", url: "/api/todos?status=done" })).json<Todo[]>();
+
+const manualAutomation = (name: string) =>
+  manage.createAutomation({ name, instruction: "noop", schedule: "" });
 
 const patch = async (id: string, body: Record<string, unknown>) =>
   app.inject({ method: "PATCH", url: `/api/todos/${encodeURIComponent(id)}`, payload: body });
@@ -115,9 +128,6 @@ describe("todos", () => {
 });
 
 describe("linked automation", () => {
-  const manualAutomation = (name: string) =>
-    manage.createAutomation({ name, instruction: "noop", schedule: "" });
-
   it("runs the linked automation when the todo completes", async () => {
     const automation = await manualAutomation("After-call follow-up");
     const { todo } = await store.createTodo({
@@ -132,6 +142,29 @@ describe("linked automation", () => {
       return list.length > 0 ? list : undefined;
     });
     expect(runs).toHaveLength(1);
+  });
+
+  it("answers a decision with one option and hands the answer to the linked run", async () => {
+    const automation = await manualAutomation("Continue with the answer");
+    const { todo } = await store.createTodo({
+      title: "Send the discounted offer?",
+      options: [{ label: "Ja, 10 %" }, { label: "Nein", detail: "Full price" }],
+      linkedAutomationId: automation.id,
+    });
+    expect((await listOpen()).find((t) => t.id === todo.id)?.options).toEqual([
+      { label: "Ja, 10 %" },
+      { label: "Nein", detail: "Full price" },
+    ]);
+
+    const done = (await patch(todo.id, { status: "done", answer: "Ja, 10 %" })).json<Todo>();
+    expect(done).toMatchObject({ status: "done", answer: "Ja, 10 %" });
+    const [run] = await waitFor(async () => {
+      const list = (
+        await app.inject({ method: "GET", url: `/api/automations/${automation.id}/runs` })
+      ).json<{ trigger: { kind: string; answer?: string } | null }[]>();
+      return list.length > 0 ? list : undefined;
+    });
+    expect(run?.trigger).toMatchObject({ kind: "todo", answer: "Ja, 10 %" });
   });
 
   it("links and unlinks via PATCH; an unknown automation id 400s", async () => {
@@ -164,6 +197,148 @@ describe("linked automation", () => {
     });
 
     expect(await runsOf(skipped.id)).toHaveLength(0);
+  });
+});
+
+describe("approvals", () => {
+  const draftFor = (targetLabel: string) =>
+    outbound.createOutboundDraft({
+      channel: "test-channel",
+      target: "491700000001@s.whatsapp.net",
+      targetLabel,
+      body: "Hallo, passt Freitag?",
+    });
+  const approvalOf = async (outboundId: string) =>
+    (await listOpen()).find((t) => t.ref?.kind === "outbound" && t.ref.outboundId === outboundId);
+
+  it("files an outbound draft on the agenda and closes it as done when sent", async () => {
+    const draft = await draftFor("Anna Beispiel");
+    const item = await approvalOf(draft.id);
+    expect(item).toMatchObject({ kind: "approval", title: "Anna Beispiel", status: "open" });
+    expect(item?.ref).toMatchObject({ channel: "test-channel", body: "Hallo, passt Freitag?" });
+    if (!item) return;
+
+    // The agent may schedule and annotate it, never retitle or close it.
+    expect((await patch(item.id, { dueAt: "2026-09-04" })).json<Todo>().dueAt).toBe("2026-09-04");
+    expect((await patch(item.id, { title: "Renamed" })).statusCode).toBe(400);
+    expect((await patch(item.id, { status: "done" })).statusCode).toBe(400);
+
+    await app.inject({ method: "POST", url: `/api/outbound/${draft.id}/send` });
+    expect((await listOpen()).some((t) => t.id === item.id)).toBe(false);
+    expect((await listDone()).some((t) => t.id === item.id)).toBe(true);
+  });
+
+  it("discarding the draft dismisses its approval", async () => {
+    const draft = await draftFor("Max Muster");
+    const item = await approvalOf(draft.id);
+    await app.inject({ method: "DELETE", url: `/api/outbound/${draft.id}` });
+    expect((await listOpen()).some((t) => t.id === item?.id)).toBe(false);
+    expect((await listDone()).some((t) => t.id === item?.id)).toBe(false);
+  });
+
+  it("answers in place: the answer fires the linked automation and the row stays open", async () => {
+    const { applyTodoUpdate } = await import("../../src/services/todos.js");
+    const automation = await manualAutomation("Rework the draft");
+    const draft = await draftFor("Lisa Hofer");
+    const item = await approvalOf(draft.id);
+    if (!item) throw new Error("approval not filed");
+    await applyTodoUpdate(item.id, {
+      body: "Kürzer oder so lassen?",
+      options: [{ label: "Kürzer" }, { label: "So lassen" }],
+      linkedAutomationId: automation.id,
+    });
+
+    const answered = (await patch(item.id, { answer: "Kürzer" })).json<Todo>();
+    expect(answered).toMatchObject({ status: "open", answer: "Kürzer" });
+    const [run] = await waitFor(async () => {
+      const list = (
+        await app.inject({ method: "GET", url: `/api/automations/${automation.id}/runs` })
+      ).json<{ trigger: { kind: string; answer?: string } | null }[]>();
+      return list.length > 0 ? list : undefined;
+    });
+    expect(run?.trigger).toMatchObject({
+      kind: "todo",
+      answer: "Kürzer",
+      ref: { kind: "outbound", outboundId: draft.id },
+    });
+    expect((await listOpen()).some((t) => t.id === item.id)).toBe(true);
+  });
+
+  it("mirrors the mailbox: a listed email draft is open, a vanished one closes", async () => {
+    const { syncEmailApprovals } = await import("../../src/services/approvals.js");
+    const inbox = { accountId: "acc-1", account: "mail@example.com" };
+    const draft = (id: string, subject: string) => ({
+      id,
+      messageId: `m-${id}`,
+      threadId: `t-${id}`,
+      subject,
+      to: "kunde@example.com",
+      date: "2026-09-01T09:00:00.000Z",
+      webUrl: `https://mail.example/${id}`,
+    });
+
+    await syncEmailApprovals([
+      { ...inbox, drafts: [draft("d1", "Angebot"), draft("d2", "Termin")] },
+    ]);
+    const filed = (await listOpen()).find(
+      (t) => t.ref?.kind === "email_draft" && t.ref.draftId === "d1",
+    );
+    expect(filed).toMatchObject({
+      kind: "approval",
+      title: "Angebot",
+      createdAt: "2026-09-01T09:00:00.000Z",
+    });
+    expect(filed?.ref).toMatchObject({ accountId: "acc-1", to: "kunde@example.com" });
+
+    await syncEmailApprovals([{ ...inbox, drafts: [draft("d1", "Angebot v2")] }]);
+    const after = await listOpen();
+    expect(after.find((t) => t.id === filed?.id)?.title).toBe("Angebot v2");
+    expect(after.some((t) => t.ref?.kind === "email_draft" && t.ref.draftId === "d2")).toBe(false);
+
+    // An inbox whose fetch failed is no evidence that its drafts are gone.
+    await syncEmailApprovals([{ ...inbox, drafts: [], error: "offline" }]);
+    expect((await listOpen()).some((t) => t.id === filed?.id)).toBe(true);
+  });
+});
+
+describe("approval migration", () => {
+  it("files every open outbound draft on the agenda when the columns arrive", async () => {
+    const { SCHEMA_STEPS } = await import("../../src/db/schemaSteps.js");
+    const stepIndex = SCHEMA_STEPS.findIndex((s) =>
+      s.includes("ALTER TABLE todos ADD COLUMN kind"),
+    );
+    const raw = new Database(":memory:");
+    for (const step of SCHEMA_STEPS.slice(0, stepIndex)) raw.exec(step);
+    const insert = raw.prepare(
+      "INSERT INTO outbound_drafts (id, channel, target, target_label, body, status, conversation_id, created_at, updated_at) VALUES (?, 'whatsapp', 'jid', ?, ?, ?, ?, '2026-08-30T08:00:00.000Z', '2026-08-30T08:00:00.000Z')",
+    );
+    insert.run("ob-open", "Anna Beispiel", "Hallo Anna", "open", "conv-1");
+    insert.run("ob-sent", "Max Muster", "Hallo Max", "sent", null);
+
+    raw.exec(SCHEMA_STEPS[stepIndex] as string);
+
+    const rows = raw
+      .prepare(
+        "SELECT kind, ref, title, status, conversation_id, dedupe_key, created_at FROM todos",
+      )
+      .all() as Record<string, string>[];
+    expect(rows).toHaveLength(1);
+    expect(rows[0]).toMatchObject({
+      kind: "approval",
+      title: "Anna Beispiel",
+      status: "open",
+      conversation_id: "conv-1",
+      dedupe_key: "approval:outbound:ob-open",
+      created_at: "2026-08-30T08:00:00.000Z",
+    });
+    expect(JSON.parse(rows[0]?.ref ?? "{}")).toEqual({
+      kind: "outbound",
+      outboundId: "ob-open",
+      channel: "whatsapp",
+      targetLabel: "Anna Beispiel",
+      body: "Hallo Anna",
+    });
+    raw.close();
   });
 });
 

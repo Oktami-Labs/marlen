@@ -23,7 +23,8 @@ export function ListRow({ className, ...props }: React.HTMLAttributes<HTMLDivEle
  * The quiet terminal line a row becomes once it has been sent. It carries the
  * live row's transition name, so sending morphs the row in place rather than
  * reading as a leave plus an arrival, the one outward, irreversible action
- * must not look like a discard.
+ * must not look like a discard. Bare like the approval rows it replaces, which
+ * sit inside Home's one raised panel.
  */
 export function SentRow({
   id,
@@ -37,12 +38,15 @@ export function SentRow({
   label: string;
 }) {
   return (
-    <ListRow style={rowTransition(id)}>
+    <div
+      className="flex items-center justify-between gap-3 rounded-md px-2.5 py-2.5"
+      style={rowTransition(id)}
+    >
       <div className="min-w-0">
         <p className="truncate text-sm font-medium">{title}</p>
         {subtitle && <p className="truncate text-xs text-muted-foreground">{subtitle}</p>}
       </div>
       <Badge variant="success">{label}</Badge>
-    </ListRow>
+    </div>
   );
 }

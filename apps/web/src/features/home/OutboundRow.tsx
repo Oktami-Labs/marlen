@@ -1,4 +1,4 @@
-import { OUTBOUND_CHANNEL_LABELS, type OutboundDraft } from "@marlen/shared";
+import { OUTBOUND_CHANNEL_LABELS, type Todo, type TodoRef } from "@marlen/shared";
 import { MessageSquare, Send, Trash2 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
@@ -15,6 +15,7 @@ import { IconChip } from "@/components/ui/icon-chip";
 import { SentRow } from "@/components/ui/list-row";
 import { Textarea } from "@/components/ui/textarea";
 import { NewDot } from "@/features/home/seen";
+import { ApprovalNote } from "@/features/home/TodoRow";
 import { api, isNotFound } from "@/lib/api";
 import { toast } from "@/lib/toast";
 import { errorMessage, rowTransition, withViewTransition } from "@/lib/utils";
@@ -26,27 +27,33 @@ import { errorMessage, rowTransition, withViewTransition } from "@/lib/utils";
  * dispatches through POST /api/outbound/:id/send, the click is the
  * authorization.
  */
+/** The agenda item wrapping an outbound message. */
+export type OutboundApproval = Todo & { ref: Extract<TodoRef, { kind: "outbound" }> };
+
 export function OutboundRow({
-  draft,
+  todo,
   dateLabel,
   onChanged,
   onError,
   isNew,
+  onAnswer,
 }: {
-  draft: OutboundDraft;
+  todo: OutboundApproval;
   dateLabel: (iso: string) => string;
   /** Called after a send/discard succeeds, so the list refetches without waiting on the event debounce. */
   onChanged: () => void;
   onError: (message: string | null) => void;
   /** Drafted since the user last looked, fronts the title with the new dot. */
   isNew?: boolean;
+  onAnswer: (label: string) => void;
 }) {
   const { t } = useTranslation();
+  const { ref } = todo;
   const [open, setOpen] = React.useState(false);
   // Editable body: `bodyDraft` is the live field value, `savedBody` the
   // last-persisted baseline it's compared against for the dirty flag.
-  const [bodyDraft, setBodyDraft] = React.useState(draft.body);
-  const [savedBody, setSavedBody] = React.useState(draft.body);
+  const [bodyDraft, setBodyDraft] = React.useState(ref.body);
+  const [savedBody, setSavedBody] = React.useState(ref.body);
   const [saving, setSaving] = React.useState(false);
   // True right after a send, a quiet terminal line until the "outbound"
   // server event removes the row from the open list.
@@ -61,7 +68,7 @@ export function OutboundRow({
     setSaving(true);
     onError(null);
     try {
-      await api.updateOutbound(draft.id, { body: bodyDraft });
+      await api.updateOutbound(ref.outboundId, { body: bodyDraft });
       setSavedBody(bodyDraft);
       toast.success(t("common.saved"));
       onChanged();
@@ -79,10 +86,10 @@ export function OutboundRow({
       onError(null);
       try {
         if (dirty) {
-          await api.updateOutbound(draft.id, { body: bodyDraft });
+          await api.updateOutbound(ref.outboundId, { body: bodyDraft });
           setSavedBody(bodyDraft);
         }
-        await api.sendOutbound(draft.id);
+        await api.sendOutbound(ref.outboundId);
         withViewTransition(() => setSent(true));
         toast.success(t("home.outboundSentToast"));
         onChanged();
@@ -99,7 +106,7 @@ export function OutboundRow({
     discard: async () => {
       onError(null);
       try {
-        await api.discardOutbound(draft.id);
+        await api.discardOutbound(ref.outboundId);
         withViewTransition(() => setDiscarded(true));
         onChanged();
         return true;
@@ -114,15 +121,15 @@ export function OutboundRow({
     },
   });
 
-  const channelLabel = OUTBOUND_CHANNEL_LABELS[draft.channel] ?? draft.channel;
-  const title = draft.targetLabel || channelLabel;
+  const channelLabel = OUTBOUND_CHANNEL_LABELS[ref.channel] ?? ref.channel;
+  const title = ref.targetLabel || channelLabel;
 
   if (discarded) return null;
 
   if (sent) {
     return (
       <SentRow
-        id={draft.id}
+        id={todo.id}
         title={title}
         subtitle={channelLabel}
         label={t("chat.cards.messageDraft.sentLabel")}
@@ -131,7 +138,7 @@ export function OutboundRow({
   }
 
   return (
-    <div className="surface surface-hover group rounded-lg" style={rowTransition(draft.id)}>
+    <div className="surface-hover group rounded-md" style={rowTransition(todo.id)}>
       <div className="flex w-full flex-wrap items-center gap-2 px-2.5 py-2.5">
         <button
           type="button"
@@ -151,13 +158,13 @@ export function OutboundRow({
             <div className="flex items-baseline gap-2">
               <p className="truncate text-xs text-muted-foreground">
                 {channelLabel}
-                {!open && <span className="text-muted-foreground/70"> · {draft.body}</span>}
+                {!open && <span className="text-muted-foreground/70"> · {savedBody}</span>}
               </p>
               <time
-                dateTime={draft.createdAt}
-                className="ml-auto shrink-0 font-mono text-2xs tabular-nums text-muted-foreground"
+                dateTime={todo.createdAt}
+                className="ml-auto shrink-0 text-2xs tabular-nums text-muted-foreground"
               >
-                {dateLabel(draft.createdAt)}
+                {dateLabel(todo.createdAt)}
               </time>
             </div>
           </div>
@@ -165,7 +172,7 @@ export function OutboundRow({
         <div className="ml-auto flex shrink-0 items-center gap-1">
           {/* Keep the secondary refine action hidden until hover. */}
           <HoverActions className="gap-1">
-            <RefineInChatButton conversationId={draft.conversationId} subject={title} />
+            <RefineInChatButton conversationId={todo.conversationId} subject={title} />
           </HoverActions>
           <Button
             variant="ghost"
@@ -194,6 +201,8 @@ export function OutboundRow({
           <ExpandButton open={open} onToggle={() => setOpen((v) => !v)} />
         </div>
       </div>
+
+      <ApprovalNote todo={todo} disabled={actions.busy} onAnswer={onAnswer} />
 
       {open && (
         <div className="px-2.5 pb-3">

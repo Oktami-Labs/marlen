@@ -13,8 +13,8 @@ export const streamViaModelRegistry: StreamFn = (model, context, options) =>
 
 /**
  * Runs one prompt through a fresh, throwaway Agent and returns its final text:
- * the shape every one-shot sub-agent call shares (humanizer, compaction
- * summarizer, delegate workers). Runs on the active model, resolved per call
+ * the shape every one-shot sub-agent call shares (compaction summarizer,
+ * delegate workers). Runs on the active model, resolved per call
  * since Settings can change between calls, unless the caller pins one via
  * `model`.
  */

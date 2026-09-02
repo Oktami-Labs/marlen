@@ -23,7 +23,7 @@ import {
 /**
  * Provider-neutral mail reading over the local MailReadProviders: one search
  * across every connected account, one thread in full. Every hit is remembered
- * (seenMail.ts) so compose_briefing can fill an item from its thread id.
+ * (seenMail.ts) so publish_report can fill an item from its thread id.
  */
 
 const SEARCH_DEFAULT_LIMIT = 20;
@@ -186,7 +186,7 @@ function buildMailSearchTool(sessionId: string): AgentTool {
 
       const notes: string[] = [];
       const rows: (MailMessageSummary & { accountId: string; accountName: string })[] = [];
-      let capped = false;
+      const cappedAccounts = new Set<string>();
       await Promise.all(
         targets.map(async (target) => {
           const provider = getMailReadProvider(target.app);
@@ -204,7 +204,7 @@ function buildMailSearchTool(sessionId: string): AgentTool {
                 accountName: target.name,
               })),
             );
-            if (found.length >= search.limit) capped = true;
+            if (found.length >= search.limit) cappedAccounts.add(target.name);
           } catch (error) {
             notes.push(`${target.name}: search failed (${errorMessage(error)}).`);
           }
@@ -214,10 +214,12 @@ function buildMailSearchTool(sessionId: string): AgentTool {
       if (rows.length === 0) return textResult(["No messages match.", ...notes].join("\n"));
 
       const format = stampFormat(timeZone);
+      const capped = [...cappedAccounts].sort();
       const header =
         `${rows.length} message${rows.length === 1 ? "" : "s"}, newest first` +
-        (capped
-          ? ` (limit ${search.limit} per account reached; narrow the search for the rest)`
+        (capped.length > 0
+          ? ` (limit ${search.limit} reached in ${capped.join(", ")}; search each account again ` +
+            `with until immediately before its oldest returned time)`
           : "") +
         ".";
       const list = numberedList(
@@ -274,7 +276,7 @@ function buildMailThreadTool(sessionId: string): AgentTool {
     description:
       "Read one conversation in full, oldest message first: every message's time, sender, " +
       "recipients and body, quoted history trimmed. Takes the threadId from mail_search or a " +
-      "briefing item; the account is inferred from that search, so pass it only when asked to. " +
+      "report item; the account is inferred from that search, so pass it only when asked to. " +
       "A long thread keeps its newest messages; raise maxMessages for more.",
     params: {
       threadId: Type.String({ description: "The thread id from mail_search." }),

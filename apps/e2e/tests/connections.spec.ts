@@ -3,7 +3,7 @@ import { expect, openApp, test } from "../src/fixtures.js";
 import { t } from "../src/i18n.js";
 
 async function openConnections(page: import("@playwright/test").Page) {
-  await openApp(page, "/settings");
+  await openApp(page, "/settings?section=connections");
   await expect(
     page.getByRole("heading", { name: t("settings.sections.accounts.title"), exact: true }),
   ).toBeVisible();

@@ -3,7 +3,7 @@ import { readFileSync } from "node:fs";
 import { eq } from "drizzle-orm";
 import { moduleLogger } from "../../core/logger.js";
 import { db, schema } from "../../db/index.js";
-import { getSetting, setSetting } from "../../db/settings.js";
+import { deleteSetting, getSetting, setSetting } from "../../db/settings.js";
 
 const log = moduleLogger("automations");
 
@@ -43,6 +43,17 @@ const DEFAULT_AUTOMATIONS: DefaultAutomation[] = [
     notifyOnCompletion: false,
     instruction: readInstruction("morgenbriefing"),
   },
+  {
+    name: "Automationsvorschläge",
+    previousNames: [],
+    schedule: "0 18 * * 0",
+    enabled: true,
+    showInActivity: true,
+    pinned: false,
+    runOnNewMail: false,
+    notifyOnCompletion: false,
+    instruction: readInstruction("automationsvorschlaege"),
+  },
 ];
 
 // Per-default seed flag: each seeds at most once ever, so deleting one never
@@ -76,6 +87,8 @@ const SUPERSEDED_INSTRUCTION_HASHES: Record<string, readonly string[]> = {
     "da4ec24ac0fb5f1f944a39a6324ce44648c4513bfb182dfb1a7523013aa54d05",
     "29a781ab5b91979f37e1874fb411114414a3e07b3cd393b2aa9a2c0ac559dd82",
     "05f49448bea59c5c590d032ed72f022ae6dbb3b34f487d1fef0ee3a49c0a0718",
+    "5a0e70d02f4b7edd3b5249e84f9f4398354a70ca2350ed454f7ad635e20e46e0",
+    "977316314f08230a693d052fbc64b3fa54c827e57c2d798cff7f310484b14012",
   ],
 };
 
@@ -158,5 +171,14 @@ export async function seedDefaultAutomations(): Promise<void> {
       log.info({ automation: preset.name }, "seeded default automation");
     }
     await setSetting(key, "true");
+  }
+}
+
+/** Drop every seed flag, so the next seedDefaultAutomations brings the defaults back. */
+export async function forgetSeededDefaults(): Promise<void> {
+  for (const preset of DEFAULT_AUTOMATIONS) {
+    for (const name of [preset.name, ...preset.previousNames]) {
+      await deleteSetting(`${DEFAULT_SEEDED_KEY_PREFIX}${name}`);
+    }
   }
 }

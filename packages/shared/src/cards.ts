@@ -59,29 +59,50 @@ export interface DraftPreview {
   attachments?: { filename: string; size?: number }[];
 }
 
-export const BRIEFING_PRIORITIES = ["urgent", "reply", "action", "fyi"] as const;
-export type BriefingPriority = (typeof BRIEFING_PRIORITIES)[number];
+/** How an item relates to the previous report of the same automation. */
+export type ReportChange = "new" | "updated" | "carried";
 
-export interface BriefingItem {
-  threadId: string;
-  messageId?: string;
-  accountId?: string;
-  sender: string;
-  senderEmail?: string;
-  subject: string;
+/**
+ * What a report item points at. Email facts are resolved from the session's
+ * own mail reads, never typed by the model.
+ */
+export type ReportRef =
+  | {
+      kind: "email";
+      accountId: string;
+      threadId: string;
+      messageId?: string;
+      sender: string;
+      senderEmail?: string;
+      receivedAt?: string;
+      webUrl?: string;
+    }
+  | { kind: "url"; url: string }
+  | { kind: "none" };
+
+export interface ReportItem {
+  /** Identity across the automation's reports: carry-over, dedup and handled marks key on it. */
+  key: string;
+  ref: ReportRef;
+  /** The row's lead text: the email's subject, or the item's own title. */
+  title: string;
   gist: string;
-  priority: BriefingPriority;
   deadline?: string;
-  receivedAt?: string;
   draftId?: string;
-  webUrl?: string;
-  /** Set after the user explicitly clears this item from a run. */
+  /** Waits on the user; carried into later reports until closed or reported resolved. */
+  needsUser?: boolean;
+  /** Closed: by the user in Home, or reported resolved by the model. */
   handled?: boolean;
+  change?: ReportChange;
+  /** When the item first entered the report; set alongside `change`. */
+  since?: string;
 }
 
-export interface BriefingRollup {
+export interface ReportSection {
   label: string;
-  items: BriefingItem[];
+  /** Folded by default: routine items the user unfolds on demand. */
+  collapsed?: boolean;
+  items: ReportItem[];
 }
 
 export interface ChoiceOption {
@@ -207,11 +228,10 @@ export type AgentCard =
       diff?: { added: number; removed: number; rows: WikiDiffRow[] };
     }
   | {
-      kind: "briefing";
+      kind: "report";
       headline?: string;
       periodLabel?: string;
       accounts?: CardAccount[];
-      items: BriefingItem[];
-      rollups?: BriefingRollup[];
+      sections: ReportSection[];
       scanned?: number;
     };

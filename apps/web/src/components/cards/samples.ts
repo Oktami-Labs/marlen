@@ -1,4 +1,4 @@
-import type { AgentCard, CardAccount } from "@marlen/shared";
+import type { AgentCard, CardAccount, ReportItem } from "@marlen/shared";
 
 /**
  * Sample data for the `/showcase` chat command. It includes one turn for each
@@ -103,122 +103,176 @@ const ATTACHMENTS_CARD: AgentCard = {
   ],
 };
 
-/** The structured Morning-briefing card, flat and cross-account, mixing the
- *  work and personal demo inboxes so the priority-first layout has something
- *  to prove. Reuses the Acme thread/draft ids from DRAFT_CARD, so the
- *  "Review draft"/"Ask about this" quick actions land on the same demo data
- *  that card already shows. */
-const BRIEFING_CARD: AgentCard = {
-  kind: "briefing",
+/** The morning report, flat and cross-account, mixing the work and personal
+ *  demo inboxes so the sections-first layout has something to prove. Reuses
+ *  the Acme thread/draft ids from DRAFT_CARD, so the "Review draft"/"Ask
+ *  about this" quick actions land on the same demo data that card shows. */
+function emailItem(
+  threadId: string,
+  accountId: string,
+  sender: string,
+  title: string,
+  gist: string,
+  extra: Partial<ReportItem> & { senderEmail?: string; webUrl?: string } = {},
+): ReportItem {
+  const { senderEmail, webUrl, ...rest } = extra;
+  return {
+    key: `email:${accountId}\n${threadId}`,
+    ref: {
+      kind: "email",
+      accountId,
+      threadId,
+      sender,
+      ...(senderEmail ? { senderEmail } : {}),
+      ...(webUrl ? { webUrl } : {}),
+    },
+    title,
+    gist,
+    ...rest,
+  };
+}
+
+const REPORT_CARD: AgentCard = {
+  kind: "report",
   headline: "Zwei Dinge brauchen dich heute.",
   periodLabel: "seit gestern Morgen",
   accounts: [WORK_ACCOUNT, PERSONAL_ACCOUNT],
   scanned: 43,
-  items: [
+  sections: [
     {
-      threadId: "thread-acme-2291",
-      accountId: "demo-work",
-      sender: "Thomas Brandt",
-      senderEmail: "t.brandt@acme-gmbh.de",
-      subject: "Re: Rechnung #A-2291 – Zahlungserinnerung",
-      gist: "Bittet erneut um die Rechnung als PDF, sonst folgt eine Mahngebühr.",
-      priority: "urgent",
-      deadline: "Freitag 17:00",
-      draftId: "draft-acme-2291-reply",
-    },
-    {
-      threadId: "thread-seeblick-august",
-      accountId: "demo-personal",
-      sender: "Sabine Möller",
-      senderEmail: "sabine.moeller@seeblick-ferien.de",
-      subject: "Ferienwohnung Seeblick – Buchung im August",
-      gist: "Fragt nach der Adresse für die Buchungsbestätigung.",
-      priority: "reply",
-    },
-    {
-      threadId: "thread-rebrand-elif",
-      accountId: "demo-work",
-      sender: "Elif Aydın",
-      subject: "Angebot Rebranding – Rückfragen",
-      gist: "Möchte vor der Freigabe zwei Layout-Varianten sehen.",
-      priority: "reply",
-    },
-    {
-      threadId: "thread-zahnarzt",
-      accountId: "demo-personal",
-      sender: "Zahnarztpraxis Dr. Yıldız",
-      subject: "Terminerinnerung nächste Woche",
-      gist: "Termin muss bis Mittwoch bestätigt oder abgesagt werden.",
-      priority: "action",
-      deadline: "Mittwoch",
-    },
-    {
-      threadId: "thread-team-update",
-      accountId: "demo-work",
-      sender: "Team Nordwind",
-      subject: "Wöchentliches Update",
-      gist: "Kurzer Statusbericht, keine Rückmeldung nötig.",
-      priority: "fyi",
-    },
-    {
-      threadId: "thread-fitzone-hours",
-      accountId: "demo-personal",
-      sender: "FitZone Studio",
-      subject: "Neue Öffnungszeiten ab August",
-      gist: "Reine Information, keine Handlung nötig.",
-      priority: "fyi",
-    },
-  ],
-  rollups: [
-    {
-      label: "Newsletter & Angebote",
+      label: "Dringend",
       items: [
+        emailItem(
+          "thread-acme-2291",
+          "demo-work",
+          "Thomas Brandt",
+          "Re: Rechnung #A-2291 – Zahlungserinnerung",
+          "Bittet erneut um die Rechnung als PDF, sonst folgt eine Mahngebühr.",
+          {
+            senderEmail: "t.brandt@acme-gmbh.de",
+            needsUser: true,
+            deadline: "Freitag 17:00",
+            draftId: "draft-acme-2291-reply",
+            change: "updated",
+          },
+        ),
+      ],
+    },
+    {
+      label: "Antwort ausstehend",
+      items: [
+        emailItem(
+          "thread-seeblick-august",
+          "demo-personal",
+          "Sabine Möller",
+          "Ferienwohnung Seeblick – Buchung im August",
+          "Fragt nach der Adresse für die Buchungsbestätigung.",
+          { senderEmail: "sabine.moeller@seeblick-ferien.de", needsUser: true, change: "new" },
+        ),
+        emailItem(
+          "thread-rebrand-elif",
+          "demo-work",
+          "Elif Aydın",
+          "Angebot Rebranding – Rückfragen",
+          "Möchte vor der Freigabe zwei Layout-Varianten sehen.",
+          { needsUser: true, change: "carried", since: "2026-07-06T08:00:00.000Z" },
+        ),
+      ],
+    },
+    {
+      label: "Zu tun",
+      items: [
+        emailItem(
+          "thread-zahnarzt",
+          "demo-personal",
+          "Zahnarztpraxis Dr. Yıldız",
+          "Terminerinnerung nächste Woche",
+          "Termin muss bis Mittwoch bestätigt oder abgesagt werden.",
+          { needsUser: true, deadline: "Mittwoch", change: "new" },
+        ),
         {
-          threadId: "roll-zalando",
-          accountId: "demo-work",
-          sender: "Zalando",
-          subject: "-20% auf Sneaker – nur bis Sonntag",
-          gist: "Rabattaktion, keine Handlung nötig.",
-          priority: "fyi",
-          webUrl: "https://mail.google.com/mail/#all/roll-zalando",
-        },
-        {
-          threadId: "roll-duolingo",
-          accountId: "demo-personal",
-          sender: "Duolingo",
-          subject: "Vergiss deinen Streak nicht!",
-          gist: "Erinnerung, heute zu üben.",
-          priority: "fyi",
-        },
-        {
-          threadId: "roll-spotify",
-          accountId: "demo-work",
-          sender: "Spotify",
-          subject: "Dein Wochenmix ist da",
-          gist: "Neue Playlist-Empfehlungen.",
-          priority: "fyi",
+          key: "title:Exposé Seestraße 4",
+          ref: { kind: "none" },
+          title: "Exposé Seestraße 4",
+          gist: "Fehlt noch für den Versand an drei Interessenten.",
+          needsUser: true,
+          change: "carried",
+          since: "2026-07-05T08:00:00.000Z",
         },
       ],
     },
     {
-      label: "Quittungen",
+      label: "Zur Kenntnis",
+      collapsed: true,
       items: [
+        emailItem(
+          "thread-team-update",
+          "demo-work",
+          "Team Nordwind",
+          "Wöchentliches Update",
+          "Kurzer Statusbericht, keine Rückmeldung nötig.",
+        ),
+        emailItem(
+          "thread-fitzone-hours",
+          "demo-personal",
+          "FitZone Studio",
+          "Neue Öffnungszeiten ab August",
+          "Reine Information, keine Handlung nötig.",
+        ),
         {
-          threadId: "roll-apple",
-          accountId: "demo-personal",
-          sender: "Apple",
-          subject: "Deine Rechnung von Apple",
-          gist: "iCloud+ 0,99 € abgebucht.",
-          priority: "fyi",
+          key: "url:https://status.nordwind-studio.de",
+          ref: { kind: "url", url: "https://status.nordwind-studio.de" },
+          title: "Statusseite Nordwind",
+          gist: "Wartungsfenster Samstag 02:00 bis 04:00.",
         },
-        {
-          threadId: "roll-amazon",
-          accountId: "demo-personal",
-          sender: "Amazon.de",
-          subject: "Deine Bestellung wurde versandt",
-          gist: "Paket kommt voraussichtlich Dienstag.",
-          priority: "fyi",
-        },
+      ],
+    },
+    {
+      label: "Newsletter & Angebote",
+      collapsed: true,
+      items: [
+        emailItem(
+          "roll-zalando",
+          "demo-work",
+          "Zalando",
+          "-20% auf Sneaker – nur bis Sonntag",
+          "Rabattaktion, keine Handlung nötig.",
+          { webUrl: "https://mail.google.com/mail/#all/roll-zalando" },
+        ),
+        emailItem(
+          "roll-duolingo",
+          "demo-personal",
+          "Duolingo",
+          "Vergiss deinen Streak nicht!",
+          "Erinnerung, heute zu üben.",
+        ),
+        emailItem(
+          "roll-spotify",
+          "demo-work",
+          "Spotify",
+          "Dein Wochenmix ist da",
+          "Neue Playlist-Empfehlungen.",
+        ),
+      ],
+    },
+    {
+      label: "Quittungen",
+      collapsed: true,
+      items: [
+        emailItem(
+          "roll-apple",
+          "demo-personal",
+          "Apple",
+          "Deine Rechnung von Apple",
+          "iCloud+ 0,99 € abgebucht.",
+        ),
+        emailItem(
+          "roll-amazon",
+          "demo-personal",
+          "Amazon.de",
+          "Deine Bestellung wurde versandt",
+          "Paket kommt voraussichtlich Dienstag.",
+        ),
       ],
     },
   ],
@@ -263,7 +317,7 @@ const CHOICES_CARD: AgentCard = {
   ],
 };
 
-/** A lead connected to the Elif Aydın briefing sample. */
+/** A lead connected to the Elif Aydın report sample. */
 const LEAD_CARD: AgentCard = {
   kind: "lead",
   lead: {
@@ -465,7 +519,7 @@ export const SHOWCASE_TURNS: ShowcaseTurn[] = [
   { cards: [MESSAGE_DRAFT_CARD] },
   { cards: [DELEGATION_CARD] },
   { cards: [ATTACHMENTS_CARD] },
-  { cards: [BRIEFING_CARD] },
+  { cards: [REPORT_CARD] },
   { cards: [CHOICES_CARD] },
   { cards: [LEAD_CARD] },
   { cards: [CHART_BAR_CARD, CHART_LINE_CARD] },

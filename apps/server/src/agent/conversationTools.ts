@@ -43,8 +43,9 @@ export function buildConversationSearchTool(conversationId: string): AgentTool {
     label: "Search past chats",
     description:
       "Search the user's earlier Marlen conversations when they refer to a prior discussion, " +
-      "decision or answer that is not present in this chat. Returns matched excerpts with the " +
-      "conversation id, title, speaker and date. Do not use it speculatively on every turn.",
+      "decision or answer that is not present in this chat, or when a run needs to know what " +
+      "the user has been asking for. Returns matched excerpts with the conversation id, title, " +
+      "speaker and date. Do not use it speculatively on every turn.",
     params: {
       query: Type.String({
         minLength: 1,

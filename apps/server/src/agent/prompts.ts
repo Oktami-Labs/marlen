@@ -12,11 +12,7 @@ function read(name: string): string {
   return readFileSync(new URL(`./prompts/${name}.md`, import.meta.url), "utf8").trim();
 }
 
-/**
- * The writing patterns that mark text as machine-written, spliced into both the
- * system prompt and the humanizer prompt via their {{ai-writing-tells}}
- * placeholder. Extend that file, never one prompt only.
- */
+/** The writing patterns that mark text as machine-written, spliced in at {{ai-writing-tells}}. */
 const aiWritingTells = read("ai-writing-tells");
 
 function withTells(text: string): string {
@@ -26,12 +22,10 @@ function withTells(text: string): string {
 export const prompts = {
   /** The base system prompt; buildSystemPrompt appends the conditional sections. */
   system: withTells(read("system")).replaceAll("{{app-version}}", appVersion),
-  humanizer: withTells(read("humanizer")),
   /** User-facing app documentation, served by app_help, not spliced into any prompt. */
   appGuide: read("app-guide"),
   delegateWorker: read("delegate-worker"),
   compaction: read("compaction"),
-  automationSuggest: read("automation-suggest"),
   voiceExtract: read("voice-extract"),
   voiceMatch: read("voice-match"),
 } as const;

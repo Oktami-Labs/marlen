@@ -4,7 +4,7 @@ import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
 import { UpdatePill, useUpdateState } from "@/components/UpdatePill";
 import { Button } from "@/components/ui/button";
-import { visibleNavItems } from "@/lib/nav";
+import { NAV_ITEMS } from "@/lib/nav";
 import { cn, withViewTransition } from "@/lib/utils";
 
 interface SidebarProps {
@@ -140,7 +140,7 @@ export function Sidebar({ status, onClose, isCollapsed, onCollapsedChange }: Sid
           isCollapsed ? "px-3 md:px-2 md:items-center" : "px-3",
         )}
       >
-        {visibleNavItems(Boolean(status?.onofficeConfigured)).map(({ id, path, icon }) => {
+        {NAV_ITEMS.map(({ id, path, icon }) => {
           const isActive =
             location.pathname === path || (path !== "/" && location.pathname.startsWith(path));
           return (

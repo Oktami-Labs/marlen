@@ -203,7 +203,7 @@ interface ScanSummary {
 let scanning: Promise<ScanSummary> | null = null;
 let rescanWanted = false;
 
-function scanLibrary(): Promise<ScanSummary> {
+export function scanLibrary(): Promise<ScanSummary> {
   if (scanning) {
     rescanWanted = true;
     return scanning;

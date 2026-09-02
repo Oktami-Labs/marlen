@@ -21,9 +21,7 @@ export interface Seen {
 
 /** Mark keys, one namespace per kind of Home item. */
 export const todoSeenKey = (id: string) => `todo:${id}`;
-export const outboundSeenKey = (id: string) => `outbound:${id}`;
 export const runSeenKey = (id: string) => `run:${id}`;
-export const draftSeenKey = (accountId: string, draftId: string) => `draft:${accountId}:${draftId}`;
 
 export function useSeen(): Seen {
   const queryClient = useQueryClient();
@@ -95,7 +93,7 @@ export function NewDot({ className }: { className?: string }) {
       data-tooltip={t("home.newMark")}
       className={cn("flex shrink-0 items-center", className)}
     >
-      <AccountDot tone="accent" className="dot-breathe h-2 w-2" />
+      <AccountDot tone="accent" className="h-2 w-2" />
     </span>
   );
 }

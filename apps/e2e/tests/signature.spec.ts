@@ -22,7 +22,7 @@ const PNG_BYTES = Buffer.from(
 
 async function openSignatureEditor(page: Page): Promise<Locator> {
   await page.route("**/api/pipedream/accounts", (route) => route.fulfill({ json: [ACCOUNT] }));
-  await openApp(page, "/settings");
+  await openApp(page, "/settings?section=connections");
   await page.getByRole("button", { name: t("connections.permissions.editEmail") }).click();
   const editor = page.getByRole("textbox", { name: t("connections.signature.title") });
   await expect(editor).toBeVisible();

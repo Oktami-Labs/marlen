@@ -1,4 +1,4 @@
-import { ChevronDown, ChevronUp, type LucideIcon } from "lucide-react";
+import { ChevronDown, ChevronUp } from "lucide-react";
 import type * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Badge } from "@/components/ui/badge";
@@ -32,14 +32,11 @@ export function SectionHeader({
 }
 
 /**
- * Page-section title row: icon tile, title, live count, optional collapse
- * toggle, a trailing slot for the section's own controls, and an optional
- * description line below. Every top-level list section (Home, Knowledge)
- * uses this one shape.
+ * Page-section title row: title, live count, optional collapse toggle, a
+ * trailing slot for the section's own controls and meta, and an optional
+ * description line below. Every top-level list section uses this one shape.
  */
 export function SectionTitle({
-  icon: Icon,
-  tone = "tint-accent",
   title,
   count,
   description,
@@ -47,9 +44,6 @@ export function SectionTitle({
   onToggle,
   children,
 }: {
-  icon: LucideIcon;
-  /** Always a `tint-*` token, never a hand-mixed fill. */
-  tone?: "tint-accent" | "tint-neutral" | "tint-success" | "tint-warning";
   title: string;
   /** `null` while the first fetch is in flight, so the badge doesn't flash a zero. */
   count?: number | null;
@@ -82,9 +76,6 @@ export function SectionTitle({
               aria-expanded={expanded}
               className="flex select-none items-center gap-2.5 transition-colors hover:text-muted-foreground"
             >
-              <IconChip tone={tone}>
-                <Icon />
-              </IconChip>
               {title}
               {badge}
               {expanded ? (
@@ -96,9 +87,6 @@ export function SectionTitle({
           </h2>
         ) : (
           <>
-            <IconChip tone={tone}>
-              <Icon />
-            </IconChip>
             <h2 className="text-base font-semibold tracking-tight">{title}</h2>
             {badge}
           </>

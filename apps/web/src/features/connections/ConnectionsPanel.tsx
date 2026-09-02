@@ -62,7 +62,7 @@ export function ConnectionsPanel({ onStatusChanged }: { onStatusChanged?: () => 
     );
   }
 
-  const custom = status.mode === "custom";
+  const custom = status.mode === "custom" || !status.builtinAvailable;
 
   // The custom-project toggle + its wizard/footer row: the only thing that
   // matters during first-time setup, tucked under "Advanced" once an account
@@ -151,7 +151,7 @@ export function ConnectionsPanel({ onStatusChanged }: { onStatusChanged?: () => 
             </DisclosureToggle>
             {advancedOpen && (
               <div className="mt-3 flex flex-col gap-4">
-                {modeToggle}
+                {status.builtinAvailable && modeToggle}
                 {projectPanel}
               </div>
             )}
@@ -159,7 +159,7 @@ export function ConnectionsPanel({ onStatusChanged }: { onStatusChanged?: () => 
         </>
       ) : (
         <>
-          {modeToggle}
+          {status.builtinAvailable && modeToggle}
           {projectPanel}
           {accountsList}
         </>
@@ -234,7 +234,7 @@ export function PipedreamWizard({
   };
 
   return (
-    <Card padding="md" className="animate-in-up flex flex-col gap-4">
+    <Card padding="md" className="@container animate-in-up flex flex-col gap-4">
       <div className="flex items-start justify-between gap-3">
         <div className="flex flex-col gap-1.5">
           <p className="text-sm font-medium">{t("connections.setupTitle")}</p>
@@ -267,15 +267,18 @@ export function PipedreamWizard({
 
       <ol className="flex flex-col gap-2">
         {GUIDE_STEPS.map((step, i) => (
-          <li key={step.key} className="flex items-center justify-between gap-3">
-            <div className="flex items-center gap-2.5">
+          <li
+            key={step.key}
+            className="flex flex-col items-stretch gap-2.5 @md:flex-row @md:items-center @md:justify-between"
+          >
+            <div className="flex items-start gap-2.5 @md:items-center">
               <StepCircle tone="tint-accent">{i + 1}</StepCircle>
               <p className="text-xs text-muted-foreground">{t(`connections.${step.key}`)}</p>
             </div>
             <Button
               variant="outline"
               size="sm"
-              className="shrink-0"
+              className="w-full @md:w-auto @md:shrink-0"
               onClick={() => openExternal(step.url)}
             >
               <ExternalLink /> {t(`connections.${step.labelKey}`)}
@@ -284,7 +287,7 @@ export function PipedreamWizard({
         ))}
       </ol>
 
-      <div className="grid gap-4 sm:grid-cols-2">
+      <div className="flex flex-col gap-4">
         <FormField id="pd-client-id" label={t("connections.clientId")}>
           <Input
             id="pd-client-id"
@@ -305,7 +308,7 @@ export function PipedreamWizard({
             autoComplete="off"
           />
         </FormField>
-        <FormField id="pd-project" label={t("connections.project")} className="sm:col-span-2">
+        <FormField id="pd-project" label={t("connections.project")}>
           <Input
             id="pd-project"
             value={project}

@@ -71,13 +71,13 @@ export function focusFromCard(card: AgentCard): FocusPatch | null {
           }
         : null;
     // An attachments listing is an aside, not a focus move. Choices and
-    // briefing carry no top-level account (a briefing spans accounts, a choices
+    // report carry no top-level account (a report spans accounts, a choices
     // card is a question) and never move focus; a message draft is
     // channel-scoped, not email-account-scoped. A lead, chart, source list or
     // saved page is a standalone readout, unrelated to the email focus.
     case "attachments":
     case "choices":
-    case "briefing":
+    case "report":
     case "message_draft":
     case "delegation":
     case "lead":

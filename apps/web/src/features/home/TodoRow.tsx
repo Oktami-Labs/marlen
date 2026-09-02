@@ -106,16 +106,18 @@ export function TodoRow({
       t("home.deletedAutomation"))
     : null;
 
-  const completeTodo = () =>
-    onPatch(todo.id, { status: "done" }, (list) => list.filter((td) => td.id !== todo.id));
-  const startComplete = () => {
+  const completeTodo = (answer?: string) =>
+    onPatch(todo.id, { status: "done", ...(answer ? { answer } : {}) }, (list) =>
+      list.filter((td) => td.id !== todo.id),
+    );
+  const startComplete = (answer?: string) => {
     if (completing) return;
     if (window.matchMedia("(prefers-reduced-motion: reduce)").matches) {
-      completeTodo();
+      completeTodo(answer);
       return;
     }
     setCompleting(true);
-    window.setTimeout(completeTodo, 450);
+    window.setTimeout(() => completeTodo(answer), 450);
   };
   const dismiss = () =>
     onPatch(todo.id, { status: "dismissed" }, (list) => list.filter((td) => td.id !== todo.id));
@@ -150,12 +152,12 @@ export function TodoRow({
   return (
     <article
       className={cn(
-        "surface surface-hover group flex flex-col gap-2 rounded-lg px-2.5 py-2.5 transition",
+        "surface-hover group flex flex-col gap-2 rounded-md px-2.5 py-2.5 transition",
         completing && "opacity-60",
       )}
     >
       <div className="flex flex-wrap items-center gap-2">
-        <Checkbox checked={completing} onToggle={startComplete} label={todo.title} />
+        <Checkbox checked={completing} onToggle={() => startComplete()} label={todo.title} />
         {editing ? (
           <Input
             defaultValue={todo.title}
@@ -171,7 +173,7 @@ export function TodoRow({
           <button
             type="button"
             className={cn(
-              "flex min-w-0 flex-1 basis-[calc(100%-2rem)] items-center gap-2 text-left @md:basis-auto",
+              "flex min-w-0 flex-1 items-center gap-2 text-left max-sm:basis-[calc(100%-2rem)]",
               expandable && "cursor-pointer",
             )}
             onClick={() => expandable && withViewTransition(() => setOpen((v) => !v))}
@@ -217,7 +219,9 @@ export function TodoRow({
             </Button>
           ) : (
             <>
-              <HoverActions className="gap-1">
+              {/* A reserved slot would truncate the title for icons nobody sees; the
+                  actions take no room until the row is hovered or focused. */}
+              <HoverActions className="gap-1 sm:hidden sm:group-focus-within:flex sm:group-hover:flex">
                 {onOpenChat && (
                   <Button
                     variant="ghost"
@@ -286,12 +290,80 @@ export function TodoRow({
           />
         </div>
       ) : (
-        open &&
-        expandable && (
-          <p className="whitespace-pre-wrap pl-8 text-sm text-muted-foreground">{todo.body}</p>
-        )
+        <>
+          {open && expandable && (
+            <p className="whitespace-pre-wrap pl-8 text-sm text-muted-foreground">{todo.body}</p>
+          )}
+          {/* A decision answers with one click; the answer completes the todo. */}
+          <AnswerOptions
+            todo={todo}
+            disabled={completing}
+            onAnswer={startComplete}
+            className="pl-8"
+          />
+        </>
       )}
     </article>
+  );
+}
+
+/** A decision's answers as buttons; once answered (an approval stays open), the answer instead. */
+export function AnswerOptions({
+  todo,
+  disabled,
+  onAnswer,
+  className,
+}: {
+  todo: Todo;
+  disabled?: boolean;
+  onAnswer: (label: string) => void;
+  className?: string;
+}) {
+  const { t } = useTranslation();
+  if (todo.answer) {
+    return (
+      <p className={cn("text-xs text-muted-foreground", className)}>
+        {t("home.todosAnswered", { answer: todo.answer })}
+      </p>
+    );
+  }
+  if (todo.options.length === 0) return null;
+  return (
+    <div className={cn("flex flex-wrap gap-1.5", className)}>
+      {todo.options.map((option) => (
+        <Button
+          key={option.label}
+          variant="secondary"
+          size="sm"
+          disabled={disabled}
+          data-tooltip={option.detail}
+          onClick={() => onAnswer(option.label)}
+        >
+          {option.label}
+        </Button>
+      ))}
+    </div>
+  );
+}
+
+/** What the agent added to an approval: its question about the draft and the answers it offers. */
+export function ApprovalNote({
+  todo,
+  disabled,
+  onAnswer,
+}: {
+  todo: Todo;
+  disabled?: boolean;
+  onAnswer: (label: string) => void;
+}) {
+  if (!todo.body && todo.options.length === 0 && !todo.answer) return null;
+  return (
+    <div className="flex flex-col gap-1.5 px-2.5 pb-2.5 pl-10">
+      {todo.body && (
+        <p className="whitespace-pre-wrap text-xs text-muted-foreground">{todo.body}</p>
+      )}
+      <AnswerOptions todo={todo} disabled={disabled} onAnswer={onAnswer} />
+    </div>
   );
 }
 
@@ -300,10 +372,11 @@ export function TodoRow({
 export function DoneTodoRow({ todo, onRestore }: { todo: Todo; onRestore: () => void }) {
   const { t } = useTranslation();
   return (
-    <article className="surface surface-hover flex items-center gap-2 rounded-lg px-2.5 py-2">
+    <article className="surface-hover flex items-center gap-2 rounded-md px-2.5 py-2">
       <Checkbox checked onToggle={onRestore} label={t("home.todosRestore")} />
-      <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground line-through">
-        {todo.title}
+      <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
+        <span className="line-through">{todo.title}</span>
+        {todo.answer && <span className="ml-2 font-medium">{todo.answer}</span>}
       </span>
     </article>
   );

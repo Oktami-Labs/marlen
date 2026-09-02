@@ -14,6 +14,8 @@
     "test": "pnpm --filter @marlen/server test && pnpm --filter @marlen/web test",
     "test:e2e": "pnpm --filter @marlen/web build && pnpm --filter @marlen/e2e test",
     "test:e2e:ui": "pnpm --filter @marlen/web build && pnpm --filter @marlen/e2e test:ui",
+    "demo": "pnpm --filter @marlen/web build && pnpm --filter @marlen/e2e demo",
+    "seed:demo": "pnpm --filter @marlen/server seed:demo",
     "format": "biome format --write .",
     "lint": "biome check --error-on-warnings .",
     "lint:fix": "biome check --write .",

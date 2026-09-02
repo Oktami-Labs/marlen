@@ -24,7 +24,6 @@ import { stripDuplicateSignoff, stripHtml } from "../email/textUtils.js";
 import { keepDraftProposal } from "../services/draftProposals.js";
 import { resolveLibraryAttachments } from "../storage/library/draftAttachments.js";
 import { buildEmailDraftCard, cardNote, toCardAccount } from "./cards.js";
-import { composeDraftBody } from "./composition.js";
 import { numberedList, textResult, tool } from "./toolkit.js";
 import { listAccountVoiceInfos } from "./voiceLearn.js";
 
@@ -155,9 +154,7 @@ export function buildDraftTool(
           `user reviews and sends it themselves. `) +
       `Pass threadId to attach the draft to an existing ` +
       `conversation (use the thread's id from find/list tools), where the connected provider ` +
-      `supports it. The body goes through a humanizer pass before saving, which removes ` +
-      `AI-sounding phrasing; the tool result reports the final saved text when it was adjusted. ` +
-      `Documents from the user's library can be ` +
+      `supports it. Documents from the user's library can be ` +
       `attached as files via attachLibraryDocumentIds.\n\n` +
       `Acts as the connected account: ${account.name}.` +
       (hasSignature ? SIGNATURE_TOOL_NOTE : ""),
@@ -229,14 +226,10 @@ export function buildDraftTool(
           return textResult(errorMessage(error));
         }
       }
-      const composed = await composeDraftBody({
-        body: input.body,
-        subject: input.subject,
-      });
       const signatureHtml = await accountSignatureHtml(account.id);
       const finalBody = signatureHtml
-        ? stripDuplicateSignoff(composed.body, stripHtml(signatureHtml))
-        : composed.body;
+        ? stripDuplicateSignoff(input.body, stripHtml(signatureHtml))
+        : input.body;
 
       // Interactive sessions propose drafts unless an armed send was explicitly requested.
       const autosend = send === true && sendArmed && Boolean(provider.sendDraft);
@@ -269,8 +262,7 @@ export function buildDraftTool(
           text += `\nAttached: ${listed}.`;
         }
         if (finalBody !== input.body) {
-          const reasonText = composed.humanized ? ` (lightly edited by the humanizer pass)` : "";
-          text += `\n\nThe proposed draft reads${reasonText}:\n\n${finalBody}`;
+          text += `\n\nThe proposed draft reads:\n\n${finalBody}`;
         }
         text += DRAFT_CARD_NOTE;
 
@@ -356,8 +348,7 @@ export function buildDraftTool(
       }
 
       if (finalBody !== input.body) {
-        const reasonText = composed.humanized ? ` (lightly edited by the humanizer pass)` : "";
-        text += `\n\nThe saved draft reads${reasonText}:\n\n${finalBody}`;
+        text += `\n\nThe saved draft reads:\n\n${finalBody}`;
       }
       text += sendNote;
       text += DRAFT_CARD_NOTE;
@@ -405,8 +396,7 @@ export function buildUpdateDraftTool(
       `draft already in this account's Drafts folder. Use this whenever the user asks to ` +
       `refine, shorten, or otherwise change a draft that already ` +
       `exists (you know its draft id from creating or listing it) — never create a second ` +
-      `draft for a refinement. Nothing is sent. The new body goes through the same humanizer ` +
-      `pass as draft creation. Recipients cannot be changed; if the user ` +
+      `draft for a refinement. Nothing is sent. Recipients cannot be changed; if the user ` +
       `wants different recipients, discard and create a new draft instead.\n\n` +
       `Acts as the connected account: ${account.name}.` +
       (hasSignature ? SIGNATURE_TOOL_NOTE : ""),
@@ -444,10 +434,9 @@ export function buildUpdateDraftTool(
         }
         let proposalBody = body;
         if (body !== undefined) {
-          const composed = await composeDraftBody({ body, subject });
           proposalBody = signatureHtml
-            ? stripDuplicateSignoff(composed.body, stripHtml(signatureHtml))
-            : composed.body;
+            ? stripDuplicateSignoff(body, stripHtml(signatureHtml))
+            : body;
         }
         await updateDraftProposalContent(draftId, { body: proposalBody, subject });
         const card = buildEmailDraftCard({
@@ -473,10 +462,7 @@ export function buildUpdateDraftTool(
 
       let finalBody = body;
       if (body !== undefined) {
-        const composed = await composeDraftBody({ body, subject });
-        finalBody = signatureHtml
-          ? stripDuplicateSignoff(composed.body, stripHtml(signatureHtml))
-          : composed.body;
+        finalBody = signatureHtml ? stripDuplicateSignoff(body, stripHtml(signatureHtml)) : body;
       }
       await updateDraft(account, draftId, {
         ...(finalBody !== undefined ? outgoingBody(finalBody, signatureHtml) : {}),

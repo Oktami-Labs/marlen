@@ -43,13 +43,21 @@ export function SettingRow({
           {error && <p className="text-xs text-destructive">{error}</p>}
         </div>
       </div>
-      <div className="flex shrink-0 items-center gap-2">{children}</div>
+      <div className="flex w-full items-center justify-end gap-2 @md:w-auto @md:shrink-0">
+        {children}
+      </div>
     </>
   );
 
+  const content = (
+    <div className="flex w-full flex-col items-stretch gap-3 @md:flex-row @md:items-start @md:justify-between">
+      {body}
+    </div>
+  );
+
   return bare ? (
-    <div className={cn("flex items-start justify-between gap-3", className)}>{body}</div>
+    <div className={cn("@container", className)}>{content}</div>
   ) : (
-    <ListRow className={className}>{body}</ListRow>
+    <ListRow className={cn("@container", className)}>{content}</ListRow>
   );
 }

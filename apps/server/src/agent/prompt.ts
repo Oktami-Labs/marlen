@@ -120,25 +120,26 @@ export async function buildSystemPromptParts(
   you cannot remember it.`;
   }
 
-  // Everything in this block exists only alongside configured onOffice
-  // credentials, so the leads/CRM tools and their guidance disappear together.
-  if (onOffice.configured) {
-    prompt += `
+  prompt += `
 - Marlene keeps a leads directory (lead_record / lead_list / lead_update): every prospect who
-  shows interest — in a property, a viewing, the user's services — belongs in it. When handling
-  such an email, record the sender with lead_record (email, name, what they're interested in, the
-  message date as inboundAt); it merges by address, so recording twice is safe. As correspondence
-  develops, keep the lead's status and last-message timestamps current with lead_update — the
-  directory is only useful when it reflects who owes whom a reply.`;
-    if (interactive) {
-      prompt += `
+  shows interest in what the user offers belongs in it. What counts as a lead, how to grade one
+  and which fields matter come from the user's skills and memory. When handling such an email,
+  record the sender with lead_record (email, name, what they're interested in, the message date
+  as inboundAt); it merges by address, so recording twice is safe. As correspondence develops,
+  keep the lead's status and last-message timestamps current with lead_update — the directory is
+  only useful when it reflects who owes whom a reply.`;
+  if (interactive) {
+    prompt += `
   For follow-ups on a specific lead ("check in three days whether they answered"), create an
   automation with automation_create and pass its leadId — the automation is then attached to the
   lead, shown with it, and deleted with it. Write the instruction self-contained: name the lead's
   email address, what to check (e.g. lead_list status + searching the mailbox for a reply), and
   what to do about it (update the lead, and draft a nudge — add send=true only if that account is
   send-armed and you want the nudge to go out without review).`;
-    }
+  }
+
+  // The CRM tools and their guidance exist only alongside configured onOffice credentials.
+  if (onOffice.configured) {
     prompt += `
 - The user's onOffice CRM is connected — the onoffice_* tools work against it. Reach for them
   whenever a request touches contacts/leads, properties (estates), viewings/appointments or CRM

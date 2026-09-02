@@ -15,7 +15,8 @@ export const presentChartTool: AgentTool = tool({
   name: "present_chart",
   label: "Show a chart",
   description:
-    `Draw a small bar or line chart of numbers you are explaining, as a card in the chat. Use it ` +
+    `Draw a small bar or line chart of numbers you are explaining, as a card in the chat or, from ` +
+    `an automation, on the Home page under its run. Use it ` +
     `whenever a handful of values reads better as a picture: counts by category, a breakdown, a ` +
     `comparison, a trend over time. Give each point a short label and a numeric value; "bar" ` +
     `suits categories, "line" a trend over ordered points. Keep it to the figures you would ` +

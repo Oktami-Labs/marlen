@@ -103,6 +103,7 @@ export function FocusChip({
       <Chip
         active={hasFocus}
         disabled={Boolean(conversationId) && detailQuery.isPending}
+        aria-label={label}
         aria-expanded={open}
         title={label}
         onClick={(e) => {
@@ -117,8 +118,8 @@ export function FocusChip({
           hasFocus && "bg-secondary text-foreground hover:bg-secondary",
         )}
       >
-        {hasFocus && <AccountDot color={focusedColor} />}
-        <span className="min-w-0 truncate">{label}</span>
+        <AccountDot color={hasFocus ? focusedColor : undefined} />
+        <span className="hidden min-w-0 truncate sm:inline">{label}</span>
         <ChevronDown
           aria-hidden
           className={cn("h-3 w-3 shrink-0 opacity-60 transition-transform", open && "rotate-180")}

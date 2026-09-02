@@ -9,7 +9,6 @@ import {
   ChevronUp,
   FileText,
   FolderOpen,
-  Inbox,
   RotateCcw,
   Send,
   Sparkles,
@@ -673,7 +672,7 @@ export function MicroInteractionsDemo() {
 
       {/* The count badge replays `count-tick` on its own, keyed on the value. */}
       <div className="flex flex-col items-start gap-2">
-        <SectionTitle icon={Inbox} title="Needs attention" count={count} />
+        <SectionTitle title="Needs attention" count={count} />
         <div className="flex items-center gap-2">
           <Button variant="secondary" size="sm" onClick={() => setCount((n) => n + 1)}>
             Add one

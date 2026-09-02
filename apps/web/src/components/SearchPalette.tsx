@@ -22,7 +22,7 @@ import { Kbd } from "@/components/ui/kbd";
 import { revealChat, sendChatCommand } from "@/features/chat/controller";
 import { api } from "@/lib/api";
 import { dateTimeLabel } from "@/lib/dates";
-import { registerOpenSearch, visibleNavItems } from "@/lib/nav";
+import { NAV_ITEMS, registerOpenSearch } from "@/lib/nav";
 import { cn, MOD_LABEL } from "@/lib/utils";
 
 type HitType = SearchResult["type"];
@@ -63,7 +63,7 @@ interface Section {
   rows: Row[];
 }
 
-export function SearchPalette({ onofficeConfigured }: { onofficeConfigured: boolean }) {
+export function SearchPalette() {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const [open, setOpen] = React.useState(false);
@@ -130,13 +130,13 @@ export function SearchPalette({ onofficeConfigured }: { onofficeConfigured: bool
 
   const pages = React.useMemo<PageItem[]>(
     () =>
-      visibleNavItems(onofficeConfigured).map((nav) => ({
+      NAV_ITEMS.map((nav) => ({
         id: nav.id,
         path: nav.path,
         icon: nav.icon,
         title: t(`views.${nav.id}.title`),
       })),
-    [t, onofficeConfigured],
+    [t],
   );
 
   const sections = React.useMemo<Section[]>(() => {

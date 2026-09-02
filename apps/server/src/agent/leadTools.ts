@@ -21,9 +21,8 @@ const STATUS_DESCRIPTION =
 
 const prioritySchema = Type.Union([Type.Literal("A"), Type.Literal("B"), Type.Literal("C")], {
   description:
-    "Priority tier from purchase likelihood: A hot (concrete budget, time pressure, or a " +
-    "viewing wish for a specific unit), B warm (a clear search profile without urgency), " +
-    "C cold (a vague first inquiry).",
+    "Priority tier: A hot, B warm, C cold. Grade by the user's own criteria (their skills and " +
+    "memory); absent those, by how concrete and time-bound the interest is.",
 });
 
 const languageSchema = Type.String({
@@ -52,7 +51,7 @@ const leadRecord: AgentTool = tool({
   label: "Record lead",
   description:
     `Record a prospect in the leads directory — whenever an email (or conversation) shows ` +
-    `someone interested in a property, a viewing, or the user's services, file them here. One ` +
+    `someone interested in what the user offers, file them here. One ` +
     `row per email address: recording a known address merges (fills missing fields, advances ` +
     `the last-message timestamps) instead of duplicating, so it is always safe to call. When ` +
     `recording from an email, pass the message date as inboundAt and the mailbox as accountId. ` +
@@ -65,11 +64,11 @@ const leadRecord: AgentTool = tool({
       Type.String({ description: "Connected account the correspondence runs through." }),
     ),
     interest: Type.Optional(
-      Type.String({ description: "What they're after: property, budget, area, timeframe…" }),
+      Type.String({ description: "What they're after: the offer, budget, timeframe, specifics…" }),
     ),
     persona: Type.Optional(
       Type.String({
-        description: 'Buyer type in a few words, e.g. "Kapitalanleger", "junge Familie".',
+        description: "The kind of prospect in a few words, in the user's own categories.",
       }),
     ),
     priority: Type.Optional(prioritySchema),
@@ -162,7 +161,9 @@ const leadUpdate: AgentTool = tool({
     ),
     interest: Type.Optional(Type.String({ description: "Complete replacement text." })),
     persona: Type.Optional(
-      Type.String({ description: 'Buyer type in a few words, e.g. "Kapitalanleger".' }),
+      Type.String({
+        description: "The kind of prospect in a few words, in the user's own categories.",
+      }),
     ),
     priority: Type.Optional(prioritySchema),
     language: Type.Optional(languageSchema),

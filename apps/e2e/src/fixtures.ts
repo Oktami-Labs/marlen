@@ -4,6 +4,8 @@ import { type StartedServer, startServer } from "./server.js";
 
 interface WorkerFixtures {
   server: StartedServer;
+  /** `test.use({ seeded: true })` boots the worker's server on the demo persona. */
+  seeded: boolean;
 }
 
 interface TestFixtures {
@@ -11,10 +13,11 @@ interface TestFixtures {
 }
 
 export const test = base.extend<TestFixtures, WorkerFixtures>({
+  seeded: [false, { scope: "worker", option: true }],
+
   server: [
-    // biome-ignore lint/correctness/noEmptyPattern: Playwright reads a fixture's dependencies out of this destructuring pattern and rejects a plain identifier, so "no dependencies" has to be spelled {}
-    async ({}, use, workerInfo) => {
-      const server = await startServer(workerInfo.workerIndex);
+    async ({ seeded }, use, workerInfo) => {
+      const server = await startServer(workerInfo.workerIndex, { seeded });
       await use(server);
       await server.stop();
     },
@@ -62,5 +65,5 @@ export { expect };
 /** Wait for navigation because the app's SSE connection prevents `networkidle`. */
 export async function openApp(page: import("@playwright/test").Page, path = "/") {
   await page.goto(path);
-  await expect(page.getByRole("navigation")).toBeVisible();
+  await expect(page.getByRole("navigation").first()).toBeVisible();
 }

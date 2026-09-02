@@ -4,6 +4,7 @@ import { useTranslation } from "react-i18next";
 import { ChangelogDialog } from "@/components/ChangelogDialog";
 import { useUpdateState } from "@/components/UpdatePill";
 import { Button } from "@/components/ui/button";
+import { DisclosureToggle } from "@/components/ui/disclosure-toggle";
 import { Label } from "@/components/ui/label";
 import { LinkButton } from "@/components/ui/link-button";
 import { ListRow } from "@/components/ui/list-row";
@@ -52,6 +53,7 @@ export function AboutPanel() {
   const [info, setInfo] = React.useState<DesktopAppInfo | null>(null);
   const [check, setCheck] = React.useState<CheckState>({ phase: "idle" });
   const [changelogOpen, setChangelogOpen] = React.useState(false);
+  const [detailsOpen, setDetailsOpen] = React.useState(false);
 
   React.useEffect(() => {
     desktopBridge()
@@ -91,25 +93,34 @@ export function AboutPanel() {
         )}
       </div>
 
-      <div className="flex flex-col gap-1.5">
-        {info && (
-          <MetaRow label={t("settings.about.build")} mono>
-            {platform} · {info.arch} · v{info.version}
-          </MetaRow>
+      <div>
+        <DisclosureToggle open={detailsOpen} onToggle={() => setDetailsOpen((open) => !open)}>
+          {t("settings.about.technicalDetails")}
+        </DisclosureToggle>
+        {detailsOpen && (
+          <div className="mt-2 flex flex-col gap-1.5 rounded-lg bg-surface-2 p-3">
+            {info && (
+              <MetaRow label={t("settings.about.build")} mono>
+                {platform} · {info.arch} · v{info.version}
+              </MetaRow>
+            )}
+            <MetaRow label={t("settings.about.bundleId")} mono>
+              {BUNDLE_ID}
+            </MetaRow>
+            <MetaRow label={t("settings.about.license")}>
+              {t("settings.about.licenseValue")}
+            </MetaRow>
+            <MetaRow label={t("settings.about.github")}>
+              <LinkButton
+                onClick={() => openExternal(REPO_URL)}
+                className="flex items-center gap-1.5 font-mono text-foreground"
+              >
+                <GithubMark className="h-3.5 w-3.5" />
+                {REPO_SLUG}
+              </LinkButton>
+            </MetaRow>
+          </div>
         )}
-        <MetaRow label={t("settings.about.bundleId")} mono>
-          {BUNDLE_ID}
-        </MetaRow>
-        <MetaRow label={t("settings.about.license")}>{t("settings.about.licenseValue")}</MetaRow>
-        <MetaRow label={t("settings.about.github")}>
-          <LinkButton
-            onClick={() => openExternal(REPO_URL)}
-            className="flex items-center gap-1.5 font-mono text-foreground"
-          >
-            <GithubMark className="h-3.5 w-3.5" />
-            {REPO_SLUG}
-          </LinkButton>
-        </MetaRow>
       </div>
 
       <div className="flex flex-col gap-2">
@@ -125,10 +136,6 @@ export function AboutPanel() {
           </LinkButton>
           <Button variant="secondary" size="sm" onClick={() => setChangelogOpen(true)}>
             {t("changelog.open")}
-          </Button>
-          <Button variant="secondary" size="sm" onClick={() => openExternal(REPO_URL)}>
-            <GithubMark />
-            {t("settings.about.viewOnGithub")}
           </Button>
           {bridge &&
             (readyVersion ? (

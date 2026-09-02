@@ -144,24 +144,6 @@ export const libraryDocuments = sqliteTable("library_documents", {
   indexedAt: text("indexed_at").notNull(),
 });
 
-/**
- * Proposed automations from the nightly suggestion sweep. Decided rows stay
- * (pruned to a recent window) as dedup context so a later sweep doesn't
- * re-suggest what the user already answered.
- */
-export const automationSuggestions = sqliteTable("automation_suggestions", {
-  id: text("id").primaryKey(),
-  name: text("name").notNull(),
-  instruction: text("instruction").notNull(),
-  schedule: text("schedule").notNull(),
-  rationale: text("rationale").notNull(),
-  status: text("status", { enum: ["pending", "accepted", "dismissed"] })
-    .notNull()
-    .default("pending"),
-  createdAt: text("created_at").notNull(),
-  decidedAt: text("decided_at"),
-});
-
 export const automationRuns = sqliteTable("automation_runs", {
   id: text("id").primaryKey(),
   automationId: text("automation_id").notNull(),
@@ -176,26 +158,30 @@ export const automationRuns = sqliteTable("automation_runs", {
 });
 
 /**
- * Durable outcome of one thread in a repeating automation. Open work carries
- * into later briefings until the user handles it; informational rows remain as
- * dedup evidence so an unchanged provider message is not announced again.
+ * Durable outcome of one report item in a repeating automation. Work that
+ * waits on the user carries into later reports until handled; informational
+ * rows remain as dedup evidence so an unchanged item is not announced again.
  */
-export const automationThreadStates = sqliteTable(
-  "automation_thread_states",
+export const automationReportItems = sqliteTable(
+  "automation_report_items",
   {
     automationId: text("automation_id").notNull(),
-    accountId: text("account_id").notNull(),
-    threadId: text("thread_id").notNull(),
-    messageId: text("message_id").notNull().default(""),
+    /** ReportItem.key: the item's identity across reports. */
+    itemKey: text("item_key").notNull(),
+    /** What must differ for a repeat to count as news: the email's message id, else the gist. */
+    changeKey: text("change_key").notNull().default(""),
+    sectionLabel: text("section_label").notNull().default(""),
     itemJson: text("item_json").notNull(),
     disposition: text("disposition", { enum: ["open", "reported", "handled"] }).notNull(),
+    /** When the item first entered a report; reset when a handled item reopens with news. */
+    firstReportedAt: text("first_reported_at").notNull().default(""),
     lastReportedAt: text("last_reported_at").notNull(),
     handledAt: text("handled_at"),
     updatedAt: text("updated_at").notNull(),
   },
   (table) => [
-    primaryKey({ columns: [table.automationId, table.accountId, table.threadId] }),
-    index("idx_automation_thread_states_disposition").on(
+    primaryKey({ columns: [table.automationId, table.itemKey] }),
+    index("idx_automation_report_items_disposition").on(
       table.automationId,
       table.disposition,
       table.updatedAt,
@@ -262,12 +248,17 @@ export const outboundDrafts = sqliteTable("outbound_drafts", {
 });
 
 /**
- * An item the agent surfaces because the user must act or decide. dedupe_key
- * ("" for ad-hoc) makes a repeating run's create
- * idempotent so it upserts one todo, not many.
+ * An item on the Home agenda: something the user must do, decide, or approve.
+ * dedupe_key ("" for ad-hoc) makes a repeating run's create idempotent so it
+ * upserts one todo, not many; an approval's key names the draft it wraps.
  */
 export const todos = sqliteTable("todos", {
   id: text("id").primaryKey(),
+  kind: text("kind", { enum: ["todo", "approval"] })
+    .notNull()
+    .default("todo"),
+  /** JSON TodoRef for an approval, null for a todo. */
+  ref: text("ref"),
   title: text("title").notNull(),
   body: text("body").notNull().default(""),
   status: text("status", { enum: ["open", "done", "dismissed"] })
@@ -277,6 +268,9 @@ export const todos = sqliteTable("todos", {
   position: real("position").notNull().default(0),
   conversationId: text("conversation_id"),
   linkedAutomationId: text("linked_automation_id"),
+  /** JSON TodoOption[]; the todo is a decision when non-empty. */
+  options: text("options").notNull().default("[]"),
+  answer: text("answer"),
   dedupeKey: text("dedupe_key").notNull().default(""),
   createdAt: text("created_at").notNull(),
   updatedAt: text("updated_at").notNull(),

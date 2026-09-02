@@ -21,8 +21,11 @@ export function RunTriggerBadge({ trigger }: { trigger: RunTrigger | null }) {
     );
   }
   if (trigger.kind === "todo") {
+    const detail = trigger.answer
+      ? t("home.triggerTodoAnswerDetail", { title: trigger.title, answer: trigger.answer })
+      : t("home.triggerTodoDetail", { title: trigger.title });
     return (
-      <Badge variant="muted" data-tooltip={t("home.triggerTodoDetail", { title: trigger.title })}>
+      <Badge variant="muted" data-tooltip={detail}>
         {t("home.triggerTodo")}
       </Badge>
     );

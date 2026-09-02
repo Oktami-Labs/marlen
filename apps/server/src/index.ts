@@ -6,6 +6,7 @@ import { reconcileVoiceLearns } from "./agent/voiceLearn.js";
 import { buildApp } from "./app.js";
 import { env } from "./core/env.js";
 import { installProcessErrorHandlers, logger } from "./core/logger.js";
+import { startDraftsRefresh, stopDraftsRefresh } from "./email/draftsCache.js";
 import { startLearning, stopLearning } from "./email/learn/service.js";
 import { pipedreamConfigured } from "./integrations/pipedream/connect.js";
 import {
@@ -17,7 +18,6 @@ import { seedDefaultAutomations } from "./services/automations/defaults.js";
 import { startMailProbe, stopMailProbe } from "./services/automations/mailProbe.js";
 import { clearRunSteps, endRunStep, startRunStep } from "./services/automations/runProgress.js";
 import { startScheduler, stopScheduler } from "./services/automations/scheduler.js";
-import { startNightlySuggest, stopNightlySuggest } from "./services/automations/suggest.js";
 import { registerTurnRunner } from "./services/automations/turnRunner.js";
 import { initAgentHome, stopHomeWatchers } from "./storage/home/agentHome.js";
 import { getLibraryDir, startLibrary, stopLibrary } from "./storage/library/ingest.js";
@@ -60,8 +60,8 @@ async function main(): Promise<void> {
   app.addHook("onClose", async () => {
     stopScheduler();
     stopMailProbe();
+    stopDraftsRefresh();
     stopLearning();
-    stopNightlySuggest();
     stopLibrary();
     stopHomeWatchers();
     await stopWhatsApp();
@@ -100,10 +100,11 @@ async function startServices(app: FastifyInstance): Promise<void> {
   await startScheduler();
   // Runs runOnNewMail-flagged automations when new inbound mail arrives.
   startMailProbe();
+  // Keeps the agenda's email approvals current while Home is closed.
+  startDraftsRefresh();
   await recoverInterruptedTurns();
 
   await startLearning();
-  await startNightlySuggest();
   // Voice-learn catch-up for accounts never attempted; records its own outcomes.
   void reconcileVoiceLearns();
 

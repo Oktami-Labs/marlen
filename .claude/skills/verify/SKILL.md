@@ -59,6 +59,21 @@ node ~/…/Trailin/apps/server/node_modules/.bin/tsx ~/…/Trailin/apps/server/s
 `apps/e2e/src/server.ts` does all of the above already; read it rather than
 re-deriving the flags.
 
+To look at a populated app instead of an empty one, seed the scratch instance
+with the demo persona (`apps/server/src/services/demo/`) before or after
+booting it, with the same env vars and cwd:
+
+```sh
+DATABASE_PATH=./verify.db AGENT_HOME_PATH=./home \
+node ~/…/Trailin/apps/server/node_modules/.bin/tsx ~/…/Trailin/apps/server/scripts/seed-demo.ts --yes
+```
+
+Every panel then has data: a living briefing with change marks, todos and
+approvals, leads in every status, chats with every card kind, wiki pages and
+knowledge documents. `pnpm seed:demo` does the same for the developer's own
+`pnpm dev` instance (never run that against `apps/server/data/` from a verify
+session; the developer decides when their instance is reseeded).
+
 ## Drive the API
 
 Plain curl against `http://127.0.0.1:<port>/api/...`. Useful states:
@@ -74,6 +89,12 @@ Plain curl against `http://127.0.0.1:<port>/api/...`. Useful states:
 the repo root builds the web app and runs it. Add a spec there rather than
 hand-rolling a browser session — the fixtures already boot an isolated server
 per worker, dismiss the first-run setup gate, and pin the language.
+
+`pnpm demo` (repo root) records the seeded Home demo
+(`apps/e2e/tests/home-demo.spec.ts`, booted on the demo persona through the
+`seeded` fixture option) to `~/Movies/agent-demos/marlen/` and opens it. Extend
+the demo fixtures and that spec for a new proof video rather than writing a
+throwaway spec.
 
 `apps/e2e/README.md` has the rules that bite: never wait for `networkidle` (the
 SPA holds an SSE connection open forever), select through the `t()` helper

@@ -1,4 +1,4 @@
-import { type ChildProcess, spawn } from "node:child_process";
+import { type ChildProcess, spawn, spawnSync } from "node:child_process";
 import { existsSync } from "node:fs";
 import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
@@ -11,6 +11,7 @@ const here = dirname(fileURLToPath(import.meta.url));
 export const repoRoot = resolve(here, "../../..");
 
 const SERVER_ENTRY = join(repoRoot, "apps/server/src/index.ts");
+const SEED_SCRIPT = join(repoRoot, "apps/server/scripts/seed-demo.ts");
 const TSX_BIN = join(
   repoRoot,
   "apps/server/node_modules/.bin",
@@ -113,7 +114,15 @@ export interface StartedServer extends TestServer {
   stop: () => Promise<void>;
 }
 
-export async function startServer(workerIndex: number): Promise<StartedServer> {
+export interface StartServerOptions {
+  /** Fill the state directory with the demo persona before the server boots. */
+  seeded?: boolean;
+}
+
+export async function startServer(
+  workerIndex: number,
+  options: StartServerOptions = {},
+): Promise<StartedServer> {
   if (!existsSync(WEB_DIST)) {
     throw new Error(
       `${WEB_DIST} is missing — the server serves the SPA from it.\n` +
@@ -127,6 +136,20 @@ export async function startServer(workerIndex: number): Promise<StartedServer> {
   const stateDir = await mkdtemp(join(tmpdir(), `marlen-e2e-w${workerIndex}-`));
   const port = BASE_PORT + workerIndex;
   const baseURL = `http://127.0.0.1:${port}`;
+
+  // Seeding before boot lets the server index the knowledge files and read
+  // the account colors the way it would on any install.
+  if (options.seeded) {
+    const seed = spawnSync(TSX_BIN, [SEED_SCRIPT, "--yes"], {
+      cwd: stateDir,
+      env: serverEnv(stateDir, port),
+      encoding: "utf8",
+    });
+    if (seed.status !== 0) {
+      await rm(stateDir, { recursive: true, force: true });
+      throw new Error(`seeding the demo data failed:\n${seed.stdout}${seed.stderr}`);
+    }
+  }
 
   const child = spawn(TSX_BIN, [SERVER_ENTRY], {
     cwd: stateDir,
