@@ -4,11 +4,11 @@ import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Link } from "react-router-dom";
 import { Button } from "@/components/ui/button";
+import { ChangeList } from "@/components/ui/change-list";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { DisclosureToggle } from "@/components/ui/disclosure-toggle";
 import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";
-import { cn } from "@/lib/utils";
 
 type WikiNoteData = Extract<AgentCard, { kind: "wiki_note" }>;
 
@@ -89,22 +89,7 @@ export function WikiNoteCard({ card }: { card: WikiNoteData }) {
               removed: card.diff.removed,
             })}
           </DisclosureToggle>
-          {showDiff && (
-            <ul className="flex flex-col gap-0.5 pb-1">
-              {card.diff.rows.map((row, i) => (
-                <li
-                  // biome-ignore lint/suspicious/noArrayIndexKey: diff rows are positional and never reorder
-                  key={i}
-                  className={cn(
-                    "rounded px-2 py-0.5 font-mono text-2xs leading-relaxed",
-                    row.op === "+" ? "tint-success" : "tint-danger line-through",
-                  )}
-                >
-                  {row.text}
-                </li>
-              ))}
-            </ul>
-          )}
+          {showDiff && <ChangeList diff={card.diff} className="pb-1" />}
         </div>
       )}
 

@@ -3,9 +3,9 @@ import { MessageCircle, Send, Trash2 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
+  DiscussInChatButton,
   DraftActionDialog,
   EditSaveActions,
-  RefineInChatButton,
   useDraftActions,
 } from "@/components/draftActions";
 import { Button } from "@/components/ui/button";
@@ -150,7 +150,7 @@ export function OutboundRow({
       expanded={open}
       actions={
         <>
-          <RefineInChatButton conversationId={todo.conversationId} subject={title} />
+          <DiscussInChatButton conversationId={todo.conversationId} />
           <Button
             variant="ghost"
             size="icon-xs"

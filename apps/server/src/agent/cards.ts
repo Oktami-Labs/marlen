@@ -25,7 +25,7 @@ import {
   type ReportSection,
   type SourceItem,
   splitPage,
-  type WikiDiffRow,
+  type TextDiffRow,
 } from "@marlen/shared";
 import { textDiff } from "../core/utils/diff.js";
 import { isNonEmptyString, isRecord } from "../core/utils/util.js";
@@ -558,7 +558,7 @@ function parseWikiDiff(value: unknown): CardOf<"wiki_note">["diff"] {
   if (!isRecord(value)) return undefined;
   const { added, removed, rows } = value;
   if (typeof added !== "number" || typeof removed !== "number") return undefined;
-  const parsed: WikiDiffRow[] = [];
+  const parsed: TextDiffRow[] = [];
   for (const row of Array.isArray(rows) ? rows : []) {
     if (!isRecord(row) || !isString(row.text)) continue;
     if (row.op !== "+" && row.op !== "-") continue;

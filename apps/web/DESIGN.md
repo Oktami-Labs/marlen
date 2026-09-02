@@ -135,8 +135,10 @@ clean call sites; when you add one, add it to this list.
   tint containers.
 - **Empty states:** `EmptyState`.
 - **Step marks:** `StepCircle`. **Keyboard hints:** `Kbd`.
-- **Draft rows:** `SentRow`, `RefineInChatButton`, `EditSaveActions`
+- **Draft rows:** `SentRow`, `DiscussInChatButton`, `EditSaveActions`
   (`components/draftActions.tsx`) provide the shared parts of an approve/send row.
+- **Rewrites:** `ChangeList` (`ui/change-list.tsx`) is the one shape for what a
+  rewrite changed, the changed lines alone, tinted and struck through.
 - **Icon verbs:** `.icon-send`/`.icon-discard`/`.icon-refine` move a glyph in its
   verb's direction on hover. Transform only, so hover never reflows.
 - **Lists:** rows separated by spacing or a hover fill, never a divider. A long

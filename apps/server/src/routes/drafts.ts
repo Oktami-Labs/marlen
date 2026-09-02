@@ -3,6 +3,7 @@ import type {
   AccountDrafts,
   ConnectedAccount,
   DraftProposalStatusResult,
+  DraftRewriteResult,
   EmailDraftDetail,
   KeepDraftProposalResult,
 } from "@marlen/shared";
@@ -23,6 +24,7 @@ import {
   syncEmailApprovalsInBackground,
 } from "../services/approvals.js";
 import { keepDraftProposal } from "../services/draftProposals.js";
+import { rewriteDraftText } from "../services/draftRewrite.js";
 
 async function findDraftAccount(
   accountId: string,
@@ -43,6 +45,13 @@ const draftPatchBody = Type.Object({
   to: Type.Optional(Type.String()),
   cc: Type.Optional(Type.String()),
   bcc: Type.Optional(Type.String()),
+});
+const accountParams = Type.Object({ accountId: Type.String() });
+const rewriteBody = Type.Object({
+  instruction: Type.String({ minLength: 1, maxLength: 2_000 }),
+  /** The letter as it stands on screen, unsaved edits included. */
+  body: Type.String(),
+  subject: Type.String(),
 });
 const proposalParams = Type.Object({ proposalId: Type.String() });
 const keepProposalBody = Type.Object({ send: Type.Optional(Type.Boolean()) });
@@ -173,6 +182,25 @@ export const draftRoutes: FastifyPluginAsyncTypebox = async (app) => {
         return { ok: true };
       } catch (error) {
         throw toProviderError(error, "draft not found");
+      }
+    },
+  );
+
+  /**
+   * The instruction line under a draft. Saves nothing and needs no write
+   * grant: it returns the rewrite for the user to keep or drop, and the PATCH
+   * below is still what commits text to the mailbox.
+   */
+  app.post(
+    "/api/drafts/:accountId/rewrite",
+    { schema: { params: accountParams, body: rewriteBody } },
+    async (req): Promise<DraftRewriteResult> => {
+      const found = await findDraftAccount(req.params.accountId);
+      if (!found) throw notFound("account not found");
+      try {
+        return await rewriteDraftText(found.account, req.body);
+      } catch (error) {
+        throw upstreamError(errorMessage(error), error);
       }
     },
   );

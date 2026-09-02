@@ -374,6 +374,16 @@ export async function listAccountVoiceInfos(): Promise<AccountVoiceInfo[]> {
   });
 }
 
+/** The learned style for one account, or nothing when it has none yet or the read fails. */
+export async function accountVoiceDirectives(accountId: string): Promise<string[] | undefined> {
+  try {
+    const infos = await listAccountVoiceInfos();
+    return infos.find((info) => info.accountId === accountId)?.directives;
+  } catch {
+    return undefined;
+  }
+}
+
 export const voiceLearnTool: AgentTool = tool({
   name: "voice_learn",
   label: "Learn account voice",

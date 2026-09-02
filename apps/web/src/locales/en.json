@@ -613,7 +613,6 @@
     "previous": "Previous draft",
     "next": "Next draft",
     "openReader": "Open draft",
-    "refineLabel": "Refine",
     "bodyLabel": "Message",
     "open": "Open in mailbox",
     "discard": "Discard draft",
@@ -623,9 +622,18 @@
     "sent": "Sent",
     "sentToast": "Draft sent.",
     "emptyBodyText": "(empty body)",
-    "refine": "Refine with AI",
-    "refineInChat": "Refine in the chat that wrote it",
-    "refinePrompt": "Please refine the draft \"{{subject}}\"",
+    "rewrite": "Rewrite",
+    "rewriteAsk": "What should be different?",
+    "rewritePresets": {
+      "shorter": "Shorter",
+      "warmer": "Warmer",
+      "formal": "More formal"
+    },
+    "rewriteChanges": "{{added}} added, {{removed}} removed",
+    "rewriteApply": "Apply",
+    "rewriteRevert": "Revert",
+    "rewriteNoChange": "Nothing changed.",
+    "discussInChat": "Discuss in chat",
     "save": "Save"
   },
   "mail": {

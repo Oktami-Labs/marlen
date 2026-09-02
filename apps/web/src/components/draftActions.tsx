@@ -1,4 +1,4 @@
-import { Sparkles } from "lucide-react";
+import { MessagesSquare } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
@@ -80,52 +80,58 @@ export function DraftActionDialog({
 }
 
 /**
- * Hands a draft to the chat for rewording. With a `conversationId` the agent
- * wrote this draft, so its conversation reopens with the context and the draft
- * card intact; without one the draft predates the link and a fresh chat with a
- * prefilled ask is the best available.
+ * Reopens the conversation that wrote a message, for the asks its own row
+ * cannot serve: looking something up, checking the thread, attaching a file.
+ * Nothing to open on a message written outside a chat, so the action is absent
+ * there rather than starting cold.
  */
-export function RefineInChatButton({
+export function DiscussInChatButton({
   conversationId,
-  subject,
   label,
 }: {
   conversationId?: string | null;
-  subject: string;
   /** Renders the action as a labelled button; without it, a bare row icon. */
   label?: string;
 }) {
   const { t } = useTranslation();
-  const title = conversationId ? t("drafts.refineInChat") : t("drafts.refine");
+  const title = t("drafts.discussInChat");
+  if (!conversationId) return null;
   return (
     <Button
       variant="ghost"
       size={label ? "sm" : "icon-xs"}
-      className="icon-refine hover:bg-accent/10 hover:text-accent-text"
+      className="hover:bg-accent/10 hover:text-accent-text"
       onClick={(e) => {
         e.stopPropagation();
         revealChat();
-        if (conversationId) sendChatCommand({ kind: "open", conversationId });
-        else sendChatCommand({ kind: "prefill", text: t("drafts.refinePrompt", { subject }) });
+        sendChatCommand({ kind: "open", conversationId });
       }}
       title={title}
       aria-label={label ?? title}
     >
-      <Sparkles />
+      <MessagesSquare />
       {label}
     </Button>
   );
 }
 
-/** The cancel/save footer an in-place draft edit reveals once it is dirty. */
+/**
+ * The cancel/save footer an in-place draft edit reveals once it is dirty, and
+ * the keep/drop decision a pending rewrite reveals, which is the same pair of
+ * buttons under different words.
+ */
 export function EditSaveActions({
   saving,
   busy,
+  cancelLabel,
+  saveLabel,
   onCancel,
   onSave,
 }: {
   saving: boolean;
   busy: boolean;
+  cancelLabel?: string;
+  saveLabel?: string;
   onCancel: () => void;
   onSave: () => void;
 }) {
@@ -133,10 +139,10 @@ export function EditSaveActions({
   return (
     <div className="flex justify-end gap-2">
       <Button variant="ghost" size="sm" onClick={onCancel} disabled={saving || busy}>
-        {t("common.cancel")}
+        {cancelLabel ?? t("common.cancel")}
       </Button>
       <Button size="sm" onClick={onSave} disabled={busy} loading={saving}>
-        {saving ? t("common.saving") : t("drafts.save")}
+        {saving ? t("common.saving") : (saveLabel ?? t("drafts.save"))}
       </Button>
     </div>
   );

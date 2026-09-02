@@ -17,6 +17,7 @@ import type {
   ConversationListResponse,
   ConversationType,
   DraftProposalStatusResult,
+  DraftRewriteResult,
   EmailDraftDetail,
   EmailRef,
   EmailThreadMessage,
@@ -292,6 +293,11 @@ export const api = {
       `/api/drafts/${encodeURIComponent(accountId)}/${encodeURIComponent(draftId)}`,
       patch,
     ),
+  rewriteDraft: (
+    accountId: string,
+    input: { instruction: string; body: string; subject: string },
+  ) =>
+    http<DraftRewriteResult>("POST", `/api/drafts/${encodeURIComponent(accountId)}/rewrite`, input),
   sendDraft: (accountId: string, draftId: string) =>
     http<{ ok: boolean }>(
       "POST",

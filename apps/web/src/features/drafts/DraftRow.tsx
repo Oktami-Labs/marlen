@@ -1,11 +1,12 @@
 import type { Todo, TodoRef } from "@marlen/shared";
-import { Send, Trash2 } from "lucide-react";
+import { Send, Sparkles, Trash2 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { DraftActionDialog, RefineInChatButton, useDraftActions } from "@/components/draftActions";
+import { DiscussInChatButton, DraftActionDialog, useDraftActions } from "@/components/draftActions";
 import { AvatarMark } from "@/components/ui/avatar-mark";
 import { Button } from "@/components/ui/button";
 import { SentRow } from "@/components/ui/list-row";
+import { REWRITE_BAR_ENABLED } from "@/features/drafts/RewriteBar";
 import { NeedsRow } from "@/features/home/NeedsRow";
 import { ApprovalNote } from "@/features/home/TodoRow";
 import { recipientNames, splitAddresses } from "@/lib/addresses";
@@ -27,7 +28,8 @@ export function DraftRow({
   onAnswer,
 }: {
   todo: EmailApproval;
-  onOpen: () => void;
+  /** Opens the letter; `rewrite` puts the caret in its instruction line. */
+  onOpen: (opts?: { rewrite?: boolean }) => void;
   /** The draft was sent or discarded: the list refetches without waiting on the event debounce. */
   onChanged: () => void;
   onError: (message: string | null) => void;
@@ -97,13 +99,28 @@ export function DraftRow({
       title={subject}
       meta={`${t("home.approvalEmailTo", { name })} · ${whenLabel(todo.createdAt, i18n.language)}`}
       isNew={isNew}
-      onPress={onOpen}
+      onPress={() => onOpen()}
       actions={
         <>
-          <RefineInChatButton
-            conversationId={todo.conversationId ?? undefined}
-            subject={todo.title}
-          />
+          {/* Rewording happens in the letter, so this opens it rather than
+              carrying an instruction line into every row. */}
+          {REWRITE_BAR_ENABLED && (
+            <Button
+              variant="ghost"
+              size="icon-xs"
+              className="icon-refine hover:bg-accent/10 hover:text-accent-text"
+              onClick={(e) => {
+                e.stopPropagation();
+                onOpen({ rewrite: true });
+              }}
+              disabled={actions.busy}
+              title={t("drafts.rewrite")}
+              aria-label={t("drafts.rewrite")}
+            >
+              <Sparkles />
+            </Button>
+          )}
+          <DiscussInChatButton conversationId={todo.conversationId} />
           <Button
             variant="ghost"
             size="icon-xs"

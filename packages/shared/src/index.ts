@@ -1,4 +1,4 @@
-import type { AgentCard, EmailRef } from "./cards.js";
+import type { AgentCard, EmailRef, TextDiff } from "./cards.js";
 
 export * from "./appSettings.js";
 export * from "./cards.js";
@@ -376,6 +376,13 @@ export interface EmailDraftDetail {
   cc: string;
   bcc: string;
   signature?: string;
+}
+
+/** The rewrite a draft's instruction line asked for, not yet saved anywhere. */
+export interface DraftRewriteResult {
+  body: string;
+  subject: string;
+  diff: TextDiff;
 }
 
 export type DraftProposalStatus = "proposed" | "kept" | "sent" | "discarded";

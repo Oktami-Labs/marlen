@@ -613,7 +613,6 @@
     "previous": "Vorheriger Entwurf",
     "next": "Nächster Entwurf",
     "openReader": "Entwurf öffnen",
-    "refineLabel": "Überarbeiten",
     "bodyLabel": "Nachricht",
     "open": "Im Postfach öffnen",
     "discard": "Entwurf verwerfen",
@@ -623,9 +622,18 @@
     "sent": "Gesendet",
     "sentToast": "Entwurf gesendet.",
     "emptyBodyText": "(leerer Inhalt)",
-    "refine": "Mit KI überarbeiten",
-    "refineInChat": "Im zugehörigen Chat überarbeiten",
-    "refinePrompt": "Bitte überarbeite den Entwurf „{{subject}}“",
+    "rewrite": "Überarbeiten",
+    "rewriteAsk": "Was soll anders sein?",
+    "rewritePresets": {
+      "shorter": "Kürzer",
+      "warmer": "Freundlicher",
+      "formal": "Formeller"
+    },
+    "rewriteChanges": "{{added}} neu, {{removed}} entfernt",
+    "rewriteApply": "Übernehmen",
+    "rewriteRevert": "Verwerfen",
+    "rewriteNoChange": "Nichts geändert.",
+    "discussInChat": "Im Chat besprechen",
     "save": "Speichern"
   },
   "mail": {

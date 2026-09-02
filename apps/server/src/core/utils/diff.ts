@@ -1,15 +1,4 @@
-/** One changed line of a text rewrite, in the order it appears. */
-export interface DiffRow {
-  op: "+" | "-";
-  text: string;
-}
-
-export interface TextDiff {
-  added: number;
-  removed: number;
-  /** The changed lines, capped; empty when the change is too large to spell out. */
-  rows: DiffRow[];
-}
+import type { TextDiff, TextDiffRow } from "@marlen/shared";
 
 /** Past this many lines a side is only counted, not diffed: the table is O(n·m). */
 const MAX_LINES = 300;
@@ -45,12 +34,12 @@ export function textDiff(before: string, after: string, maxRows = 40): TextDiff 
     }
   }
 
-  const rows: DiffRow[] = [];
+  const rows: TextDiffRow[] = [];
   let added = 0;
   let removed = 0;
   let i = 0;
   let j = 0;
-  const push = (op: DiffRow["op"], text: string) => {
+  const push = (op: TextDiffRow["op"], text: string) => {
     if (op === "+") added++;
     else removed++;
     if (text.trim() && rows.length < maxRows) rows.push({ op, text });

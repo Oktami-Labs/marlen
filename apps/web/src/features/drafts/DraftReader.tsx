@@ -1,19 +1,22 @@
-import type { AccountDrafts, EmailDraft } from "@marlen/shared";
+import type { AccountDrafts, EmailDraft, TextDiff } from "@marlen/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { ChevronDown, ChevronLeft, ChevronUp } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
+  DiscussInChatButton,
   DraftActionDialog,
   EditSaveActions,
-  RefineInChatButton,
   useDraftActions,
 } from "@/components/draftActions";
 import { ThreadHistory } from "@/components/ThreadHistory";
 import { Button } from "@/components/ui/button";
-import { ErrorBanner, LoadingRow } from "@/components/ui/feedback";
+import { ChangeList } from "@/components/ui/change-list";
+import { ErrorBanner, LoadingRow, RetryableError } from "@/components/ui/feedback";
 import { Input } from "@/components/ui/input";
 import { OpenExternalButton } from "@/components/ui/open-external-button";
 import { Textarea } from "@/components/ui/textarea";
+import { REWRITE_BAR_ENABLED, RewriteBar } from "@/features/drafts/RewriteBar";
 import { api, isNotFound } from "@/lib/api";
 import { dateTimeLabel } from "@/lib/dates";
 import { toast } from "@/lib/toast";
@@ -39,12 +42,31 @@ export function draftStack(drafts: AccountDrafts[] | null): StackEntry[] {
   );
 }
 
+/** Every editable field of the letter, as one value. */
+interface Fields {
+  body: string;
+  subject: string;
+  to: string;
+  cc: string;
+  bcc: string;
+}
+
+/** A rewrite waiting to be kept or dropped. */
+interface PendingRewrite {
+  diff: TextDiff;
+  /** The letter as it stood before it, restored by Revert. */
+  previous: Fields;
+}
+
 /**
  * One draft, read and edited on its own screen: the letter first, with the
  * decision at the bottom of it, and the conversation it answers folded
  * underneath. The approval list stays one click away and the stack is walked
  * with the arrows, so a queue of drafts is worked through without returning to
  * the list between two of them.
+ *
+ * Mounted under a key per draft (see HomePanel), so moving through the stack
+ * starts each letter clean with no state to reset.
  */
 export function DraftReader({
   entry,
@@ -52,117 +74,75 @@ export function DraftReader({
   onClose,
   onOpen,
   onChanged,
+  focusRewrite,
 }: {
   entry: StackEntry;
   /** The whole review stack, for the position readout and the arrows. */
   stack: StackEntry[];
   onClose: () => void;
   onOpen: (accountId: string, draftId: string) => void;
-  /** Called after a send, discard or save, so the list behind refetches. */
+  /** Called after a send or discard, so the list behind refetches. */
   onChanged: () => void;
+  /** Opened from Home's rewrite action: the instruction line takes the caret. */
+  focusRewrite?: boolean;
 }) {
   const { t, i18n } = useTranslation();
+  const queryClient = useQueryClient();
   const { accountId, account, draft } = entry;
 
-  const [detail, setDetail] = React.useState<{
-    body: string;
-    cc: string;
-    bcc: string;
-    signature?: string;
-  } | null>(null);
-  // `*Draft` are the live field values, `saved*` the last-persisted baselines
-  // they are compared against for the dirty flag.
-  const [bodyDraft, setBodyDraft] = React.useState("");
-  const [savedBody, setSavedBody] = React.useState("");
-  const [subjectDraft, setSubjectDraft] = React.useState(draft.subject);
-  const [savedSubject, setSavedSubject] = React.useState(draft.subject);
-  const [toDraft, setToDraft] = React.useState(draft.to);
-  const [savedTo, setSavedTo] = React.useState(draft.to);
-  const [ccDraft, setCcDraft] = React.useState("");
-  const [savedCc, setSavedCc] = React.useState("");
-  const [bccDraft, setBccDraft] = React.useState("");
-  const [savedBcc, setSavedBcc] = React.useState("");
-  /** Cc and Bcc stay folded away until the draft has one or the user asks. */
-  const [copiesOpen, setCopiesOpen] = React.useState(false);
+  // The saved letter. A rewrite the agent makes elsewhere lands here through
+  // the drafts topic, so the reader never shows text the mailbox no longer has.
+  const detailQuery = useQuery({
+    queryKey: ["drafts", "detail", accountId, draft.id],
+    queryFn: () => api.draftDetail(accountId, draft.id),
+    retry: false,
+  });
+  const detail = detailQuery.data;
+  const saved: Fields | null = detail
+    ? {
+        body: detail.body,
+        subject: draft.subject,
+        to: draft.to,
+        cc: detail.cc,
+        bcc: detail.bcc,
+      }
+    : null;
+
+  // Unsaved edits, the user's or a rewrite's; null while the letter stands as
+  // saved, so an edit elsewhere shows up instead of being held off by a
+  // baseline of its own.
+  const [edit, setEdit] = React.useState<Fields | null>(null);
+  const [rewrite, setRewrite] = React.useState<PendingRewrite | null>(null);
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
+  /** Cc and Bcc stay folded away until the draft has one or the user asks. */
+  const [copiesAsked, setCopiesAsked] = React.useState(false);
+  const copiesOpen = copiesAsked || Boolean(detail?.cc || detail?.bcc);
+
+  const fields = edit ?? saved;
+  const dirty = Boolean(saved && fields && !sameFields(fields, saved));
+  /** Every field write goes through here, so a first keystroke forks the baseline. */
+  const put = (patch: Partial<Fields>) => {
+    if (!fields) return;
+    setEdit({ ...fields, ...patch });
+  };
 
   const index = stack.findIndex((item) => item.draft.id === draft.id);
   const previous = index > 0 ? stack[index - 1] : undefined;
   const next = index >= 0 ? stack[index + 1] : undefined;
 
-  // Reload whenever the reader moves to another draft; the fields are reset
-  // from the fetched body so a half-typed edit never leaks across drafts.
-  React.useEffect(() => {
-    let current = true;
-    setDetail(null);
-    setError(null);
-    setSubjectDraft(draft.subject);
-    setSavedSubject(draft.subject);
-    setToDraft(draft.to);
-    setSavedTo(draft.to);
-    setCopiesOpen(false);
-    api
-      .draftDetail(accountId, draft.id)
-      .then((result) => {
-        if (!current) return;
-        setDetail(result);
-        setBodyDraft(result.body);
-        setSavedBody(result.body);
-        setCcDraft(result.cc);
-        setSavedCc(result.cc);
-        setBccDraft(result.bcc);
-        setSavedBcc(result.bcc);
-        if (result.cc || result.bcc) setCopiesOpen(true);
-      })
-      .catch((err) => {
-        if (current) setError(errorMessage(err));
-      });
-    return () => {
-      current = false;
-    };
-  }, [accountId, draft.id, draft.subject, draft.to]);
-
-  const dirty =
-    bodyDraft !== savedBody ||
-    subjectDraft !== savedSubject ||
-    toDraft !== savedTo ||
-    ccDraft !== savedCc ||
-    bccDraft !== savedBcc;
-
-  /** PATCHes only the fields that changed from their saved baseline. */
-  const savePatch = () => ({
-    ...(bodyDraft !== savedBody && { body: bodyDraft }),
-    ...(subjectDraft !== savedSubject && { subject: subjectDraft }),
-    ...(toDraft !== savedTo && { to: toDraft }),
-    ...(ccDraft !== savedCc && { cc: ccDraft }),
-    ...(bccDraft !== savedBcc && { bcc: bccDraft }),
-  });
-
-  const markSaved = () => {
-    setSavedBody(bodyDraft);
-    setSavedSubject(subjectDraft);
-    setSavedTo(toDraft);
-    setSavedCc(ccDraft);
-    setSavedBcc(bccDraft);
-  };
-
-  const revertEdits = () => {
-    setBodyDraft(savedBody);
-    setSubjectDraft(savedSubject);
-    setToDraft(savedTo);
-    setCcDraft(savedCc);
-    setBccDraft(savedBcc);
-  };
-
   const save = async () => {
+    if (!saved || !fields) return;
     setSaving(true);
     setError(null);
     try {
-      await api.updateDraft(accountId, draft.id, savePatch());
-      markSaved();
+      await api.updateDraft(accountId, draft.id, patchOf(fields, saved));
+      // Released only once the refetched letter carries the new text, so the
+      // paper never flashes back to what was on it a moment ago.
+      await queryClient.invalidateQueries({ queryKey: ["drafts"] });
+      setEdit(null);
+      setRewrite(null);
       toast.success(t("common.saved"));
-      onChanged();
     } catch (err) {
       // Keep the typed text, only the banner reflects the failure.
       setError(errorMessage(err));
@@ -183,7 +163,9 @@ export function DraftReader({
     send: async () => {
       setError(null);
       try {
-        if (dirty) await api.updateDraft(accountId, draft.id, savePatch());
+        if (saved && fields && dirty) {
+          await api.updateDraft(accountId, draft.id, patchOf(fields, saved));
+        }
         await api.sendDraft(accountId, draft.id);
         toast.success(t("drafts.sentToast"));
         advance();
@@ -209,6 +191,34 @@ export function DraftReader({
       }
     },
   });
+
+  /**
+   * The instruction line. The letter as it stands on screen is what gets
+   * rewritten, unsaved edits included, and the result only lands in the
+   * fields: nothing reaches the mailbox until the user keeps it.
+   */
+  const askRewrite = async (instruction: string) => {
+    if (!fields) return;
+    const result = await api.rewriteDraft(accountId, {
+      instruction,
+      body: fields.body,
+      subject: fields.subject,
+    });
+    if (result.diff.added + result.diff.removed === 0) {
+      toast.info(t("drafts.rewriteNoChange"));
+      return;
+    }
+    setError(null);
+    setEdit({ ...fields, body: result.body, subject: result.subject });
+    // A second rewrite reverts to where the first one started, so Revert always
+    // means "the letter I wrote", never "the rewrite before this one".
+    setRewrite({ diff: result.diff, previous: rewrite?.previous ?? fields });
+  };
+
+  const revertRewrite = () => {
+    if (rewrite) setEdit(rewrite.previous);
+    setRewrite(null);
+  };
 
   return (
     <div className="flex flex-col gap-5 pt-1">
@@ -249,16 +259,21 @@ export function DraftReader({
       </div>
 
       {error && <ErrorBanner>{error}</ErrorBanner>}
+      {detailQuery.error && (
+        <RetryableError onRetry={() => void detailQuery.refetch()}>
+          {errorMessage(detailQuery.error)}
+        </RetryableError>
+      )}
 
       {/* The letter. Subject and body are the paper itself, with a writing
           line that surfaces on hover and follows the caret, so nothing here
           reads as a form. */}
       <div className="surface flex flex-col gap-4 rounded-[--radius] p-6">
         <Input
-          value={subjectDraft}
-          onChange={(e) => setSubjectDraft(e.target.value)}
+          value={fields?.subject ?? draft.subject}
+          onChange={(e) => put({ subject: e.target.value })}
           placeholder={t("drafts.noSubject")}
-          disabled={actions.busy}
+          disabled={actions.busy || !fields}
           aria-label={t("mail.subject")}
           className="field-paper h-auto px-0 py-1 text-base font-semibold tracking-tight"
         />
@@ -268,17 +283,17 @@ export function DraftReader({
         <div className="grid grid-cols-[auto_1fr_auto] items-center gap-x-4 gap-y-1 border-b border-border pb-4 text-sm">
           <span className="text-muted-foreground">{t("mail.to")}</span>
           <Input
-            value={toDraft}
-            onChange={(e) => setToDraft(e.target.value)}
+            value={fields?.to ?? draft.to}
+            onChange={(e) => put({ to: e.target.value })}
             placeholder={t("drafts.recipientsPlaceholder")}
-            disabled={actions.busy}
+            disabled={actions.busy || !fields}
             aria-label={t("mail.to")}
             className="field-paper h-auto px-0 py-1 text-sm"
           />
           {copiesOpen ? (
             <span />
           ) : (
-            <Button variant="ghost" size="sm" onClick={() => setCopiesOpen(true)}>
+            <Button variant="ghost" size="sm" onClick={() => setCopiesAsked(true)}>
               {t("drafts.addCopies")}
             </Button>
           )}
@@ -287,19 +302,19 @@ export function DraftReader({
             <>
               <span className="text-muted-foreground">{t("mail.cc")}</span>
               <Input
-                value={ccDraft}
-                onChange={(e) => setCcDraft(e.target.value)}
+                value={fields?.cc ?? ""}
+                onChange={(e) => put({ cc: e.target.value })}
                 placeholder={t("drafts.recipientsPlaceholder")}
-                disabled={actions.busy || !detail}
+                disabled={actions.busy || !fields}
                 aria-label={t("mail.cc")}
                 className="field-paper col-span-2 h-auto px-0 py-1 text-sm"
               />
               <span className="text-muted-foreground">{t("mail.bcc")}</span>
               <Input
-                value={bccDraft}
-                onChange={(e) => setBccDraft(e.target.value)}
+                value={fields?.bcc ?? ""}
+                onChange={(e) => put({ bcc: e.target.value })}
                 placeholder={t("drafts.recipientsPlaceholder")}
-                disabled={actions.busy || !detail}
+                disabled={actions.busy || !fields}
                 aria-label={t("mail.bcc")}
                 className="field-paper col-span-2 h-auto px-0 py-1 text-sm"
               />
@@ -310,13 +325,13 @@ export function DraftReader({
           <span className="col-span-2 truncate text-muted-foreground">{account}</span>
         </div>
 
-        {!detail ? (
+        {!fields ? (
           <LoadingRow className="py-6 text-xs" />
         ) : (
           <>
             <Textarea
-              value={bodyDraft}
-              onChange={(e) => setBodyDraft(e.target.value)}
+              value={fields.body}
+              onChange={(e) => put({ body: e.target.value })}
               placeholder={t("drafts.emptyBodyText")}
               disabled={actions.busy}
               aria-label={t("drafts.bodyLabel")}
@@ -324,19 +339,50 @@ export function DraftReader({
             />
             {/* The account signature: the server detached it from the body and
                 re-appends it on send, so it is shown but never editable here. */}
-            {detail.signature && (
+            {detail?.signature && (
               <p className="whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
                 {detail.signature}
               </p>
             )}
+
+            {/* What the rewrite changed, so the letter needs no re-reading to
+                see it. Counted even when the lines are too many to list. */}
+            {rewrite && (
+              <div className="flex flex-col gap-1.5">
+                <span className="font-mono text-2xs uppercase tracking-[0.12em] text-muted-foreground">
+                  {t("drafts.rewriteChanges", {
+                    added: rewrite.diff.added,
+                    removed: rewrite.diff.removed,
+                  })}
+                </span>
+                <ChangeList diff={rewrite.diff} />
+              </div>
+            )}
+
+            {REWRITE_BAR_ENABLED && (
+              <RewriteBar
+                onSubmit={askRewrite}
+                disabled={actions.busy || saving}
+                autoFocus={focusRewrite}
+              />
+            )}
           </>
         )}
 
-        {dirty ? (
+        {rewrite ? (
           <EditSaveActions
             saving={saving}
             busy={actions.busy}
-            onCancel={revertEdits}
+            cancelLabel={t("drafts.rewriteRevert")}
+            saveLabel={t("drafts.rewriteApply")}
+            onCancel={revertRewrite}
+            onSave={() => void save()}
+          />
+        ) : dirty ? (
+          <EditSaveActions
+            saving={saving}
+            busy={actions.busy}
+            onCancel={() => setEdit(null)}
             onSave={() => void save()}
           />
         ) : (
@@ -355,16 +401,15 @@ export function DraftReader({
             >
               {t("drafts.discard")}
             </Button>
-            <RefineInChatButton
+            <DiscussInChatButton
               conversationId={draft.conversationId}
-              subject={draft.subject}
-              label={t("drafts.refineLabel")}
+              label={t("drafts.discussInChat")}
             />
             <Button
               size="sm"
               className="icon-send"
               onClick={() => actions.arm("send")}
-              disabled={actions.busy || !detail}
+              disabled={actions.busy || !fields}
               loading={actions.busy && actions.pending === "send"}
             >
               {t("drafts.send")}
@@ -387,4 +432,25 @@ export function DraftReader({
       />
     </div>
   );
+}
+
+function sameFields(a: Fields, b: Fields): boolean {
+  return (
+    a.body === b.body &&
+    a.subject === b.subject &&
+    a.to === b.to &&
+    a.cc === b.cc &&
+    a.bcc === b.bcc
+  );
+}
+
+/** PATCHes only the fields that differ from what is saved. */
+function patchOf(fields: Fields, saved: Fields): Partial<Fields> {
+  return {
+    ...(fields.body !== saved.body && { body: fields.body }),
+    ...(fields.subject !== saved.subject && { subject: fields.subject }),
+    ...(fields.to !== saved.to && { to: fields.to }),
+    ...(fields.cc !== saved.cc && { cc: fields.cc }),
+    ...(fields.bcc !== saved.bcc && { bcc: fields.bcc }),
+  };
 }

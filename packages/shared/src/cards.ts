@@ -159,10 +159,18 @@ export interface ChartPoint {
   tone?: ChartTone;
 }
 
-/** One changed line of a rewritten wiki page. */
-export interface WikiDiffRow {
+/** One changed line of a rewrite, in the order it appears. */
+export interface TextDiffRow {
   op: "+" | "-";
   text: string;
+}
+
+/** What a rewrite changed: the counts, plus the changed lines when they fit. */
+export interface TextDiff {
+  added: number;
+  removed: number;
+  /** The changed lines, capped; empty when the change is too large to spell out. */
+  rows: TextDiffRow[];
 }
 
 /** One thing the agent still needs before it can act. */
@@ -272,7 +280,7 @@ export type AgentCard =
       /** The page already existed and was rewritten. */
       updated?: boolean;
       /** What the rewrite changed, when it was one. */
-      diff?: { added: number; removed: number; rows: WikiDiffRow[] };
+      diff?: TextDiff;
     }
   | {
       kind: "report";

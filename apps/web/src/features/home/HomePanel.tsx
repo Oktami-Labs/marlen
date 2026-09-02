@@ -61,8 +61,11 @@ export function HomePanel({
     draftParam && separator > 0
       ? { accountId: draftParam.slice(0, separator), draftId: draftParam.slice(separator + 1) }
       : null;
-  const openDraft = (accountId: string, draftId: string) =>
-    setSearchParams({ draft: `${accountId}:${draftId}` });
+  const openDraft = (accountId: string, draftId: string, opts?: { rewrite?: boolean }) =>
+    setSearchParams({
+      draft: `${accountId}:${draftId}`,
+      ...(opts?.rewrite ? { rewrite: "1" } : {}),
+    });
   const reportParam = searchParams.get("report");
   const openRun = (runId: string) => setSearchParams({ report: runId });
   const closePage = () => setSearchParams({}, { replace: true });
@@ -108,6 +111,7 @@ export function HomePanel({
         onClose={closePage}
         onOpen={openDraft}
         onChanged={refreshDrafts}
+        focusRewrite={searchParams.get("rewrite") === "1"}
       />
     );
   }

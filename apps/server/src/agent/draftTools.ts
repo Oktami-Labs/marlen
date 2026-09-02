@@ -25,20 +25,11 @@ import { keepDraftProposal } from "../services/draftProposals.js";
 import { resolveLibraryAttachments } from "../storage/library/draftAttachments.js";
 import { buildEmailDraftCard, cardNote, toCardAccount } from "./cards.js";
 import { numberedList, textResult, tool } from "./toolkit.js";
-import { listAccountVoiceInfos } from "./voiceLearn.js";
+import { accountVoiceDirectives } from "./voiceLearn.js";
 
 const log = moduleLogger("draftTools");
 
 const DRAFT_CARD_NOTE = cardNote("the draft", "Don't repeat its subject or body in your reply.");
-
-async function draftVoiceDirectives(accountId: string): Promise<string[] | undefined> {
-  try {
-    const infos = await listAccountVoiceInfos();
-    return infos.find((info) => info.accountId === accountId)?.directives;
-  } catch {
-    return undefined;
-  }
-}
 
 const SIGNATURE_TOOL_NOTE =
   `\n\nThe user's stored signature for this account is appended below the body ` +
@@ -268,7 +259,7 @@ export function buildDraftTool(
 
         const card = buildEmailDraftCard({
           account: toCardAccount(account),
-          voiceDirectives: await draftVoiceDirectives(account.id),
+          voiceDirectives: await accountVoiceDirectives(account.id),
           draft: {
             proposalId,
             ...(input.threadId ? { threadId: input.threadId } : {}),
@@ -355,7 +346,7 @@ export function buildDraftTool(
 
       const card = buildEmailDraftCard({
         account: toCardAccount(account),
-        voiceDirectives: await draftVoiceDirectives(account.id),
+        voiceDirectives: await accountVoiceDirectives(account.id),
         draft: {
           draftId: result.draftId,
           threadId: result.threadId,
@@ -441,7 +432,7 @@ export function buildUpdateDraftTool(
         await updateDraftProposalContent(draftId, { body: proposalBody, subject });
         const card = buildEmailDraftCard({
           account: toCardAccount(account),
-          voiceDirectives: await draftVoiceDirectives(account.id),
+          voiceDirectives: await accountVoiceDirectives(account.id),
           draft: {
             proposalId: draftId,
             ...(proposal.threadId ? { threadId: proposal.threadId } : {}),
@@ -480,7 +471,7 @@ export function buildUpdateDraftTool(
       if (details) {
         const card = buildEmailDraftCard({
           account: toCardAccount(account),
-          voiceDirectives: await draftVoiceDirectives(account.id),
+          voiceDirectives: await accountVoiceDirectives(account.id),
           draft: {
             draftId,
             ...(details.threadId ? { threadId: details.threadId } : {}),

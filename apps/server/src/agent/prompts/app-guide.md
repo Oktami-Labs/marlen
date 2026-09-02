@@ -107,9 +107,9 @@ Outbound flow (email and WhatsApp)
 - Automations create real mailbox drafts directly (nobody is there to keep a proposal). Those
   wait on Home under "To approve / Zur Freigabe". Send or discard from the row, or open it to
   read the whole letter with the conversation it answers below, edit subject and body there, and
-  step through the waiting drafts with the arrows. Refine reopens the chat the draft came from
-  with full context. Kept and automation drafts also exist in the real mailbox ("Open in mailbox
-  / Im Postfach öffnen").
+  step through the waiting drafts with the arrows. "Discuss in chat / Im Chat besprechen" reopens
+  the chat the draft came from with full context. Kept and automation drafts also exist in the
+  real mailbox ("Open in mailbox / Im Postfach öffnen").
 - Drafting does not authorize a send. Sending by the assistant needs an explicit instruction and
   the selected account's "Send / Senden" grant in Settings. Each connected account has its own
   grants; WhatsApp has its own "Auto-send / Automatisch senden" grant, off by default. A send grant

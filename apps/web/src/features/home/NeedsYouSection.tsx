@@ -43,7 +43,7 @@ export function NeedsYouSection({
   /** The connected inboxes and their live drafts; null while the (slow, live-mailbox) fetch is in flight. Read for per-inbox errors; the rows come from the todos list. */
   drafts: AccountDrafts[] | null;
   /** Opens one draft on the reading screen that replaces Home. */
-  onOpenDraft: (accountId: string, draftId: string) => void;
+  onOpenDraft: (accountId: string, draftId: string, opts?: { rewrite?: boolean }) => void;
   /** A draft row was sent/discarded: refresh the drafts list without waiting on the event debounce. */
   onDraftsChanged: () => void;
   onNavigate: (view: View) => void;
@@ -113,7 +113,7 @@ export function NeedsYouSection({
       return (
         <DraftRow
           todo={{ ...todo, ref }}
-          onOpen={() => onOpenDraft(ref.accountId, ref.draftId)}
+          onOpen={(opts) => onOpenDraft(ref.accountId, ref.draftId, opts)}
           onChanged={approvalChanged}
           onError={setRowError}
           isNew={isNew}
