@@ -1,4 +1,4 @@
-import { CHAT_ATTACHMENT_SCHEMA_STEP } from "./chatAttachmentSchemaStep.js";
+import * as attachmentSchema from "./chatAttachmentSchemaStep.js";
 
 /**
  * Numbered schema steps applied in order against PRAGMA user_version by
@@ -788,5 +788,10 @@ export const SCHEMA_STEPS: readonly string[] = [
   // 42: user-pasted chat attachments keep their bytes and extracted document
   // text beside the durable transcript. The message id owns them; the repeated
   // conversation id makes conversation deletion and history loading direct.
-  CHAT_ATTACHMENT_SCHEMA_STEP,
+  attachmentSchema.CHAT_ATTACHMENT_SCHEMA_STEP,
+  // 43: the runs feed orders by started_at; indexed, that stays a range read as the table grows.
+  "CREATE INDEX IF NOT EXISTS idx_runs_started ON automation_runs(started_at);",
+  // 44: rebuild from shared columns so tables lacking position gain durable order.
+  // SQLite cannot conditionally add columns; rowid retains per-message insertion order.
+  attachmentSchema.CHAT_ATTACHMENT_POSITION_REPAIR_SCHEMA_STEP,
 ];

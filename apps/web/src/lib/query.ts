@@ -34,6 +34,9 @@ export const queryClient = new QueryClient({
     queries: {
       staleTime: 30_000,
       refetchOnWindowFocus: false,
+      // The event stream refetches every topic when it reopens after a drop;
+      // the browser's own online event would do the same work a second time.
+      refetchOnReconnect: false,
       retry: 1,
     },
   },

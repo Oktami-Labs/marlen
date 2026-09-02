@@ -3,7 +3,13 @@ import { dirname, join } from "node:path";
 import { and, eq, inArray, like, or } from "drizzle-orm";
 import { db, schema } from "../../db/index.js";
 import { lowerSeenFloor } from "../../db/seenStore.js";
-import { clearAccountVoices, getAccountColors, setAccountColors } from "../../db/settings.js";
+import {
+  clearAccountVoices,
+  getAccountColors,
+  getProfile,
+  setAccountColors,
+  setProfileText,
+} from "../../db/settings.js";
 import { ensureAgentHome, knowledgeDir, wikiDir } from "../../storage/home/agentHome.js";
 import { scanLibrary } from "../../storage/library/ingest.js";
 import { listDocuments } from "../../storage/library/store.js";
@@ -151,6 +157,16 @@ async function writeKnowledgeFiles(rows: DemoRows): Promise<void> {
   }
 }
 
+/** The persona signs the sidebar and the prompt, unless the owner already has a name. */
+async function adoptPersonaProfile(): Promise<void> {
+  const current = await getProfile();
+  if (current.name || current.about) return;
+  await setProfileText({
+    name: DEMO.owner,
+    about: `Inhaberin von ${DEMO.studio}, Design und Branding in Hamburg. Mit Kunden per Sie, im Team per Du.`,
+  });
+}
+
 async function mergeAccountColors(rows: DemoRows): Promise<void> {
   const demoIds = new Set(rows.accountColors.map((color) => color.accountId));
   const kept = (await getAccountColors()).filter((color) => !demoIds.has(color.accountId));
@@ -167,6 +183,7 @@ export async function seedDemo(now = new Date()): Promise<DemoSeedSummary> {
   await writeKnowledgeFiles(rows);
   await scanLibrary();
   await mergeAccountColors(rows);
+  await adoptPersonaProfile();
   await lowerSeenFloor(rows.seenFloor);
   const documents = await listDocuments();
   return {

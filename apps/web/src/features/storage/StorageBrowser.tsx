@@ -514,7 +514,7 @@ function FolderTreeRow({
             selected ? "tint-accent font-medium" : "text-foreground hover:bg-surface-2",
           )}
         >
-          <Folder className="h-4 w-4 shrink-0 text-accent" />
+          <Folder className="h-4 w-4 shrink-0 text-accent-text" />
           <span className="truncate">{node.name}</span>
         </button>
       </div>

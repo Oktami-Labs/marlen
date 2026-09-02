@@ -3,6 +3,7 @@ import {
   type AccentColorPreference,
   isLanguage,
   LANGUAGE_LABELS,
+  QUICK_ACTION_PREFERENCES,
   SUPPORTED_LANGUAGES,
 } from "@marlen/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
@@ -18,7 +19,7 @@ import { useLaunchAtLoginPreference } from "@/lib/launchAtLogin";
 import { type QuickActionMode, useQuickActionMode } from "@/lib/quickActions";
 import { toast } from "@/lib/toast";
 import { ACCENT_COLOR_PRESETS, useAccentColor } from "@/lib/useTheme";
-import { cn, errorMessage } from "@/lib/utils";
+import { errorMessage } from "@/lib/utils";
 
 const TIMEZONE_QUERY_KEY = ["settings", "timezone"] as const;
 
@@ -33,7 +34,11 @@ function isAccentColorPreference(value: string): value is AccentColorPreference 
   return (ACCENT_COLOR_PREFERENCES as readonly string[]).includes(value);
 }
 
-function useSaveState() {
+function isQuickActionMode(value: string): value is QuickActionMode {
+  return (QUICK_ACTION_PREFERENCES as readonly string[]).includes(value);
+}
+
+export function useSaveState() {
   const [state, setState] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
   const [error, setError] = React.useState<string | null>(null);
   const resetTimer = React.useRef<number | null>(null);
@@ -62,7 +67,7 @@ function useSaveState() {
   return { state, error, run } as const;
 }
 
-function SaveStatus({
+export function SaveStatus({
   state,
   error,
 }: {
@@ -235,50 +240,25 @@ export function TimezoneControl({ id, className }: ControlProps) {
   );
 }
 
-export function QuickActionsControl({ id }: Pick<ControlProps, "id"> = {}) {
+export function QuickActionsControl({ id, className }: ControlProps) {
   const { t } = useTranslation();
   const controlId = useControlId(id, "quick-actions");
   const [mode, setMode] = useQuickActionMode();
-  const choices: { value: QuickActionMode; label: string }[] = [
-    { value: "send", label: t("settings.sections.quickActions.send") },
-    { value: "prefill", label: t("settings.sections.quickActions.prefill") },
-  ];
 
   return (
-    <fieldset
+    <Select
       id={controlId}
-      className="flex w-full min-w-0 rounded-lg border-0 bg-surface-2 p-1 @md:w-auto"
-    >
-      <legend className="sr-only">{t("settings.sections.quickActions.title")}</legend>
-      {choices.map((choice) => {
-        const selected = choice.value === mode;
-        return (
-          <label
-            key={choice.value}
-            className="relative min-w-0 flex-1 cursor-pointer @md:flex-none"
-          >
-            <input
-              type="radio"
-              name={controlId}
-              value={choice.value}
-              checked={selected}
-              onChange={() => setMode(choice.value)}
-              className="peer sr-only"
-            />
-            <span
-              className={cn(
-                "flex h-7 items-center justify-center whitespace-nowrap rounded-md px-2.5 text-xs font-medium transition-colors peer-focus-visible:outline-none peer-focus-visible:ring-2 peer-focus-visible:ring-ring peer-focus-visible:ring-offset-2 peer-focus-visible:ring-offset-surface-2",
-                selected
-                  ? "bg-primary text-primary-foreground"
-                  : "text-muted-foreground hover:text-foreground",
-              )}
-            >
-              {choice.label}
-            </span>
-          </label>
-        );
-      })}
-    </fieldset>
+      aria-label={t("settings.sections.quickActions.title")}
+      className={className}
+      value={mode}
+      onChange={(value) => {
+        if (isQuickActionMode(value)) setMode(value);
+      }}
+      options={QUICK_ACTION_PREFERENCES.map((value) => ({
+        value,
+        label: t(`settings.sections.quickActions.${value}`),
+      }))}
+    />
   );
 }
 

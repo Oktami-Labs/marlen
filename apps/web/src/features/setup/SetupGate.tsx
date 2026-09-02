@@ -7,6 +7,7 @@ import {
 import { Check, ChevronDown, ChevronUp } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { BrandMark } from "@/components/BrandMark";
 import { Button } from "@/components/ui/button";
 import { LoadingRow, Notice } from "@/components/ui/feedback";
 import { LinkButton } from "@/components/ui/link-button";
@@ -139,7 +140,7 @@ export function SetupGate({
     <div className="min-h-dvh overflow-y-auto scroll-stable px-5 py-12 sm:px-8">
       <div className="mx-auto flex w-full max-w-xl flex-col gap-10">
         <div className="flex flex-col gap-3">
-          <img src="/logo.svg" alt="" className="h-9 w-fit object-contain" />
+          <BrandMark className="h-10 w-auto text-accent" />
           <div className="flex flex-col gap-1">
             <h1 className="text-lg font-semibold tracking-tight">{t("setup.title")}</h1>
             <p className="text-sm text-muted-foreground">{t("setup.intro")}</p>

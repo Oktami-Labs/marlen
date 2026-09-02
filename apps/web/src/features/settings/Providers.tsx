@@ -299,7 +299,7 @@ function LoginFlowCard({ flow, onClose }: { flow: LoginFlowStatus; onClose: () =
       <div className="flex items-center justify-between">
         {/* tint-accent also tints text; restore the default ink since this row relies on it. */}
         <p className="flex items-center gap-2 text-sm font-medium text-foreground">
-          <Spinner className="text-accent" />
+          <Spinner className="text-accent-text" />
           {t("settings.signingInWith", { provider: flow.providerName ?? flow.providerId })}
         </p>
         <Button
@@ -366,7 +366,7 @@ function LoginFlowCard({ flow, onClose }: { flow: LoginFlowStatus; onClose: () =
                     href={flow.deviceCode.verificationUri}
                     target="_blank"
                     rel="noreferrer"
-                    className="text-accent underline"
+                    className="text-accent-text underline"
                   >
                     {flow.deviceCode.verificationUri}
                   </a>

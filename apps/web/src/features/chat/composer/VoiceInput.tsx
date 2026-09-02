@@ -289,7 +289,7 @@ function Waveform({ analyser }: { analyser: AnalyserNode }) {
     return () => cancelAnimationFrame(frame);
   }, [analyser]);
 
-  return <canvas ref={canvasRef} className="h-full w-full text-accent" />;
+  return <canvas ref={canvasRef} className="h-full w-full text-accent-text" />;
 }
 
 function elapsedLabel(ms: number): string {

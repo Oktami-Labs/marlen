@@ -1,5 +1,10 @@
 import { type EmailRef, LANGUAGE_ENGLISH_NAMES, type Language } from "@marlen/shared";
-import { getAccountPermissions, getLanguageSetting, userTimezone } from "../db/settings.js";
+import {
+  getAccountPermissions,
+  getLanguageSetting,
+  getProfile,
+  userTimezone,
+} from "../db/settings.js";
 import { parseMailbox } from "../email/textUtils.js";
 import { listPages } from "../storage/wiki/store.js";
 import { buildAccountsContext } from "./accounts.js";
@@ -53,6 +58,16 @@ function formatNow(timezone: string, locale: string): string {
     minute: "2-digit",
     hourCycle: "h23",
   }).format(new Date());
+}
+
+/** Who the user is, from Settings → Profile; nothing when they left it empty. */
+function buildProfileContext({ name, about }: { name: string; about: string }): string {
+  if (!name && !about) return "";
+  const lines = [
+    name ? `The user you work for is ${name}; address them by that name.` : "",
+    about ? `In their own words:\n${about}` : "",
+  ].filter(Boolean);
+  return `\n\n${lines.join("\n")}`;
 }
 
 /** The system prompt in its parts, in prompt order. */
@@ -205,6 +220,7 @@ export async function buildSystemPromptParts(
   later: wiki pages, skills, and any files you write.`;
   }
 
+  prompt += buildProfileContext(await getProfile());
   prompt += await buildAccountsContext(interactive);
 
   // Everything above is the app's own instructions plus one line per connected

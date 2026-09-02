@@ -2,7 +2,7 @@ import { randomUUID } from "node:crypto";
 import type { AgentMessage } from "@earendil-works/pi-agent-core";
 import type { Api, Message, Model } from "@earendil-works/pi-ai";
 import type { ChatToolCall } from "@marlen/shared";
-import { eq } from "drizzle-orm";
+import { and, desc, eq, gte } from "drizzle-orm";
 import { attachmentFromRow, listConversationAttachments } from "../db/chatAttachmentStore.js";
 import { db, schema } from "../db/index.js";
 import { attachmentModelInput } from "../services/chatAttachments.js";
@@ -129,11 +129,34 @@ function expandAssistantRow(row: MessageRow, model: Model<Api>, timestamp: numbe
  * (compaction_cutoff), which stays in full.
  */
 export async function loadHistory(conversationId: string): Promise<Message[]> {
+  // Everything before the latest compaction's cutoff is dropped by the replay
+  // below, so only the rows from the cutoff on are read; the compaction row
+  // itself is among them, as it was recorded after the tail it keeps.
+  const [latestCompaction] = await db
+    .select({
+      createdAt: schema.messages.createdAt,
+      compactionCutoff: schema.messages.compactionCutoff,
+    })
+    .from(schema.messages)
+    .where(
+      and(
+        eq(schema.messages.conversationId, conversationId),
+        eq(schema.messages.role, "compaction"),
+      ),
+    )
+    .orderBy(desc(schema.messages.createdAt))
+    .limit(1);
+  const inConversation = eq(schema.messages.conversationId, conversationId);
+  const since = latestCompaction
+    ? new Date(
+        latestCompaction.compactionCutoff ?? (Date.parse(latestCompaction.createdAt) || Date.now()),
+      ).toISOString()
+    : null;
   const [rows, attachmentRows] = await Promise.all([
     db
       .select()
       .from(schema.messages)
-      .where(eq(schema.messages.conversationId, conversationId))
+      .where(since ? and(inConversation, gte(schema.messages.createdAt, since)) : inConversation)
       .orderBy(schema.messages.createdAt),
     listConversationAttachments(conversationId),
   ]);

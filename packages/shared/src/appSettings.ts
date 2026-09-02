@@ -18,7 +18,14 @@ export function isLanguage(value: unknown): value is Language {
 export const APPEARANCE_PREFERENCES = ["light", "dark", "system"] as const;
 export type AppearancePreference = (typeof APPEARANCE_PREFERENCES)[number];
 
-export const ACCENT_COLOR_PREFERENCES = ["violet", "blue", "teal", "rose", "amber"] as const;
+export const ACCENT_COLOR_PREFERENCES = [
+  "blue",
+  "yellow",
+  "violet",
+  "teal",
+  "rose",
+  "amber",
+] as const;
 export type AccentColorPreference = (typeof ACCENT_COLOR_PREFERENCES)[number];
 
 export const QUICK_ACTION_PREFERENCES = ["send", "prefill"] as const;
@@ -46,7 +53,7 @@ const AGENT_WRITABLE_SETTINGS = {
   accent_color: {
     valueKind: "enum",
     values: ACCENT_COLOR_PREFERENCES,
-    valueDescription: "violet|blue|teal|rose|amber",
+    valueDescription: "blue|yellow|violet|teal|rose|amber",
     application: "client",
   },
   language: {

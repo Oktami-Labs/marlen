@@ -46,7 +46,7 @@ const components: Components = {
               .then(() => toast.success(t("markdown.copiedToClipboard", { email })))
               .catch(() => toast.error(t("markdown.copyFailed", { email })));
           }}
-          className="font-medium text-accent underline decoration-accent/30 underline-offset-4 transition-colors hover:decoration-accent"
+          className="font-medium text-accent-text underline decoration-accent-text/30 underline-offset-4 transition-colors hover:decoration-accent-text"
           title={t("markdown.copyEmailAddress")}
         >
           {children}
@@ -60,14 +60,14 @@ const components: Components = {
         href={href}
         target="_blank"
         rel="noopener noreferrer"
-        className="font-medium text-accent underline decoration-accent/30 underline-offset-4 transition-colors hover:decoration-accent"
+        className="font-medium text-accent-text underline decoration-accent-text/30 underline-offset-4 transition-colors hover:decoration-accent-text"
       >
         {children}
       </a>
     );
   },
   ul: ({ children }) => (
-    <ul className="my-2 ml-5 list-disc space-y-1.5 marker:text-accent/80">{children}</ul>
+    <ul className="my-2 ml-5 list-disc space-y-1.5 marker:text-accent-text/80">{children}</ul>
   ),
   ol: ({ children }) => (
     <ol className="my-2 ml-5 list-decimal space-y-1.5 marker:text-muted-foreground/70">

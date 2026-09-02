@@ -34,7 +34,7 @@ export function EmptyState({
     >
       <div
         className={cn(
-          "grid place-items-center rounded-xl text-accent",
+          "grid place-items-center rounded-xl text-accent-text",
           // Recessed grey inside the white box; a raised white tile when the
           // state is bare on the canvas (lg).
           lg ? "bg-surface h-14 w-14 rounded-2xl" : "bg-surface-2 h-11 w-11",

@@ -42,13 +42,20 @@ export function useSeen(): Seen {
   });
 
   const marked = React.useMemo(() => new Set(data?.keys ?? []), [data]);
+  // A row's focus and its click both report the same item; the second report
+  // in a session is a no-op rather than a second round trip.
+  const sent = React.useRef(new Set<string>());
   // Parsed, not string-compared: provider draft dates are not all ISO-Z, and an
   // unparsable date yields NaN, which reads as "not new" instead of always-new.
   const floorMs = data ? Date.parse(data.floor) : Number.NaN;
 
   return {
     isNew: (key, createdAt) => Date.parse(createdAt) > floorMs && !marked.has(key),
-    see: (key) => mutation.mutate([key]),
+    see: (key) => {
+      if (sent.current.has(key)) return;
+      sent.current.add(key);
+      mutation.mutate([key]);
+    },
     seeAll: () => mutation.mutate("all"),
   };
 }

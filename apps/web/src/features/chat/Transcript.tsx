@@ -116,121 +116,46 @@ export function Transcript({
   /** Rewrites a waiting message before its turn comes. */
   onEditQueued: (id: string, text: string) => void;
 }) {
-  const { t, i18n } = useTranslation();
+  const { t } = useTranslation();
   const query = search?.query.trim() ?? "";
+
+  // The rows are memoized, so a streamed token redraws the one message it
+  // lands in. The handlers reach the rows through one ref, so a parent render
+  // that re-creates them does not re-render every row.
+  const handlers = React.useRef({ onRetryTurn, onRegenerate, onContinue, onRetryTool });
+  React.useEffect(() => {
+    handlers.current = { onRetryTurn, onRegenerate, onContinue, onRetryTool };
+  });
+  const retryTurn = React.useCallback((index: number) => handlers.current.onRetryTurn(index), []);
+  const regenerate = React.useCallback((index: number) => handlers.current.onRegenerate(index), []);
+  const continueTurn = React.useCallback(() => handlers.current.onContinue(), []);
+  const retryTool = React.useCallback(
+    (call: ChatToolCall) => handlers.current.onRetryTool(call),
+    [],
+  );
 
   return (
     <div className="thread-column flex flex-col gap-4 py-1">
-      {messages.map((m, i) => (
-        <React.Fragment key={m.id}>
-          {startsNewDay(m, messages[i - 1]) && <DayHeading iso={m.createdAt} />}
-          <div
-            ref={search?.currentId === m.id ? hitRef : undefined}
-            title={
-              Number.isNaN(Date.parse(m.createdAt))
-                ? undefined
-                : dateTimeLabel(m.createdAt, i18n.language)
-            }
-            className={cn(
-              "group animate-in-up flex flex-col gap-2",
-              m.role === "user" ? "items-end" : "w-full items-start",
-              search?.currentId === m.id && "thread-hit",
-            )}
-          >
-            {/* Cards sit on the chat canvas as their own outlined blocks
-                (CardShell carries the hairline), full-width like the
-                assistant's prose. */}
-            {m.cards.length > 0 && (
-              <div className="flex w-full flex-col gap-2">
-                {m.cards.map((c) => (
-                  <AgentCardView key={c.toolCallId} card={c.card} colors={accountColors} />
-                ))}
-              </div>
-            )}
-            {/* Pinned emails sit outside the bubble, like cards: a neutral chip
-                on the canvas rather than baked into the accent fill, so the
-                selected email reads as quiet reference, not high-contrast. */}
-            {m.role === "user" && m.refs && m.refs.length > 0 && (
-              <RefChips refs={m.refs} colors={accountColors} />
-            )}
-            {m.role === "user" && m.attachments && m.attachments.length > 0 && (
-              <AttachmentChips attachments={m.attachments} />
-            )}
-            {(m.content || m.streaming || m.toolCalls.length > 0 || m.error || m.systemPrompt) && (
-              <div
-                className={cn(
-                  "flex w-full gap-2",
-                  m.role === "user" ? "justify-end" : "flex-col gap-1.5",
-                )}
-              >
-                {/* The avatar tops the turn; its bloom lights while this
-                    turn is still streaming. */}
-                {m.role === "assistant" && <AgentAvatar active={m.streaming} />}
-                <div
-                  className={cn(
-                    "text-sm",
-                    m.role === "user"
-                      ? "bubble-accent max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-accent-foreground"
-                      : "min-w-0 text-foreground",
-                  )}
-                >
-                  {m.systemPrompt ? (
-                    <SystemPromptView prompt={m.systemPrompt} />
-                  ) : m.role === "assistant" ? (
-                    <AssistantSequence
-                      message={m}
-                      thinkingLabel={t("chat.thinking")}
-                      onRetryTool={onRetryTool}
-                    />
-                  ) : (
-                    <div className="whitespace-pre-wrap leading-relaxed">
-                      {query ? <Highlight text={m.content} query={query} /> : m.content}
-                    </div>
-                  )}
-                  {m.error && (
-                    <div
-                      role="alert"
-                      className={cn(
-                        "text-destructive",
-                        (m.content || m.toolCalls.length > 0) && "mt-2",
-                      )}
-                    >
-                      {m.errorKind === "rate_limit" ? <RateLimitNotice /> : m.error}
-                    </div>
-                  )}
-                  {m.role === "assistant" && m.memoryIds && m.memoryIds.length > 0 && (
-                    <div className="mt-2 flex flex-wrap items-center gap-1.5 text-2xs text-muted-foreground">
-                      <Database className="h-3 w-3" aria-hidden />
-                      <span>{t("chat.memoryUsed")}</span>
-                      {m.memoryIds.map((id) => (
-                        <Link
-                          key={id}
-                          to={`/knowledge?focus=wiki:${encodeURIComponent(id)}`}
-                          className="rounded-md bg-surface-2 px-1.5 py-0.5 font-mono hover:text-foreground"
-                        >
-                          {id}
-                        </Link>
-                      ))}
-                    </div>
-                  )}
-                  {m.role === "assistant" && !m.streaming && !m.systemPrompt && (
-                    <MessageActions
-                      content={m.content}
-                      last={i === messages.length - 1}
-                      onRegenerate={i === messages.length - 1 ? () => onRegenerate(i) : undefined}
-                      stopped={m.stopped}
-                      onContinue={m.stopped && i === messages.length - 1 ? onContinue : undefined}
-                      onRetry={
-                        m.error && i === messages.length - 1 ? () => onRetryTurn(i) : undefined
-                      }
-                    />
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
-        </React.Fragment>
-      ))}
+      {messages.map((m, i) => {
+        const hit = search?.currentId === m.id;
+        return (
+          <MessageRow
+            key={m.id}
+            message={m}
+            index={i}
+            newDay={startsNewDay(m, messages[i - 1])}
+            last={i === messages.length - 1}
+            hit={hit}
+            hitRef={hit ? hitRef : undefined}
+            query={query}
+            accountColors={accountColors}
+            onRetryTurn={retryTurn}
+            onRegenerate={regenerate}
+            onContinue={continueTurn}
+            onRetryTool={retryTool}
+          />
+        );
+      })}
 
       {queued.length > 0 && (
         <div className="flex flex-col gap-2">
@@ -250,6 +175,147 @@ export function Transcript({
     </div>
   );
 }
+
+/** One message as it reads: its cards, the bubble or prose, and the actions under a reply. */
+const MessageRow = React.memo(function MessageRow({
+  message: m,
+  index: i,
+  newDay,
+  last,
+  hit,
+  hitRef,
+  query,
+  accountColors,
+  onRetryTurn,
+  onRegenerate,
+  onContinue,
+  onRetryTool,
+}: {
+  message: DisplayMessage;
+  index: number;
+  /** A day heading belongs above this message. */
+  newDay: boolean;
+  last: boolean;
+  /** The message a conversation search is sitting on. */
+  hit: boolean;
+  hitRef?: React.RefObject<HTMLDivElement | null>;
+  query: string;
+  accountColors: AccountColor[];
+  onRetryTurn: (index: number) => void;
+  onRegenerate: (index: number) => void;
+  onContinue: () => void;
+  onRetryTool: (call: ChatToolCall) => void;
+}) {
+  const { t, i18n } = useTranslation();
+  return (
+    <>
+      {newDay && <DayHeading iso={m.createdAt} />}
+      <div
+        ref={hit ? hitRef : undefined}
+        title={
+          Number.isNaN(Date.parse(m.createdAt))
+            ? undefined
+            : dateTimeLabel(m.createdAt, i18n.language)
+        }
+        className={cn(
+          "group animate-in-up flex flex-col gap-2",
+          m.role === "user" ? "items-end" : "w-full items-start",
+          hit && "thread-hit",
+        )}
+      >
+        {/* Cards sit on the chat canvas as their own outlined blocks
+            (CardShell carries the hairline), full-width like the
+            assistant's prose. */}
+        {m.cards.length > 0 && (
+          <div className="flex w-full flex-col gap-2">
+            {m.cards.map((c) => (
+              <AgentCardView key={c.toolCallId} card={c.card} colors={accountColors} />
+            ))}
+          </div>
+        )}
+        {/* Pinned emails sit outside the bubble, like cards: a neutral chip
+            on the canvas rather than baked into the accent fill, so the
+            selected email reads as quiet reference, not high-contrast. */}
+        {m.role === "user" && m.refs && m.refs.length > 0 && (
+          <RefChips refs={m.refs} colors={accountColors} />
+        )}
+        {m.role === "user" && m.attachments && m.attachments.length > 0 && (
+          <AttachmentChips attachments={m.attachments} />
+        )}
+        {(m.content || m.streaming || m.toolCalls.length > 0 || m.error || m.systemPrompt) && (
+          <div
+            className={cn(
+              "flex w-full gap-2",
+              m.role === "user" ? "justify-end" : "flex-col gap-1.5",
+            )}
+          >
+            {/* The avatar tops the turn; its bloom lights while this
+                turn is still streaming. */}
+            {m.role === "assistant" && <AgentAvatar active={m.streaming} />}
+            <div
+              className={cn(
+                "text-sm",
+                m.role === "user"
+                  ? "bubble-accent max-w-[85%] rounded-2xl rounded-br-md px-4 py-2.5 text-accent-foreground"
+                  : "min-w-0 text-foreground",
+              )}
+            >
+              {m.systemPrompt ? (
+                <SystemPromptView prompt={m.systemPrompt} />
+              ) : m.role === "assistant" ? (
+                <AssistantSequence
+                  message={m}
+                  thinkingLabel={t("chat.thinking")}
+                  onRetryTool={onRetryTool}
+                />
+              ) : (
+                <div className="whitespace-pre-wrap leading-relaxed">
+                  {query ? <Highlight text={m.content} query={query} /> : m.content}
+                </div>
+              )}
+              {m.error && (
+                <div
+                  role="alert"
+                  className={cn(
+                    "text-destructive",
+                    (m.content || m.toolCalls.length > 0) && "mt-2",
+                  )}
+                >
+                  {m.errorKind === "rate_limit" ? <RateLimitNotice /> : m.error}
+                </div>
+              )}
+              {m.role === "assistant" && m.memoryIds && m.memoryIds.length > 0 && (
+                <div className="mt-2 flex flex-wrap items-center gap-1.5 text-2xs text-muted-foreground">
+                  <Database className="h-3 w-3" aria-hidden />
+                  <span>{t("chat.memoryUsed")}</span>
+                  {m.memoryIds.map((id) => (
+                    <Link
+                      key={id}
+                      to={`/knowledge?focus=wiki:${encodeURIComponent(id)}`}
+                      className="rounded-md bg-surface-2 px-1.5 py-0.5 font-mono hover:text-foreground"
+                    >
+                      {id}
+                    </Link>
+                  ))}
+                </div>
+              )}
+              {m.role === "assistant" && !m.streaming && !m.systemPrompt && (
+                <MessageActions
+                  content={m.content}
+                  last={last}
+                  onRegenerate={last ? () => onRegenerate(i) : undefined}
+                  stopped={m.stopped}
+                  onContinue={m.stopped && last ? onContinue : undefined}
+                  onRetry={m.error && last ? () => onRetryTurn(i) : undefined}
+                />
+              )}
+            </div>
+          </div>
+        )}
+      </div>
+    </>
+  );
+});
 
 /**
  * One message waiting its turn. It has not been sent yet, so it stays the

@@ -1,122 +1,90 @@
-import type { Automation } from "@marlen/shared";
+import type { Automation, RunFeedItem } from "@marlen/shared";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Badge } from "@/components/ui/badge";
+import { useNavigate } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Chip } from "@/components/ui/chip";
 import { ConfirmDialog } from "@/components/ui/confirm-dialog";
 import { Dialog } from "@/components/ui/dialog";
 import { FormField } from "@/components/ui/form-field";
 import { GroupLabel } from "@/components/ui/group-label";
 import { Input } from "@/components/ui/input";
-import { Select } from "@/components/ui/select";
 import { SettingRow } from "@/components/ui/setting-row";
 import { Switch } from "@/components/ui/switch";
 import { Textarea } from "@/components/ui/textarea";
+import { AutomationRuns } from "@/features/automations/AutomationRuns";
+import { ScheduleFields } from "@/features/automations/ScheduleFields";
 import {
-  buildCron,
-  DEFAULT_PRESET,
-  daysInMonth,
-  monthName,
-  parseCron,
-  type SchedulePreset,
-  scheduleLabel,
-  weekdayName,
-  weekdayShortName,
+  initialSchedule,
+  scheduleDraftValid,
+  scheduleFromDraft,
 } from "@/features/automations/schedule";
 import { api } from "@/lib/api";
 import { desktopBridge } from "@/lib/desktop";
 import { toast } from "@/lib/toast";
 
-const WEEKDAY_ORDER = [1, 2, 3, 4, 5, 6, 0];
+type Fields = Pick<
+  Automation,
+  "name" | "instruction" | "showInActivity" | "runOnNewMail" | "notifyOnCompletion"
+>;
 
-interface AutomationFormState {
-  name: string;
-  instruction: string;
-  showInActivity: boolean;
-  runOnNewMail: boolean;
-  notifyOnCompletion: boolean;
-}
+const EMPTY: Fields = {
+  name: "",
+  instruction: "",
+  showInActivity: true,
+  runOnNewMail: false,
+  notifyOnCompletion: false,
+};
 
-function initialForm(automation: Automation | null): AutomationFormState {
-  if (!automation) {
-    return {
-      name: "",
-      instruction: "",
-      showInActivity: true,
-      runOnNewMail: false,
-      notifyOnCompletion: false,
-    };
-  }
-  return {
-    name: automation.name,
-    instruction: automation.instruction,
-    showInActivity: automation.showInActivity,
-    runOnNewMail: automation.runOnNewMail,
-    notifyOnCompletion: automation.notifyOnCompletion,
-  };
-}
-
-type ScheduleDraft =
-  | { kind: "preset"; preset: SchedulePreset }
-  | { kind: "preserved"; schedule: string };
-
-function defaultPreset(): SchedulePreset {
-  return { ...DEFAULT_PRESET, weekdays: [...DEFAULT_PRESET.weekdays] };
-}
-
-function initialSchedule(automation: Automation | null): ScheduleDraft {
-  if (!automation) return { kind: "preset", preset: defaultPreset() };
-  const parsed = parseCron(automation.schedule);
-  return parsed
-    ? { kind: "preset", preset: parsed }
-    : { kind: "preserved", schedule: automation.schedule };
-}
-
+/**
+ * The automation's settings in a dialog: the task at left, when it runs and
+ * its run settings at right, and for a saved automation its run history
+ * under those. Saves once, on the footer button.
+ */
 export function AutomationFormDialog({
   open,
   automation,
   onOpenChange,
-  onChanged,
 }: {
   open: boolean;
+  /** Null creates a new automation. */
   automation: Automation | null;
   onOpenChange: (open: boolean) => void;
-  onChanged: () => Promise<void>;
 }) {
-  const { t, i18n } = useTranslation();
-  const [form, setForm] = React.useState(() => initialForm(automation));
-  const [scheduleDraft, setScheduleDraft] = React.useState(() => initialSchedule(automation));
+  const { t } = useTranslation();
+  const navigate = useNavigate();
+  const queryClient = useQueryClient();
+  const [fields, setFields] = React.useState<Fields>(() =>
+    automation ? { ...automation } : EMPTY,
+  );
+  const [schedule, setSchedule] = React.useState(() => initialSchedule(automation));
   const [saving, setSaving] = React.useState(false);
   const [confirmDelete, setConfirmDelete] = React.useState(false);
 
-  const preset = scheduleDraft.kind === "preset" ? scheduleDraft.preset : null;
-  const schedule =
-    scheduleDraft.kind === "preset" ? buildCron(scheduleDraft.preset) : scheduleDraft.schedule;
-  const scheduleValid =
-    scheduleDraft.kind === "preserved" ||
-    scheduleDraft.preset.frequency !== "custom" ||
-    scheduleDraft.preset.weekdays.length > 0;
-  const scheduleSummary = preset
-    ? (scheduleLabel(schedule, t, i18n.language) ?? t("automations.customSchedule"))
-    : t("automations.customSchedule");
+  const runsQuery = useQuery({
+    queryKey: ["runs", "automation", automation?.id],
+    queryFn: () => api.automationRuns(automation?.id as string),
+    enabled: automation !== null,
+    meta: { suppressErrorToast: true },
+  });
+  const runs: RunFeedItem[] | null = React.useMemo(
+    () =>
+      runsQuery.data?.map((run) => ({ ...run, automationName: automation?.name ?? null })) ?? null,
+    [runsQuery.data, automation?.name],
+  );
 
-  const updatePreset = (update: (current: SchedulePreset) => SchedulePreset) => {
-    setScheduleDraft((current) => ({
-      kind: "preset",
-      preset: update(current.kind === "preset" ? current.preset : defaultPreset()),
-    }));
-  };
+  const refresh = () => queryClient.invalidateQueries({ queryKey: ["automations"] });
+  const complete = fields.name.trim() !== "" && fields.instruction.trim() !== "";
+  const setField = <K extends keyof Fields>(key: K, value: Fields[K]) =>
+    setFields((current) => ({ ...current, [key]: value }));
 
   const save = async () => {
     setSaving(true);
+    const body = { ...fields, schedule: scheduleFromDraft(schedule) };
     try {
-      if (automation) {
-        await api.updateAutomation(automation.id, { ...form, schedule });
-      } else {
-        await api.createAutomation({ ...form, schedule });
-      }
-      await onChanged();
+      if (automation) await api.updateAutomation(automation.id, body);
+      else await api.createAutomation(body);
+      await refresh();
       setSaving(false);
       onOpenChange(false);
     } catch (error) {
@@ -130,7 +98,7 @@ export function AutomationFormDialog({
     setSaving(true);
     try {
       await api.deleteAutomation(automation.id);
-      await onChanged();
+      await refresh();
       setSaving(false);
       onOpenChange(false);
       return true;
@@ -141,16 +109,10 @@ export function AutomationFormDialog({
     }
   };
 
-  const frequencyOptions: Array<{
-    value: SchedulePreset["frequency"];
-    label: string;
-  }> = [
-    { value: "daily", label: t("automations.frequency.daily") },
-    { value: "weekdays", label: t("automations.frequency.weekdays") },
-    { value: "custom", label: t("automations.frequency.custom") },
-    { value: "date", label: t("automations.frequency.date") },
-    { value: "manual", label: t("automations.frequency.manual") },
-  ];
+  const openChat = () => {
+    onOpenChange(false);
+    navigate("/chat");
+  };
 
   return (
     <>
@@ -163,11 +125,7 @@ export function AutomationFormDialog({
         footer={
           <div className="flex w-full flex-wrap items-center justify-between gap-3">
             {automation ? (
-              <Button
-                variant="ghost-danger"
-                className="text-destructive"
-                onClick={() => setConfirmDelete(true)}
-              >
+              <Button variant="ghost-danger" onClick={() => setConfirmDelete(true)}>
                 {t("automations.delete")}
               </Button>
             ) : (
@@ -179,7 +137,7 @@ export function AutomationFormDialog({
               </Button>
               <Button
                 onClick={() => void save()}
-                disabled={!form.name.trim() || !form.instruction.trim() || !scheduleValid}
+                disabled={!complete || !scheduleDraftValid(schedule)}
                 loading={saving}
               >
                 {automation ? t("automations.save") : t("automations.create")}
@@ -195,12 +153,11 @@ export function AutomationFormDialog({
               <Input
                 id="automation-name"
                 autoFocus
-                value={form.name}
-                onChange={(event) => setForm({ ...form, name: event.target.value })}
+                value={fields.name}
+                onChange={(event) => setField("name", event.target.value)}
                 placeholder={t("automations.namePlaceholder")}
               />
             </FormField>
-
             <FormField
               id="automation-instruction"
               label={t("automations.instruction")}
@@ -209,8 +166,8 @@ export function AutomationFormDialog({
             >
               <Textarea
                 id="automation-instruction"
-                value={form.instruction}
-                onChange={(event) => setForm({ ...form, instruction: event.target.value })}
+                value={fields.instruction}
+                onChange={(event) => setField("instruction", event.target.value)}
                 placeholder={t("automations.instructionPlaceholder")}
                 rows={14}
                 className="min-h-64 flex-1 resize-none md:min-h-0"
@@ -220,114 +177,12 @@ export function AutomationFormDialog({
 
           <div className="flex flex-col gap-6 md:min-h-0 md:overflow-y-auto md:pr-1">
             <section className="flex flex-col gap-3">
-              <div className="flex items-center justify-between gap-3">
-                <div>
-                  <GroupLabel>{t("automations.timingSection")}</GroupLabel>
-                </div>
-                {scheduleSummary ? (
-                  <Badge variant="muted" className="max-w-48 truncate text-2xs">
-                    {scheduleSummary}
-                  </Badge>
-                ) : null}
-              </div>
-
-              <fieldset className="flex flex-wrap gap-1.5">
-                <legend className="sr-only">{t("automations.timingSection")}</legend>
-                {frequencyOptions.map((option) => (
-                  <Chip
-                    key={option.value}
-                    active={preset?.frequency === option.value}
-                    className="h-8"
-                    onClick={() =>
-                      updatePreset((current) => ({ ...current, frequency: option.value }))
-                    }
-                  >
-                    {option.label}
-                  </Chip>
-                ))}
-              </fieldset>
-
-              {!preset ? (
-                <p className="text-xs text-muted-foreground">
-                  {t("automations.customScheduleHint")}
-                </p>
-              ) : null}
-
-              {preset?.frequency === "custom" ? (
-                <FormField
-                  id="automation-weekdays"
-                  label={t("automations.days")}
-                  error={
-                    preset.weekdays.length === 0 ? t("automations.customDaysRequired") : undefined
-                  }
-                >
-                  <WeekdayToggle
-                    value={preset.weekdays}
-                    onChange={(weekdays) => updatePreset((current) => ({ ...current, weekdays }))}
-                    locale={i18n.language}
-                  />
-                </FormField>
-              ) : null}
-
-              {preset?.frequency === "date" ? (
-                <div className="grid grid-cols-[minmax(0,1fr)_5rem] gap-2">
-                  <FormField id="automation-month" label={t("automations.month")}>
-                    <Select
-                      id="automation-month"
-                      value={String(preset.month)}
-                      onChange={(value) => {
-                        const month = Number(value);
-                        const maxDay = daysInMonth(month);
-                        updatePreset((current) => ({
-                          ...current,
-                          month,
-                          day: Math.min(current.day, maxDay),
-                        }));
-                      }}
-                      options={Array.from({ length: 12 }, (_, index) => index + 1).map((month) => ({
-                        value: String(month),
-                        label: monthName(month, i18n.language),
-                      }))}
-                    />
-                  </FormField>
-                  <FormField id="automation-day" label={t("automations.day")}>
-                    <Select
-                      id="automation-day"
-                      value={String(preset.day)}
-                      onChange={(value) =>
-                        updatePreset((current) => ({ ...current, day: Number(value) }))
-                      }
-                      options={Array.from({ length: daysInMonth(preset.month) }, (_, index) => ({
-                        value: String(index + 1),
-                        label: String(index + 1),
-                      }))}
-                    />
-                  </FormField>
-                </div>
-              ) : null}
-
-              {preset && preset.frequency !== "manual" ? (
-                <FormField id="automation-time" label={t("automations.time")}>
-                  <Input
-                    id="automation-time"
-                    type="time"
-                    value={preset.time}
-                    onChange={(event) =>
-                      updatePreset((current) => ({
-                        ...current,
-                        time: event.target.value || "08:00",
-                      }))
-                    }
-                    className="w-32 tabular-nums"
-                  />
-                </FormField>
-              ) : null}
-              {preset?.frequency === "date" ? (
-                <p className="text-xs text-muted-foreground">{t("automations.dateOnceHint")}</p>
-              ) : null}
-              {preset?.frequency === "manual" ? (
-                <p className="text-xs text-muted-foreground">{t("automations.manualHint")}</p>
-              ) : null}
+              <GroupLabel>{t("automations.timingSection")}</GroupLabel>
+              <ScheduleFields
+                draft={schedule}
+                onChange={setSchedule}
+                nextRunAt={automation?.enabled ? automation.nextRunAt : null}
+              />
             </section>
 
             <section className="flex flex-col gap-3">
@@ -341,12 +196,10 @@ export function AutomationFormDialog({
                 >
                   <Switch
                     id="automation-activity"
-                    checked={form.showInActivity}
-                    onCheckedChange={(showInActivity) => setForm({ ...form, showInActivity })}
-                    aria-label={t("automations.showInActivity")}
+                    checked={fields.showInActivity}
+                    onCheckedChange={(value) => setField("showInActivity", value)}
                   />
                 </SettingRow>
-
                 <SettingRow
                   bare
                   htmlFor="automation-run-on-new-mail"
@@ -355,12 +208,10 @@ export function AutomationFormDialog({
                 >
                   <Switch
                     id="automation-run-on-new-mail"
-                    checked={form.runOnNewMail}
-                    onCheckedChange={(runOnNewMail) => setForm({ ...form, runOnNewMail })}
-                    aria-label={t("automations.runOnNewMail")}
+                    checked={fields.runOnNewMail}
+                    onCheckedChange={(value) => setField("runOnNewMail", value)}
                   />
                 </SettingRow>
-
                 <SettingRow
                   bare
                   htmlFor="automation-notify"
@@ -369,23 +220,31 @@ export function AutomationFormDialog({
                 >
                   <Switch
                     id="automation-notify"
-                    checked={form.notifyOnCompletion}
-                    onCheckedChange={(notifyOnCompletion) => {
-                      setForm({ ...form, notifyOnCompletion });
+                    checked={fields.notifyOnCompletion}
+                    onCheckedChange={(value) => {
                       if (
-                        notifyOnCompletion &&
+                        value &&
                         !desktopBridge() &&
                         "Notification" in window &&
                         Notification.permission === "default"
                       ) {
                         void Notification.requestPermission();
                       }
+                      setField("notifyOnCompletion", value);
                     }}
-                    aria-label={t("automations.notifyOnCompletion")}
                   />
                 </SettingRow>
               </div>
             </section>
+
+            {automation && (
+              <AutomationRuns
+                runs={runs}
+                error={runsQuery.error}
+                onRetry={() => void runsQuery.refetch()}
+                onOpenChat={openChat}
+              />
+            )}
           </div>
         </div>
       </Dialog>
@@ -394,44 +253,11 @@ export function AutomationFormDialog({
         open={confirmDelete}
         onOpenChange={setConfirmDelete}
         title={t("automations.delete")}
-        description={t("automations.deleteConfirm", { name: form.name })}
+        description={t("automations.deleteConfirm", { name: fields.name })}
         confirmLabel={t("automations.delete")}
         busy={saving}
         onConfirm={remove}
       />
     </>
-  );
-}
-
-function WeekdayToggle({
-  value,
-  onChange,
-  locale,
-}: {
-  value: number[];
-  onChange: (next: number[]) => void;
-  locale: string;
-}) {
-  const toggle = (day: number) => {
-    onChange(
-      value.includes(day)
-        ? value.filter((current) => current !== day)
-        : [...value, day].sort((left, right) => left - right),
-    );
-  };
-  return (
-    <div id="automation-weekdays" className="flex flex-wrap gap-1.5">
-      {WEEKDAY_ORDER.map((day) => (
-        <Chip
-          key={day}
-          active={value.includes(day)}
-          onClick={() => toggle(day)}
-          aria-label={weekdayName(day, locale)}
-          className="h-8 min-w-8 justify-center"
-        >
-          {weekdayShortName(day, locale)}
-        </Chip>
-      ))}
-    </div>
   );
 }

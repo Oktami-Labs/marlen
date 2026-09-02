@@ -17,7 +17,7 @@ import { ChartPlot } from "./ChartCard";
 type ComposedData = Extract<AgentCard, { kind: "composed" }>;
 
 const TONE_TEXT: Record<ChartTone, string> = {
-  accent: "text-accent",
+  accent: "text-accent-text",
   success: "text-success",
   warning: "text-warning",
   danger: "text-destructive",

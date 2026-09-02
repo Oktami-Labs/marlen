@@ -1,24 +1,23 @@
 import type { Automation, Todo } from "@marlen/shared";
 import { type QueryKey, useMutation, useQueryClient } from "@tanstack/react-query";
-import { Check, MessageSquareShare, Pencil, Trash2, Zap } from "lucide-react";
+import { Check, CircleHelp, MessageSquareShare, Pencil, Trash2, Zap } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { Button } from "@/components/ui/button";
-import { ExpandButton } from "@/components/ui/disclosure-toggle";
-import { HoverActions } from "@/components/ui/hover-actions";
+import { IconChip } from "@/components/ui/icon-chip";
 import { Input } from "@/components/ui/input";
 import { Select } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { dueChip } from "@/features/home/agenda";
 import { DueDatePicker } from "@/features/home/DueDatePicker";
-import { NewDot } from "@/features/home/seen";
+import { NeedsRow } from "@/features/home/NeedsRow";
 import { api } from "@/lib/api";
+import { waitingLabel, whenLabel } from "@/lib/dates";
 import { cn, withViewTransition } from "@/lib/utils";
 
 type PatchOpts = {
-  /** Cache list the optimistic write targets: the open agenda by default, the done history passes its own key. */
+  /** Cache list the optimistic write targets: the open list by default, the done history passes its own key. */
   key?: QueryKey;
-  /** Drag drops pass false: dnd-kit animates those itself, and a view transition would fight it. */
   transition?: boolean;
 };
 
@@ -63,17 +62,27 @@ export function useTodoPatch(): PatchFn {
   return (id, body, optimistic, opts) => mutate.mutate({ id, patch: body, optimistic, ...opts });
 }
 
+/** A todo that asks the user to choose; its options answer and complete it. */
+export const isQuestion = (todo: Todo): boolean => todo.kind === "todo" && todo.options.length > 0;
+
+/** The first line of a note, minus a list marker, what a row's meta line has room for. */
+export function firstLine(text: string): string {
+  return (
+    text
+      .split("\n")
+      .map((line) => line.replace(/^[#>*\-\s]+/, "").trim())
+      .find(Boolean) ?? ""
+  );
+}
+
 /**
- * One todo: checkbox to complete, expand for the body note, dismiss, drag to
- * reorder/reschedule, pencil to edit title/note/due/linked automation in place
- * (fields save on blur/change, no Save button). A linked automation shows as
- * a bolt: ticking done starts that automation. Only the checkbox and the
- * expand chevron show at rest; chat, edit and dismiss wait for hover, so a
- * list of twelve rows is twelve titles and not fifty icons.
+ * One todo. A task fronts a checkbox and the bolt of its linked automation;
+ * a question fronts the question mark and lays its answers out under the
+ * title. Pressing a row with a note unfolds it; the pencil edits title, note,
+ * due and linked automation in place (fields save on blur/change).
  */
 export function TodoRow({
   todo,
-  overdue,
   lang,
   todayStart,
   onPatch,
@@ -82,7 +91,6 @@ export function TodoRow({
   isNew,
 }: {
   todo: Todo;
-  overdue: boolean;
   lang: string;
   todayStart: number;
   onPatch: PatchFn;
@@ -99,8 +107,10 @@ export function TodoRow({
   // motion skips straight to completion.
   const [completing, setCompleting] = React.useState(false);
 
-  const expandable = !!todo.body;
-  const chip = todo.dueAt ? dueChip(todo.dueAt, lang, todayStart, { dayContext: !overdue }) : null;
+  const question = isQuestion(todo);
+  const note = firstLine(todo.body);
+  const expandable = !!todo.body && !editing;
+  const due = todo.dueAt ? dueChip(todo.dueAt, lang, todayStart) : null;
   const linkedName = todo.linkedAutomationId
     ? (automations?.find((a) => a.id === todo.linkedAutomationId)?.name ??
       t("home.deletedAutomation"))
@@ -148,162 +158,167 @@ export function TodoRow({
       list.map((td) => (td.id === todo.id ? { ...td, linkedAutomationId } : td)),
     );
   };
+  const toggleOpen = () => withViewTransition(() => setOpen((v) => !v));
+
+  // Line two: a question says what it is about and when it was asked; a task
+  // says when it is due, or how long it has waited, then its note.
+  const when = question
+    ? whenLabel(todo.createdAt, lang)
+    : (due?.text ?? waitingLabel(todo.createdAt, lang));
+  const whenText = <span className={cn(due?.overdue && "font-medium text-warning")}>{when}</span>;
+  const meta = question ? (
+    <>
+      {note && <>{note} · </>}
+      {whenText}
+    </>
+  ) : (
+    <>
+      {whenText}
+      {note && <> · {note}</>}
+    </>
+  );
+
+  const mark = question ? (
+    <IconChip size="sm" tone="tint-warning">
+      <CircleHelp />
+    </IconChip>
+  ) : (
+    <Checkbox checked={completing} onToggle={() => startComplete()} label={todo.title} />
+  );
+
+  const title = editing ? (
+    <Input
+      defaultValue={todo.title}
+      aria-label={t("home.todosEditTitle")}
+      className="h-7 flex-1 px-2 py-0 text-sm font-medium"
+      autoFocus
+      onBlur={(e) => saveTitle(e.target.value)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+      }}
+    />
+  ) : (
+    <>
+      <span
+        className={cn(
+          "truncate transition-colors",
+          completing && "todo-strike text-muted-foreground",
+        )}
+      >
+        {todo.title}
+      </span>
+      {linkedName && (
+        <Zap
+          className="h-3.5 w-3.5 shrink-0 text-warning"
+          aria-label={t("home.todosLinkedRun", { name: linkedName })}
+          data-tooltip={t("home.todosLinkedRun", { name: linkedName })}
+        />
+      )}
+    </>
+  );
+
+  const editor = editing && (
+    <>
+      <div className="flex flex-wrap items-center gap-2">
+        <DueDatePicker dueAt={todo.dueAt} lang={lang} onChange={saveDueAt} />
+        <div className="flex items-center gap-1.5">
+          <Zap className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
+          <Select
+            id={`todo-link-${todo.id}`}
+            value={todo.linkedAutomationId ?? ""}
+            onChange={(v) => saveLinked(v || null)}
+            aria-label={t("home.todosLinkedLabel")}
+            className="w-auto"
+            options={[
+              { value: "", label: t("home.todosLinkedNone") },
+              ...(automations ?? []).map((a) => ({ value: a.id, label: a.name })),
+            ]}
+          />
+        </div>
+      </div>
+      <Textarea
+        defaultValue={todo.body}
+        placeholder={t("home.todosBodyPlaceholder")}
+        className="field-sizing-content resize-none text-sm"
+        onBlur={(e) => saveBody(e.target.value)}
+      />
+    </>
+  );
+  const unfolded = !editing && open && expandable && (
+    <p className="whitespace-pre-wrap text-sm text-muted-foreground">{todo.body}</p>
+  );
+  const answers = !editing && question && (
+    <AnswerOptions todo={todo} disabled={completing} onAnswer={startComplete} />
+  );
+  const below = editor || unfolded || answers;
 
   return (
-    <article
-      className={cn(
-        "surface-hover group flex flex-col gap-2 rounded-md px-2.5 py-2.5 transition",
-        completing && "opacity-60",
-      )}
-    >
-      <div className="flex flex-wrap items-center gap-2">
-        <Checkbox checked={completing} onToggle={() => startComplete()} label={todo.title} />
-        {editing ? (
-          <Input
-            defaultValue={todo.title}
-            aria-label={t("home.todosEditTitle")}
-            className="h-7 flex-1 px-2 py-0 text-sm font-medium"
-            autoFocus
-            onBlur={(e) => saveTitle(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter") (e.target as HTMLInputElement).blur();
-            }}
-          />
-        ) : (
-          <button
-            type="button"
-            className={cn(
-              "flex min-w-0 flex-1 items-center gap-2 text-left max-sm:basis-[calc(100%-2rem)]",
-              expandable && "cursor-pointer",
-            )}
-            onClick={() => expandable && withViewTransition(() => setOpen((v) => !v))}
-          >
-            {isNew && <NewDot />}
-            <span
-              className={cn(
-                "truncate text-sm font-medium transition-colors",
-                completing && "todo-strike text-muted-foreground",
-              )}
-            >
-              {todo.title}
-            </span>
-            {chip?.text && (
-              <span
-                className={cn(
-                  "shrink-0 text-2xs tabular-nums",
-                  chip.overdue ? "font-medium text-warning" : "text-muted-foreground",
-                )}
+    <NeedsRow
+      mark={mark}
+      title={title}
+      meta={editing ? undefined : meta}
+      isNew={isNew}
+      onPress={expandable ? toggleOpen : undefined}
+      expanded={expandable ? open : undefined}
+      chevron={expandable}
+      className={cn("transition-opacity", completing && "opacity-60")}
+      actions={
+        editing ? undefined : (
+          <>
+            {onOpenChat && (
+              <Button
+                variant="ghost"
+                size="icon-xs"
+                title={t("home.openInChat")}
+                aria-label={t("home.openInChat")}
+                onClick={onOpenChat}
               >
-                {chip.text}
-              </span>
+                <MessageSquareShare />
+              </Button>
             )}
-            {linkedName && (
-              <Zap
-                className="h-3.5 w-3.5 shrink-0 text-warning"
-                aria-label={t("home.todosLinkedRun", { name: linkedName })}
-                data-tooltip={t("home.todosLinkedRun", { name: linkedName })}
-              />
-            )}
-          </button>
-        )}
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          {editing ? (
             <Button
               variant="ghost"
               size="icon-xs"
-              title={t("home.todosEditDone")}
-              aria-label={t("home.todosEditDone")}
-              onClick={() => withViewTransition(() => setEditing(false))}
+              title={t("home.todosEdit")}
+              aria-label={t("home.todosEdit")}
+              onClick={() => withViewTransition(() => setEditing(true))}
             >
-              <Check />
+              <Pencil />
             </Button>
-          ) : (
-            <>
-              {/* A reserved slot would truncate the title for icons nobody sees; the
-                  actions take no room until the row is hovered or focused. */}
-              <HoverActions className="gap-1 sm:hidden sm:group-focus-within:flex sm:group-hover:flex">
-                {onOpenChat && (
-                  <Button
-                    variant="ghost"
-                    size="icon-xs"
-                    title={t("home.openInChat")}
-                    aria-label={t("home.openInChat")}
-                    onClick={onOpenChat}
-                  >
-                    <MessageSquareShare />
-                  </Button>
-                )}
-                <Button
-                  variant="ghost"
-                  size="icon-xs"
-                  title={t("home.todosEdit")}
-                  aria-label={t("home.todosEdit")}
-                  onClick={() => withViewTransition(() => setEditing(true))}
-                >
-                  <Pencil />
-                </Button>
-                <Button
-                  variant="ghost-danger"
-                  size="icon-xs"
-                  title={t("home.todosDismiss")}
-                  aria-label={t("home.todosDismiss")}
-                  onClick={dismiss}
-                >
-                  <Trash2 />
-                </Button>
-              </HoverActions>
-              {expandable && (
-                <ExpandButton
-                  open={open}
-                  onToggle={() => withViewTransition(() => setOpen((v) => !v))}
-                />
-              )}
-            </>
-          )}
-        </div>
-      </div>
-
-      {editing ? (
-        <div className="flex flex-col gap-2 pl-8">
-          <div className="flex flex-wrap items-center gap-2">
-            <DueDatePicker dueAt={todo.dueAt} lang={lang} onChange={saveDueAt} />
-            <div className="flex items-center gap-1.5">
-              <Zap className="h-3.5 w-3.5 shrink-0 text-warning" aria-hidden />
-              <Select
-                id={`todo-link-${todo.id}`}
-                value={todo.linkedAutomationId ?? ""}
-                onChange={(v) => saveLinked(v || null)}
-                aria-label={t("home.todosLinkedLabel")}
-                className="w-auto"
-                options={[
-                  { value: "", label: t("home.todosLinkedNone") },
-                  ...(automations ?? []).map((a) => ({ value: a.id, label: a.name })),
-                ]}
-              />
-            </div>
-          </div>
-          <Textarea
-            defaultValue={todo.body}
-            placeholder={t("home.todosBodyPlaceholder")}
-            className="field-sizing-content resize-none text-sm"
-            onBlur={(e) => saveBody(e.target.value)}
-          />
-        </div>
-      ) : (
+            <Button
+              variant="ghost-danger"
+              size="icon-xs"
+              title={t("home.todosDismiss")}
+              aria-label={t("home.todosDismiss")}
+              onClick={dismiss}
+            >
+              <Trash2 />
+            </Button>
+          </>
+        )
+      }
+      trailing={
+        editing && (
+          <Button
+            variant="ghost"
+            size="icon-xs"
+            title={t("home.todosEditDone")}
+            aria-label={t("home.todosEditDone")}
+            onClick={() => withViewTransition(() => setEditing(false))}
+          >
+            <Check />
+          </Button>
+        )
+      }
+    >
+      {below ? (
         <>
-          {open && expandable && (
-            <p className="whitespace-pre-wrap pl-8 text-sm text-muted-foreground">{todo.body}</p>
-          )}
-          {/* A decision answers with one click; the answer completes the todo. */}
-          <AnswerOptions
-            todo={todo}
-            disabled={completing}
-            onAnswer={startComplete}
-            className="pl-8"
-          />
+          {editor}
+          {unfolded}
+          {answers}
         </>
-      )}
-    </article>
+      ) : undefined}
+    </NeedsRow>
   );
 }
 
@@ -329,7 +344,7 @@ export function AnswerOptions({
   }
   if (todo.options.length === 0) return null;
   return (
-    <div className={cn("flex flex-wrap gap-1.5", className)}>
+    <div className={cn("flex flex-wrap gap-2", className)}>
       {todo.options.map((option) => (
         <Button
           key={option.label}
@@ -358,22 +373,23 @@ export function ApprovalNote({
 }) {
   if (!todo.body && todo.options.length === 0 && !todo.answer) return null;
   return (
-    <div className="flex flex-col gap-1.5 px-2.5 pb-2.5 pl-10">
+    <>
       {todo.body && (
         <p className="whitespace-pre-wrap text-xs text-muted-foreground">{todo.body}</p>
       )}
       <AnswerOptions todo={todo} disabled={disabled} onAnswer={onAnswer} />
-    </div>
+    </>
   );
 }
 
-/** A completed todo in the collapsed history: a filled check to reopen it (back
- *  onto the agenda), title struck through. */
+/** A completed todo in the collapsed history: a filled check to reopen it, title struck through. */
 export function DoneTodoRow({ todo, onRestore }: { todo: Todo; onRestore: () => void }) {
   const { t } = useTranslation();
   return (
-    <article className="surface-hover flex items-center gap-2 rounded-md px-2.5 py-2">
-      <Checkbox checked onToggle={onRestore} label={t("home.todosRestore")} />
+    <article className="flex items-center gap-3 rounded-lg px-3 py-1.5 transition-colors hover:bg-surface-2">
+      <span className="flex w-6 shrink-0 justify-center">
+        <Checkbox checked onToggle={onRestore} label={t("home.todosRestore")} />
+      </span>
       <span className="min-w-0 flex-1 truncate text-sm text-muted-foreground">
         <span className="line-through">{todo.title}</span>
         {todo.answer && <span className="ml-2 font-medium">{todo.answer}</span>}

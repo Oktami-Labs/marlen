@@ -8,8 +8,8 @@ import {
 import { titleBarMode } from "./titlebar";
 
 // Keep these in sync with the web sidebar colors to avoid a launch flash.
-const CHROME_LIGHT = "#ffffff";
-const CHROME_DARK = "#0b0b0d";
+const CHROME_LIGHT = "#f2f2f2";
+const CHROME_DARK = "#0d0d0d";
 
 export function chromeBackground(dark: boolean): string {
   return dark ? CHROME_DARK : CHROME_LIGHT;

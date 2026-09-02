@@ -93,9 +93,7 @@ export function DueDatePicker({
     { label: t("home.todosDueNextWeek"), iso: dayIso(todayStart + 7 * DAY_MS) },
   ];
 
-  const triggerLabel = dueAt
-    ? dueChip(dueAt, lang, todayStart, { dayContext: false }).text
-    : t("home.todosDueNone");
+  const triggerLabel = dueAt ? dueChip(dueAt, lang, todayStart).text : t("home.todosDueNone");
 
   return (
     <div ref={containerRef} className="relative">
@@ -118,7 +116,7 @@ export function DueDatePicker({
                 key={q.iso}
                 variant="secondary"
                 size="sm"
-                className={cn(selectedIso === q.iso && "bg-accent/15 text-accent")}
+                className={cn(selectedIso === q.iso && "bg-accent/15 text-accent-text")}
                 onClick={() => pickDay(q.iso)}
               >
                 {q.label}
@@ -177,7 +175,7 @@ export function DueDatePicker({
                     "h-7 w-7 rounded-md text-sm tabular-nums transition-colors hover:bg-secondary",
                     isSelected
                       ? "bg-accent text-accent-foreground hover:bg-accent"
-                      : isToday && "font-semibold text-accent",
+                      : isToday && "font-semibold text-accent-text",
                   )}
                 >
                   {day}

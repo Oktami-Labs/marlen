@@ -146,7 +146,7 @@ function dataUriBytes(dataUri: string): number {
   return Math.round((base64.length * 3) / 4);
 }
 
-function loadImage(src: string): Promise<HTMLImageElement> {
+export function loadImage(src: string): Promise<HTMLImageElement> {
   return new Promise((resolve, reject) => {
     const image = new Image();
     image.onload = () => resolve(image);

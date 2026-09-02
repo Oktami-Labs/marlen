@@ -1,4 +1,4 @@
-import { type AppStatus, isLanguage, isSetupComplete } from "@marlen/shared";
+import { type AppStatus, isSetupComplete } from "@marlen/shared";
 import { useQuery } from "@tanstack/react-query";
 import {
   ChevronLeft,
@@ -14,8 +14,7 @@ import {
 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { Route, Routes, useLocation, useNavigate } from "react-router-dom";
-import { NotFound } from "@/components/NotFound";
+import { useLocation, useNavigate } from "react-router-dom";
 import { SearchPalette } from "@/components/SearchPalette";
 import { Sidebar } from "@/components/Sidebar";
 import { Button, type ButtonProps } from "@/components/ui/button";
@@ -32,10 +31,7 @@ import { ChatSearchBar } from "@/features/chat/ChatSearchBar";
 import { onRevealChat, sendChatCommand } from "@/features/chat/controller";
 import { FocusChip } from "@/features/chat/FocusChip";
 import { HistoryList } from "@/features/chat/HistoryList";
-import { HomePanel } from "@/features/home/HomePanel";
-import { SetupGate } from "@/features/setup/SetupGate";
 import { api } from "@/lib/api";
-import { rememberLanguage } from "@/lib/i18n";
 import {
   NAV_ITEMS,
   NAV_VIEWS,
@@ -47,8 +43,10 @@ import {
 import { useDesktopChrome, useWaitingBadge } from "@/lib/useDesktopChrome";
 import { useResizableWidth } from "@/lib/useResizableWidth";
 import { useRunNotifications } from "@/lib/useRunNotifications";
+import { useServerLanguage, useServerTimezone } from "@/lib/useServerPreferences";
 import { useTheme } from "@/lib/useTheme";
 import { cn, MOD_LABEL, withViewTransition } from "@/lib/utils";
+import { Pages } from "@/Pages";
 
 const SETUP_DISMISSED_KEY = "marlen-setup-dismissed";
 
@@ -57,31 +55,9 @@ const SIDEBAR_WIDTH_MAX = 384;
 const CHAT_WIDTH_MIN = 320;
 const CHAT_WIDTH_MAX = 960;
 
-const AutomationsPanel = React.lazy(() =>
-  import("@/features/automations/AutomationsPanel").then(({ AutomationsPanel }) => ({
-    default: AutomationsPanel,
-  })),
+const SetupGate = React.lazy(() =>
+  import("@/features/setup/SetupGate").then(({ SetupGate }) => ({ default: SetupGate })),
 );
-const KnowledgePanel = React.lazy(() =>
-  import("@/features/knowledge/KnowledgePanel").then(({ KnowledgePanel }) => ({
-    default: KnowledgePanel,
-  })),
-);
-const LeadsPanel = React.lazy(() =>
-  import("@/features/leads/LeadsPanel").then(({ LeadsPanel }) => ({ default: LeadsPanel })),
-);
-const SettingsPanel = React.lazy(() =>
-  import("@/features/settings/SettingsPanel").then(({ SettingsPanel }) => ({
-    default: SettingsPanel,
-  })),
-);
-const ShowcasePanel = import.meta.env.DEV
-  ? React.lazy(() =>
-      import("@/features/showcase/ShowcasePanel").then(({ ShowcasePanel }) => ({
-        default: ShowcasePanel,
-      })),
-    )
-  : null;
 
 function isNavView(path: string): path is View {
   return (NAV_VIEWS as readonly string[]).includes(path);
@@ -91,40 +67,6 @@ function isKnownPath(pathname: string): boolean {
   const path = pathname.replace(/\/+$/, "") || "/";
   if (import.meta.env.DEV && path === SHOWCASE_NAV.path) return true;
   return NAV_ITEMS.some((item) => item.path === path);
-}
-
-function useServerLanguage() {
-  const { i18n } = useTranslation();
-  React.useEffect(() => {
-    api
-      .language()
-      .then(({ language }) => {
-        if (!language) {
-          const current = i18n.language;
-          if (isLanguage(current)) {
-            rememberLanguage(current);
-            void api.setLanguage(current).catch(() => {});
-          }
-          return;
-        }
-        rememberLanguage(language);
-        if (language !== i18n.language) void i18n.changeLanguage(language);
-      })
-      .catch(() => {});
-  }, [i18n]);
-}
-
-function useServerTimezone() {
-  React.useEffect(() => {
-    api
-      .timezone()
-      .then(({ timezone }) => {
-        if (timezone) return;
-        const detected = Intl.DateTimeFormat().resolvedOptions().timeZone;
-        if (detected) void api.setTimezone(detected).catch(() => {});
-      })
-      .catch(() => {});
-  }, []);
 }
 
 function HeaderIconButton({
@@ -242,13 +184,20 @@ export default function App() {
   useServerTimezone();
   useRunNotifications();
 
+  // One request at a time: focus and visibilitychange fire together when the
+  // window comes back, and both ask for a refresh.
+  const statusRequest = React.useRef<Promise<void> | null>(null);
   const refreshStatus = React.useCallback(() => {
-    api
+    if (statusRequest.current) return;
+    statusRequest.current = api
       .status()
       .then(setStatus)
       .catch(() => {
         setStatus(null);
         setGate((g) => (g === "pending" ? "closed" : g));
+      })
+      .finally(() => {
+        statusRequest.current = null;
       });
   }, []);
 
@@ -330,11 +279,14 @@ export default function App() {
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [toggleDockedChat, toggleTheme]);
 
-  const select = (next: string) => {
-    withViewTransition(() => navigate(next === "home" ? "/" : `/${next}`));
-    setMobileOpen(false);
-    setChatOpen(false);
-  };
+  const select = React.useCallback(
+    (next: string) => {
+      withViewTransition(() => navigate(next === "home" ? "/" : `/${next}`));
+      setMobileOpen(false);
+      setChatOpen(false);
+    },
+    [navigate],
+  );
 
   const closeGate = (openSettings: boolean) => {
     localStorage.setItem(SETUP_DISMISSED_KEY, "1");
@@ -345,7 +297,15 @@ export default function App() {
   if (gate === "open") {
     return (
       <>
-        <SetupGate status={status} onStatusChanged={refreshStatus} onFinish={closeGate} />
+        <React.Suspense
+          fallback={
+            <div className="grid h-dvh place-items-center">
+              <LoadingRow />
+            </div>
+          }
+        >
+          <SetupGate status={status} onStatusChanged={refreshStatus} onFinish={closeGate} />
+        </React.Suspense>
         <Toaster />
       </>
     );
@@ -371,7 +331,7 @@ export default function App() {
     : t("views.chat.title");
 
   return (
-    <div ref={chatWidthRef} className="flex h-dvh overflow-hidden bg-sidebar">
+    <div ref={chatWidthRef} className="flex h-dvh overflow-hidden bg-background">
       <a
         href="#main-content"
         className="sr-only focus:not-sr-only focus:absolute focus:left-4 focus:top-4 focus:z-[70] focus:rounded-md focus:bg-primary focus:px-3 focus:py-2 focus:text-sm focus:font-medium focus:text-primary-foreground"
@@ -404,361 +364,347 @@ export default function App() {
         className="z-40 hidden md:flex"
       />
 
-      <main
-        id="main-content"
-        className={cn(
-          "@container relative isolate flex min-w-0 flex-1 flex-col overflow-hidden bg-background md:my-3 md:rounded-2xl",
-          onChatRoute && "hidden",
-        )}
-      >
-        <div aria-hidden className="aurora" />
-        <LoadingSweep />
-        <header className="flex shrink-0 items-center gap-4 px-5 py-5 sm:px-8">
-          <HeaderIconButton
-            label={t("app.openMenu")}
-            onClick={() => {
-              setChatOpen(false);
-              setMobileOpen(true);
-            }}
-            className="shrink-0 md:hidden"
-          >
-            <Menu />
-          </HeaderIconButton>
-          <div className="min-w-0 flex-1">
-            <h1 className="truncate text-xl font-bold tracking-tight text-foreground">
-              {pageTitle}
-            </h1>
-          </div>
-          <div className="flex items-center gap-2 shrink-0">
-            <button
-              type="button"
-              onClick={() => openSearch()}
-              className="hidden h-9 w-56 shrink-0 items-center gap-2 rounded-md bg-surface-2 px-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background @2xl:flex"
-            >
-              <Search className="h-4 w-4 shrink-0" />
-              <span className="min-w-0 flex-1 truncate">{t("search.openButton")}</span>
-              <Kbd className="bg-background/70 px-1.5">{MOD_LABEL}K</Kbd>
-            </button>
+      {/* The workspace: the page and the docked chat on one white surface, inset from
+          the grey window on desktop and edge to edge below `md`. The chat's resize
+          handle draws the one line between them. */}
+      <div className="workspace-frame surface-fills flex min-w-0 flex-1 overflow-hidden bg-surface md:my-3 md:mr-3 md:rounded-2xl">
+        <main
+          id="main-content"
+          className={cn(
+            "@container relative isolate flex min-w-0 flex-1 flex-col overflow-hidden",
+            onChatRoute && "hidden",
+          )}
+        >
+          <div aria-hidden className="aurora" />
+          <LoadingSweep />
+          <header className="flex shrink-0 items-center gap-4 px-5 py-5 sm:px-8">
             <HeaderIconButton
-              label={t("search.openButton")}
-              onClick={() => openSearch()}
-              className="hidden shrink-0 @md:inline-flex @2xl:hidden"
-            >
-              <Search />
-            </HeaderIconButton>
-            <HeaderIconButton
-              label={theme === "dark" ? t("sidebar.lightMode") : t("sidebar.darkMode")}
-              onClick={toggleTheme}
-              className="shrink-0"
-            >
-              {theme === "dark" ? <Sun /> : <Moon />}
-            </HeaderIconButton>
-            {!onChatRoute && agentCollapsed && (
-              <HeaderIconButton
-                label={t("app.expandChat")}
-                onClick={toggleDockedChat}
-                className="hidden shrink-0 lg:inline-flex"
-              >
-                <ChevronLeft />
-              </HeaderIconButton>
-            )}
-            <HeaderIconButton
-              label={t("app.openChat")}
+              label={t("app.openMenu")}
               onClick={() => {
-                setMobileOpen(false);
-                setChatOpen(true);
+                setChatOpen(false);
+                setMobileOpen(true);
               }}
-              className="shrink-0 lg:hidden"
+              className="shrink-0 md:hidden"
             >
-              <MessagesSquare />
+              <Menu />
             </HeaderIconButton>
-          </div>
-        </header>
-
-        <div
-          className={cn(
-            "min-h-0 flex-1 overflow-y-auto scroll-stable @container",
-            // Tailwind Merge cannot cancel the breakpoint variants here.
-            currentPath === "knowledge" ? "flex flex-col px-3 pb-3" : "px-5 pb-10 pt-1 sm:px-8",
-          )}
-        >
-          <div
-            className={cn(
-              currentPath === "knowledge"
-                ? "min-h-0 w-full flex-1"
-                : currentPath === "settings"
-                  ? "w-full max-w-7xl"
-                  : // Home is the one two-column page, so its cap steps out of the
-                    // way as soon as the canvas can hold two columns.
-                    currentPath === "home"
-                    ? "mx-auto w-full max-w-3xl @3xl:max-w-4xl @5xl:max-w-6xl @7xl:max-w-7xl"
-                    : "mx-auto w-full max-w-3xl @5xl:max-w-4xl @6xl:max-w-5xl @7xl:max-w-6xl",
-              import.meta.env.DEV && currentPath === "showcase" && "max-w-none",
-            )}
-          >
-            <React.Suspense fallback={<LoadingRow />}>
-              <Routes>
-                <Route path="/chat" element={null} />
-                <Route
-                  path="/settings"
-                  element={<SettingsPanel status={status} onStatusChanged={refreshStatus} />}
-                />
-                <Route path="/leads" element={<LeadsPanel />} />
-                <Route path="/automations" element={<AutomationsPanel />} />
-                <Route path="/knowledge" element={<KnowledgePanel />} />
-                {ShowcasePanel && <Route path="/showcase" element={<ShowcasePanel />} />}
-                <Route
-                  path="/"
-                  element={
-                    <HomePanel
-                      setupIncomplete={status !== null && !isSetupComplete(status)}
-                      offline={Boolean(status?.pipedreamConfigured) && !status?.emailAccountsKnown}
-                      onNavigate={select}
-                    />
-                  }
-                />
-                <Route path="*" element={<NotFound />} />
-              </Routes>
-            </React.Suspense>
-          </div>
-        </div>
-      </main>
-
-      {!onChatRoute && chatOpen && (
-        <Backdrop className="lg:hidden" onClick={() => setChatOpen(false)} />
-      )}
-
-      {onChatRoute && historyOpen && (
-        <Backdrop className="lg:hidden" onClick={() => setHistoryOpen(false)} />
-      )}
-
-      <ResizeHandle
-        label={t("chat.resize")}
-        value={chatWidth}
-        min={CHAT_WIDTH_MIN}
-        max={CHAT_WIDTH_MAX}
-        onPointerDown={onChatResizeStart}
-        onKeyDown={onChatResizeKeyDown}
-        className={cn("z-40 hidden lg:flex", (onChatRoute || agentCollapsed) && "lg:hidden")}
-      />
-
-      {/* Keep one chat instance mounted so navigation cannot drop an active stream.
-          It docks beside the canvas only from `lg`: rail plus a 320px-minimum panel
-          leaves a workable canvas from there, and below it the panel is a drawer. */}
-      <div
-        className={cn(
-          "flex flex-col min-h-0 min-w-0 overflow-hidden",
-          onChatRoute
-            ? "static z-auto min-w-0 flex-1 bg-background md:my-3 md:rounded-2xl"
-            : cn(
-                "fixed inset-y-0 right-0 w-full max-w-sm lg:static lg:z-auto lg:max-w-none lg:translate-x-0",
-                // Width animation would make the panel trail the pointer during a drag.
-                chatResizing
-                  ? "transition-none"
-                  : "transition-[transform,width] duration-200 ease-out",
-                agentCollapsed ? "lg:w-0" : "lg:w-[var(--chat-width)]",
-                chatOpen ? "z-50 translate-x-0" : "z-40 translate-x-full lg:translate-x-0",
-              ),
-        )}
-      >
-        <div
-          className={cn(
-            "flex min-h-0 min-w-0 flex-1 overflow-hidden pointer-events-auto",
-            onChatRoute ? "flex-row gap-3 p-3 sm:p-4" : "flex-col bg-sidebar",
-            // Prevent text reflow while the panel opens and closes.
-            !onChatRoute && "lg:w-[var(--chat-width)]",
-          )}
-        >
-          {onChatRoute && (
-            <aside
-              aria-label={t("chat.history")}
-              className={cn(
-                "fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-background transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-64 lg:translate-x-0 xl:w-72",
-                historyOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
-                historyCollapsed && "lg:hidden",
-              )}
-            >
-              <div className="flex shrink-0 items-center gap-2.5 px-3 pb-1 pt-4">
-                <p className="text-sm font-semibold tracking-tight">{t("chat.history")}</p>
+            <div className="min-w-0 flex-1">
+              <h1 className="truncate text-xl font-bold tracking-tight text-foreground">
+                {pageTitle}
+              </h1>
+            </div>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={() => openSearch()}
+                className="hidden h-9 w-56 shrink-0 items-center gap-2 rounded-md bg-surface-2 px-2.5 text-left text-sm text-muted-foreground transition-colors hover:bg-secondary hover:text-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background @2xl:flex"
+              >
+                <Search className="h-4 w-4 shrink-0" />
+                <span className="min-w-0 flex-1 truncate">{t("search.openButton")}</span>
+                <Kbd className="bg-background/70 px-1.5">{MOD_LABEL}K</Kbd>
+              </button>
+              <HeaderIconButton
+                label={t("search.openButton")}
+                onClick={() => openSearch()}
+                className="hidden shrink-0 @md:inline-flex @2xl:hidden"
+              >
+                <Search />
+              </HeaderIconButton>
+              <HeaderIconButton
+                label={theme === "dark" ? t("sidebar.lightMode") : t("sidebar.darkMode")}
+                onClick={toggleTheme}
+                className="shrink-0"
+              >
+                {theme === "dark" ? <Sun /> : <Moon />}
+              </HeaderIconButton>
+              {!onChatRoute && agentCollapsed && (
                 <HeaderIconButton
-                  label={t("chat.collapseHistory")}
-                  onClick={() => setHistoryCollapsed(true)}
-                  className="ml-auto hidden lg:inline-flex"
+                  label={t("app.expandChat")}
+                  onClick={toggleDockedChat}
+                  className="hidden shrink-0 lg:inline-flex"
                 >
                   <ChevronLeft />
                 </HeaderIconButton>
-                <HeaderIconButton
-                  label={t("common.close")}
-                  onClick={() => setHistoryOpen(false)}
-                  className="lg:hidden"
-                >
-                  <X />
-                </HeaderIconButton>
-              </div>
-              <div className="px-3 pb-1">
-                <Button
-                  variant="ghost"
-                  className="w-full justify-start px-3 text-foreground"
-                  onClick={() => {
-                    sendChatCommand({ kind: "new" });
-                    setHistoryOpen(false);
-                  }}
-                >
-                  <Plus />
-                  {t("chat.newConversation")}
-                </Button>
-              </div>
-              <div className="px-3 pb-2">
-                <SearchField
-                  value={historyQuery}
-                  onChange={setHistoryQuery}
-                  placeholder={t("chat.searchPlaceholder")}
-                />
-              </div>
-              <div className="min-h-0 flex-1 overflow-y-auto scroll-stable px-2 pb-4">
-                <HistoryList
-                  activeId={activeConversationId}
-                  query={historyQuery}
-                  onPick={(id) => {
-                    sendChatCommand({ kind: "open", conversationId: id });
-                    setHistoryOpen(false);
-                  }}
-                />
-              </div>
-            </aside>
-          )}
+              )}
+              <HeaderIconButton
+                label={t("app.openChat")}
+                onClick={() => {
+                  setMobileOpen(false);
+                  setChatOpen(true);
+                }}
+                className="shrink-0 lg:hidden"
+              >
+                <MessagesSquare />
+              </HeaderIconButton>
+            </div>
+          </header>
 
-          {/* This stable column always owns the ChatPanel instance.
-              White surface (a rounded card on the Chat tab, flush chrome in panel mode), so
-              its neutral controls (composer, focus chip, code blocks) recess to grey rather
-              than rising to white as they would on the canvas. */}
           <div
             className={cn(
-              "surface-fills flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden @container",
-              onChatRoute && "rounded-2xl bg-surface",
+              "min-h-0 flex-1 overflow-y-auto scroll-stable @container",
+              // Tailwind Merge cannot cancel the breakpoint variants here.
+              currentPath === "knowledge"
+                ? "flex flex-col px-3 pb-3"
+                : // Home's and Automations' rows carry their own 12px inset, so the
+                  // column pads less and the group labels land beside the page title.
+                  currentPath === "home" || currentPath === "automations"
+                  ? "px-3 pb-10 pt-1 sm:px-6"
+                  : "px-5 pb-10 pt-1 sm:px-8",
             )}
           >
             <div
               className={cn(
-                "flex shrink-0 items-center gap-2.5 px-5",
-                onChatRoute ? "py-4" : "pb-4 pt-6",
+                currentPath === "knowledge"
+                  ? "min-h-0 w-full flex-1"
+                  : currentPath === "settings"
+                    ? "w-full max-w-7xl"
+                    : // Home is the one two-column page, so its cap steps out of the
+                      // way as soon as the canvas can hold two columns.
+                      currentPath === "home"
+                      ? "mx-auto w-full max-w-3xl @3xl:max-w-4xl @5xl:max-w-6xl @7xl:max-w-7xl"
+                      : "mx-auto w-full max-w-3xl @5xl:max-w-4xl @6xl:max-w-5xl @7xl:max-w-6xl",
+                import.meta.env.DEV && currentPath === "showcase" && "max-w-none",
               )}
             >
-              {/* Full-page tab has no app header, so mobile users still need a way into the nav drawer. */}
-              {onChatRoute && (
-                <HeaderIconButton
-                  label={t("app.openMenu")}
-                  onClick={() => setMobileOpen(true)}
-                  className="shrink-0 md:hidden"
-                >
-                  <Menu />
-                </HeaderIconButton>
-              )}
-              {/* Reopen the collapsed history rail (desktop). */}
-              {onChatRoute && historyCollapsed && (
-                <HeaderIconButton
-                  label={t("chat.showHistory")}
-                  onClick={() => setHistoryCollapsed(false)}
-                  className="hidden shrink-0 lg:inline-flex"
-                >
-                  <ChevronRight />
-                </HeaderIconButton>
-              )}
-              {chatSearch ? (
-                <ChatSearchBar
-                  query={chatSearch.query}
-                  hit={chatSearch.hit}
-                  hits={chatHits}
-                  onQueryChange={(query) => setChatSearch({ query, hit: 0 })}
-                  onHitChange={(hit) => setChatSearch((s) => (s ? { ...s, hit } : s))}
-                  onClose={() => setChatSearch(null)}
-                />
-              ) : (
-                <>
-                  <p
-                    className="shrink-0 truncate text-sm font-semibold tracking-tight sm:min-w-0 sm:shrink"
-                    title={chatTitle}
-                  >
-                    {onChatRoute ? (
-                      <>
-                        <span className="sm:hidden">{t("views.chat.title")}</span>
-                        <span className="hidden sm:inline">{chatTitle}</span>
-                      </>
-                    ) : (
-                      chatTitle
-                    )}
-                  </p>
-                  <FocusChip
-                    conversationId={activeConversationId}
-                    pendingFocusAccountId={pendingFocusAccountId}
-                    onPendingFocusChange={setPendingFocusAccountId}
-                  />
-                </>
-              )}
-              {onChatRoute && !chatSearch && (
-                <HeaderIconButton
-                  label={theme === "dark" ? t("sidebar.lightMode") : t("sidebar.darkMode")}
-                  onClick={toggleTheme}
-                  className="ml-auto shrink-0"
-                >
-                  {theme === "dark" ? <Sun /> : <Moon />}
-                </HeaderIconButton>
-              )}
-              {!chatSearch && (
-                <HeaderIconButton
-                  label={t("chat.search.open")}
-                  onClick={() => {
-                    setChatSearch({ query: "", hit: 0 });
-                    setHistoryOpen(false);
-                  }}
-                  className={cn(!onChatRoute && "ml-auto")}
-                >
-                  <Search />
-                </HeaderIconButton>
-              )}
-              <HeaderIconButton
-                label={t("chat.newConversation")}
-                onClick={() => sendChatCommand({ kind: "new" })}
-                className={cn(onChatRoute && "lg:hidden")}
-              >
-                <Plus />
-              </HeaderIconButton>
-              <HeaderIconButton
-                label={t("chat.history")}
-                onClick={() => setHistoryOpen((open) => !open)}
-                className={cn(historyOpen && "text-foreground", onChatRoute && "lg:hidden")}
-              >
-                <History />
-              </HeaderIconButton>
-              {!onChatRoute && (
-                <HeaderIconButton
-                  label={t("app.collapseChat")}
-                  onClick={toggleDockedChat}
-                  className="hidden lg:inline-flex"
-                >
-                  <ChevronRight />
-                </HeaderIconButton>
-              )}
-              {!onChatRoute && (
-                <HeaderIconButton
-                  label={t("app.closeChat")}
-                  onClick={() => setChatOpen(false)}
-                  className="lg:hidden"
-                >
-                  <X />
-                </HeaderIconButton>
-              )}
+              <Pages status={status} onStatusChanged={refreshStatus} onNavigate={select} />
             </div>
-            <div className="flex flex-col min-h-0 flex-1 px-5 pb-5 overflow-hidden">
-              <ChatPanel
-                historyOpen={historyOpen}
-                setHistoryOpen={setHistoryOpen}
-                layout={onChatRoute ? "page" : "panel"}
-                onConversationChange={setActiveConversationId}
-                pendingFocusAccountId={pendingFocusAccountId}
-                search={chatSearch ?? undefined}
-                onSearchHits={setChatHits}
-              />
+          </div>
+        </main>
+
+        {!onChatRoute && chatOpen && (
+          <Backdrop className="lg:hidden" onClick={() => setChatOpen(false)} />
+        )}
+
+        {onChatRoute && historyOpen && (
+          <Backdrop className="lg:hidden" onClick={() => setHistoryOpen(false)} />
+        )}
+
+        <ResizeHandle
+          label={t("chat.resize")}
+          value={chatWidth}
+          min={CHAT_WIDTH_MIN}
+          max={CHAT_WIDTH_MAX}
+          onPointerDown={onChatResizeStart}
+          onKeyDown={onChatResizeKeyDown}
+          seam
+          className={cn("z-40 hidden lg:flex", (onChatRoute || agentCollapsed) && "lg:hidden")}
+        />
+
+        {/* Keep one chat instance mounted so navigation cannot drop an active stream.
+          It docks beside the canvas only from `lg`: rail plus a 320px-minimum panel
+          leaves a workable canvas from there, and below it the panel is a drawer. */}
+        <div
+          className={cn(
+            "flex flex-col min-h-0 min-w-0 overflow-hidden",
+            onChatRoute
+              ? "static z-auto min-w-0 flex-1"
+              : cn(
+                  "fixed inset-y-0 right-0 w-full max-w-sm lg:static lg:z-auto lg:max-w-none lg:translate-x-0",
+                  // Width animation would make the panel trail the pointer during a drag.
+                  chatResizing
+                    ? "transition-none"
+                    : "transition-[transform,width] duration-200 ease-out",
+                  agentCollapsed ? "lg:w-0" : "lg:w-[var(--chat-width)]",
+                  chatOpen ? "z-50 translate-x-0" : "z-40 translate-x-full lg:translate-x-0",
+                ),
+          )}
+        >
+          <div
+            className={cn(
+              "flex min-h-0 min-w-0 flex-1 overflow-hidden pointer-events-auto",
+              onChatRoute ? "flex-row" : "flex-col bg-surface",
+              // Prevent text reflow while the panel opens and closes.
+              !onChatRoute && "lg:w-[var(--chat-width)]",
+            )}
+          >
+            {onChatRoute && (
+              <aside
+                aria-label={t("chat.history")}
+                className={cn(
+                  "fixed inset-y-0 left-0 z-50 flex w-72 flex-col bg-surface transition-transform duration-200 ease-out lg:static lg:z-auto lg:w-64 lg:translate-x-0 xl:w-72",
+                  historyOpen ? "translate-x-0" : "-translate-x-full lg:translate-x-0",
+                  historyCollapsed && "lg:hidden",
+                )}
+              >
+                <div className="flex shrink-0 items-center gap-2.5 px-3 pb-1 pt-4">
+                  <p className="text-sm font-semibold tracking-tight">{t("chat.history")}</p>
+                  <HeaderIconButton
+                    label={t("chat.collapseHistory")}
+                    onClick={() => setHistoryCollapsed(true)}
+                    className="ml-auto hidden lg:inline-flex"
+                  >
+                    <ChevronLeft />
+                  </HeaderIconButton>
+                  <HeaderIconButton
+                    label={t("common.close")}
+                    onClick={() => setHistoryOpen(false)}
+                    className="lg:hidden"
+                  >
+                    <X />
+                  </HeaderIconButton>
+                </div>
+                <div className="px-3 pb-1">
+                  <Button
+                    variant="ghost"
+                    className="w-full justify-start px-3 text-foreground"
+                    onClick={() => {
+                      sendChatCommand({ kind: "new" });
+                      setHistoryOpen(false);
+                    }}
+                  >
+                    <Plus />
+                    {t("chat.newConversation")}
+                  </Button>
+                </div>
+                <div className="px-3 pb-2">
+                  <SearchField
+                    value={historyQuery}
+                    onChange={setHistoryQuery}
+                    placeholder={t("chat.searchPlaceholder")}
+                  />
+                </div>
+                <div className="min-h-0 flex-1 overflow-y-auto scroll-stable px-2 pb-4">
+                  <HistoryList
+                    activeId={activeConversationId}
+                    query={historyQuery}
+                    onPick={(id) => {
+                      sendChatCommand({ kind: "open", conversationId: id });
+                      setHistoryOpen(false);
+                    }}
+                  />
+                </div>
+              </aside>
+            )}
+            {onChatRoute && !historyCollapsed && (
+              <div aria-hidden className="seam hidden w-px shrink-0 lg:block" />
+            )}
+
+            {/* This stable column always owns the ChatPanel instance. */}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden @container">
+              {/* In panel mode the header pads like the page header, so the chat title
+                sits on the page title's baseline. */}
+              <div
+                className={cn(
+                  "flex shrink-0 items-center gap-2.5 px-5",
+                  onChatRoute ? "py-4" : "py-5",
+                )}
+              >
+                {/* Full-page tab has no app header, so mobile users still need a way into the nav drawer. */}
+                {onChatRoute && (
+                  <HeaderIconButton
+                    label={t("app.openMenu")}
+                    onClick={() => setMobileOpen(true)}
+                    className="shrink-0 md:hidden"
+                  >
+                    <Menu />
+                  </HeaderIconButton>
+                )}
+                {/* Reopen the collapsed history rail (desktop). */}
+                {onChatRoute && historyCollapsed && (
+                  <HeaderIconButton
+                    label={t("chat.showHistory")}
+                    onClick={() => setHistoryCollapsed(false)}
+                    className="hidden shrink-0 lg:inline-flex"
+                  >
+                    <ChevronRight />
+                  </HeaderIconButton>
+                )}
+                {chatSearch ? (
+                  <ChatSearchBar
+                    query={chatSearch.query}
+                    hit={chatSearch.hit}
+                    hits={chatHits}
+                    onQueryChange={(query) => setChatSearch({ query, hit: 0 })}
+                    onHitChange={(hit) => setChatSearch((s) => (s ? { ...s, hit } : s))}
+                    onClose={() => setChatSearch(null)}
+                  />
+                ) : (
+                  <>
+                    <p
+                      className="shrink-0 truncate text-sm font-semibold tracking-tight sm:min-w-0 sm:shrink"
+                      title={chatTitle}
+                    >
+                      {onChatRoute ? (
+                        <>
+                          <span className="sm:hidden">{t("views.chat.title")}</span>
+                          <span className="hidden sm:inline">{chatTitle}</span>
+                        </>
+                      ) : (
+                        chatTitle
+                      )}
+                    </p>
+                    <FocusChip
+                      conversationId={activeConversationId}
+                      pendingFocusAccountId={pendingFocusAccountId}
+                      onPendingFocusChange={setPendingFocusAccountId}
+                    />
+                  </>
+                )}
+                {onChatRoute && !chatSearch && (
+                  <HeaderIconButton
+                    label={theme === "dark" ? t("sidebar.lightMode") : t("sidebar.darkMode")}
+                    onClick={toggleTheme}
+                    className="ml-auto shrink-0"
+                  >
+                    {theme === "dark" ? <Sun /> : <Moon />}
+                  </HeaderIconButton>
+                )}
+                {!chatSearch && (
+                  <HeaderIconButton
+                    label={t("chat.search.open")}
+                    onClick={() => {
+                      setChatSearch({ query: "", hit: 0 });
+                      setHistoryOpen(false);
+                    }}
+                    className={cn(!onChatRoute && "ml-auto")}
+                  >
+                    <Search />
+                  </HeaderIconButton>
+                )}
+                <HeaderIconButton
+                  label={t("chat.newConversation")}
+                  onClick={() => sendChatCommand({ kind: "new" })}
+                  className={cn(onChatRoute && "lg:hidden")}
+                >
+                  <Plus />
+                </HeaderIconButton>
+                <HeaderIconButton
+                  label={t("chat.history")}
+                  onClick={() => setHistoryOpen((open) => !open)}
+                  className={cn(historyOpen && "text-foreground", onChatRoute && "lg:hidden")}
+                >
+                  <History />
+                </HeaderIconButton>
+                {!onChatRoute && (
+                  <HeaderIconButton
+                    label={t("app.collapseChat")}
+                    onClick={toggleDockedChat}
+                    className="hidden lg:inline-flex"
+                  >
+                    <ChevronRight />
+                  </HeaderIconButton>
+                )}
+                {!onChatRoute && (
+                  <HeaderIconButton
+                    label={t("app.closeChat")}
+                    onClick={() => setChatOpen(false)}
+                    className="lg:hidden"
+                  >
+                    <X />
+                  </HeaderIconButton>
+                )}
+              </div>
+              <div className="flex flex-col min-h-0 flex-1 px-5 pb-5 overflow-hidden">
+                <ChatPanel
+                  historyOpen={historyOpen}
+                  setHistoryOpen={setHistoryOpen}
+                  layout={onChatRoute ? "page" : "panel"}
+                  onConversationChange={setActiveConversationId}
+                  pendingFocusAccountId={pendingFocusAccountId}
+                  search={chatSearch ?? undefined}
+                  onSearchHits={setChatHits}
+                />
+              </div>
             </div>
           </div>
         </div>

@@ -8,6 +8,42 @@
 /** 24h clock in every language, "h23" so midnight renders 00:32, never 24:32. */
 const HOUR_CYCLE: Intl.DateTimeFormatOptions = { hourCycle: "h23" };
 
+const DATE_TIME: Intl.DateTimeFormatOptions = {
+  day: "numeric",
+  month: "short",
+  hour: "2-digit",
+  minute: "2-digit",
+  ...HOUR_CYCLE,
+};
+const TIME: Intl.DateTimeFormatOptions = { hour: "2-digit", minute: "2-digit", ...HOUR_CYCLE };
+const DAY_LONG: Intl.DateTimeFormatOptions = { weekday: "long", day: "numeric", month: "long" };
+const DAY_LONG_SHORT_MONTH: Intl.DateTimeFormatOptions = {
+  weekday: "long",
+  day: "numeric",
+  month: "short",
+};
+const WEEKDAY: Intl.DateTimeFormatOptions = { weekday: "short" };
+const DATE_SHORT: Intl.DateTimeFormatOptions = { weekday: "short", day: "numeric", month: "short" };
+
+/** Built once per (shape, language): an Intl formatter costs far more to build than to use. */
+const formatters = new WeakMap<Intl.DateTimeFormatOptions, Map<string, Intl.DateTimeFormat>>();
+
+function format(iso: string | Date, lang: string, options: Intl.DateTimeFormatOptions): string {
+  const date = iso instanceof Date ? iso : new Date(iso);
+  if (Number.isNaN(date.getTime())) return "";
+  let byLang = formatters.get(options);
+  if (!byLang) {
+    byLang = new Map();
+    formatters.set(options, byLang);
+  }
+  let formatter = byLang.get(lang);
+  if (!formatter) {
+    formatter = new Intl.DateTimeFormat(lang, options);
+    byLang.set(lang, formatter);
+  }
+  return formatter.format(date);
+}
+
 /** Whether the timestamp falls on the current local date. */
 export function isToday(iso: string): boolean {
   return new Date(iso).toDateString() === new Date().toDateString();
@@ -41,14 +77,7 @@ export function relativeTime(iso: string, lang: string): string {
 /** "9 Jul, 14:32"-style absolute label used by chat history and draft review.
  *  Empty or unparsable input returns "". */
 export function dateTimeLabel(iso: string, lang: string): string {
-  if (!iso) return "";
-  return new Date(iso).toLocaleString(lang, {
-    day: "numeric",
-    month: "short",
-    hour: "2-digit",
-    minute: "2-digit",
-    ...HOUR_CYCLE,
-  });
+  return format(iso, lang, DATE_TIME);
 }
 
 /**
@@ -63,20 +92,22 @@ export function waitingLabel(iso: string, lang: string): string {
 
 /** "Wednesday, 9 July"-style day heading, groups the Home activity feed. */
 export function dayLabel(iso: string, lang: string): string {
-  return new Date(iso).toLocaleDateString(lang, {
-    weekday: "long",
-    day: "numeric",
-    month: "long",
-  });
+  return format(iso, lang, DAY_LONG);
 }
 
 /** "14:32"-style time-only label, paired with `dayLabel` in the Home activity feed. */
 export function timeLabel(iso: string, lang: string): string {
-  return new Date(iso).toLocaleTimeString(lang, {
-    hour: "2-digit",
-    minute: "2-digit",
-    ...HOUR_CYCLE,
-  });
+  return format(iso, lang, TIME);
+}
+
+/** "Mon"-style weekday, for a gutter too narrow for a date. */
+export function weekdayLabel(iso: string, lang: string): string {
+  return format(iso, lang, WEEKDAY);
+}
+
+/** "Mon, 9 Jul"-style short date, for a due date or a day label. */
+export function shortDateLabel(iso: string, lang: string): string {
+  return format(iso, lang, DATE_SHORT);
 }
 
 /**
@@ -88,16 +119,16 @@ export function timeLabel(iso: string, lang: string): string {
  * with each other.
  */
 export function dayTimeLabel(iso: string, lang: string, style: "short" | "long" = "short"): string {
-  const date = new Date(iso);
-  const time = date.toLocaleTimeString(lang, {
-    hour: "2-digit",
-    minute: "2-digit",
-    ...HOUR_CYCLE,
-  });
+  const time = timeLabel(iso, lang);
   if (isToday(iso)) return time;
-  const day =
-    style === "long"
-      ? date.toLocaleDateString(lang, { weekday: "long", day: "numeric", month: "short" })
-      : date.toLocaleDateString(lang, { weekday: "short" });
+  const day = format(iso, lang, style === "long" ? DAY_LONG_SHORT_MONTH : WEEKDAY);
   return `${day} · ${time}`;
+}
+
+/**
+ * A row's "when": the clock alone for a timestamp from today, the date with its
+ * clock otherwise, so a row that has waited past midnight never reads as today.
+ */
+export function whenLabel(iso: string, lang: string): string {
+  return isToday(iso) ? timeLabel(iso, lang) : dateTimeLabel(iso, lang);
 }

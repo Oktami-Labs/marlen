@@ -24,7 +24,7 @@ export function AccountDot({
       className={cn(
         "h-1.5 w-1.5 shrink-0 rounded-full",
         tone === "ink" && "bg-foreground/80",
-        tone === "accent" && "bg-accent/60",
+        tone === "accent" && "bg-accent-text/60",
         className,
       )}
       style={tone ? undefined : { backgroundColor: color || UNASSIGNED_ACCOUNT_COLOR }}

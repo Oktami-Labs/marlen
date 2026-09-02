@@ -11,7 +11,7 @@ const SIZE = {
 /**
  * Small uppercase muted label heading a group of rows, the one overline
  * shape. Tag defaults to h3; pass `as` where the outline or markup demands
- * otherwise.
+ * otherwise (h2 heads a Home column, whose groups are h3 under it).
  */
 export function GroupLabel({
   as: Tag = "h3",
@@ -20,7 +20,7 @@ export function GroupLabel({
   className,
   children,
 }: {
-  as?: "h3" | "h4" | "p" | "span";
+  as?: "h2" | "h3" | "h4" | "p" | "span";
   size?: keyof typeof SIZE;
   /** How many rows the group holds; shown from two up, a one over one visible row says nothing. */
   count?: number;

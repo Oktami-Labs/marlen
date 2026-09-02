@@ -6,9 +6,13 @@ import { useTranslation } from "react-i18next";
 import { Badge, badgeVariants } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Spinner } from "@/components/ui/spinner";
-import { FileEditor } from "@/features/knowledge/FileEditor";
 import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";
+
+// The editor brings tiptap with it; it loads when a voice is opened, not with the app shell.
+const FileEditor = React.lazy(() =>
+  import("@/features/knowledge/FileEditor").then(({ FileEditor }) => ({ default: FileEditor })),
+);
 
 /**
  * Voice-learn status for one account row: an in-flight or failed attempt, or
@@ -91,11 +95,13 @@ export function VoiceLearnBadge({ account }: { account: ConnectedAccount }) {
           {t("connections.voiceLearned")}
         </button>
         {editing && (
-          <FileEditor
-            target={{ kind: "page", page: editing }}
-            onClose={() => setEditing(null)}
-            onStatus={() => {}}
-          />
+          <React.Suspense fallback={null}>
+            <FileEditor
+              target={{ kind: "page", page: editing }}
+              onClose={() => setEditing(null)}
+              onStatus={() => {}}
+            />
+          </React.Suspense>
         )}
       </>
     );

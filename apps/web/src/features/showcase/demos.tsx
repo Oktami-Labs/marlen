@@ -618,7 +618,7 @@ export function MicroInteractionsDemo() {
           <Button
             variant="ghost"
             size="icon-xs"
-            className="icon-refine hover:bg-accent/10 hover:text-accent"
+            className="icon-refine hover:bg-accent/10 hover:text-accent-text"
             aria-label="Refine"
             data-tooltip="icon-refine — the sparkle swells"
           >

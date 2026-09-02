@@ -97,7 +97,7 @@ export function PipedreamWizard({
                     href="https://pipedream.com"
                     target="_blank"
                     rel="noreferrer"
-                    className="text-accent underline"
+                    className="text-accent-text underline"
                   >
                     Pipedream
                   </a>

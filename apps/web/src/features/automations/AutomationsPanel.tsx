@@ -18,174 +18,226 @@ import {
 import { CSS } from "@dnd-kit/utilities";
 import type { Automation } from "@marlen/shared";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
+import type { ParseKeys } from "i18next";
 import { CalendarClock, Menu, Plus } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { useLocation, useNavigate } from "react-router-dom";
+import { useSearchParams } from "react-router-dom";
 import { Button } from "@/components/ui/button";
-import { Card } from "@/components/ui/card";
 import { EmptyState } from "@/components/ui/empty-state";
-import { Skeleton } from "@/components/ui/skeleton";
-import { AutomationCard } from "@/features/automations/AutomationCard";
+import { LoadingRow, RetryableError } from "@/components/ui/feedback";
+import { GroupLabel } from "@/components/ui/group-label";
 import { AutomationFormDialog } from "@/features/automations/AutomationFormDialog";
+import { AutomationRow } from "@/features/automations/AutomationRow";
+import { type TriggerKind, triggerKind } from "@/features/automations/schedule";
+import { COLUMN_HEAD } from "@/features/home/NeedsYouSection";
 import { api } from "@/lib/api";
 import { toast } from "@/lib/toast";
-import { cn, midpoint, rowTransition, stagger } from "@/lib/utils";
+import { cn, errorMessage, midpoint, rowTransition, stagger } from "@/lib/utils";
 
-type FormTarget = { kind: "create" } | { kind: "edit"; automation: Automation };
+const GROUPS: { kind: TriggerKind; label: ParseKeys }[] = [
+  { kind: "schedule", label: "automations.groupSchedule" },
+  { kind: "mail", label: "automations.groupMail" },
+  { kind: "manual", label: "automations.groupManual" },
+];
 
+/**
+ * The automations list: bare rows grouped by what starts them, in the
+ * user's own order inside a group. `?automation=<id>` opens that
+ * automation's settings dialog (`new` for one not yet saved), so Home can
+ * link to one and back closes it.
+ */
 export function AutomationsPanel() {
   const { t } = useTranslation();
   const queryClient = useQueryClient();
-  const location = useLocation();
-  const navigate = useNavigate();
-  const [focusAutomation] = React.useState(() => {
-    const state = location.state as { focusAutomation?: string } | null;
-    return state?.focusAutomation ?? null;
-  });
-  React.useEffect(() => {
-    if (focusAutomation) navigate(location.pathname, { replace: true });
-  }, [focusAutomation, navigate, location.pathname]);
+  const [searchParams, setSearchParams] = useSearchParams();
+
   const automationsQuery = useQuery({
     queryKey: ["automations", "list"],
     queryFn: () => api.automations(),
+    meta: { suppressErrorToast: true },
   });
-  const automations = automationsQuery.data ?? [];
-  const loading = automationsQuery.isPending;
-  const loadError = automationsQuery.error;
-  React.useEffect(() => {
-    if (loadError) toast.error(loadError);
-  }, [loadError]);
-  const refreshAutomations = () => queryClient.invalidateQueries({ queryKey: ["automations"] });
-  const [formTarget, setFormTarget] = React.useState<FormTarget | null>(null);
+  const automations = automationsQuery.data ?? null;
 
-  const focusRef = React.useRef<HTMLDivElement | null>(null);
-  const focusPresent = automations.some((a) => a.id === focusAutomation);
-  React.useEffect(() => {
-    if (focusPresent) focusRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
-  }, [focusPresent]);
+  const automationParam = searchParams.get("automation");
+  const openAutomation = (id: string) => setSearchParams({ automation: id });
+  const closeDialog = () => setSearchParams({}, { replace: true });
+  const selected = automationParam
+    ? (automations?.find((a) => a.id === automationParam) ?? null)
+    : null;
 
+  // Selected but not in the list: it was deleted elsewhere, so the dialog has
+  // nothing to show and the list is the honest answer, said out loud.
+  const gone =
+    automationParam !== null && automationParam !== "new" && automations !== null && !selected;
+  React.useEffect(() => {
+    if (!gone) return;
+    toast.info(t("automations.gone"));
+    setSearchParams({}, { replace: true });
+  }, [gone, setSearchParams, t]);
+
+  const dialog = (automationParam === "new" || selected) && (
+    <AutomationFormDialog
+      key={selected?.id ?? "new"}
+      open
+      automation={selected}
+      onOpenChange={(open) => {
+        if (!open) closeDialog();
+      }}
+    />
+  );
+  const newButton = (
+    <Button size="sm" onClick={() => openAutomation("new")}>
+      <Plus /> {t("automations.new")}
+    </Button>
+  );
+
+  if (automations === null) {
+    return (
+      <div className="flex flex-col">
+        <div className={cn(COLUMN_HEAD, "justify-end")}>{newButton}</div>
+        {automationsQuery.error ? (
+          <RetryableError onRetry={() => void automationsQuery.refetch()}>
+            {errorMessage(automationsQuery.error)}
+          </RetryableError>
+        ) : (
+          <LoadingRow className="px-3" />
+        )}
+        {dialog}
+      </div>
+    );
+  }
+
+  if (automations.length === 0) {
+    return (
+      <>
+        <EmptyState
+          surface={false}
+          icon={CalendarClock}
+          title={t("automations.emptyTitle")}
+          description={t("automations.emptyBody")}
+          action={newButton}
+        />
+        {dialog}
+      </>
+    );
+  }
+
+  return (
+    <>
+      <AutomationList
+        automations={automations}
+        onOpen={openAutomation}
+        newButton={newButton}
+        onReorder={(next, moved, position) => {
+          queryClient.setQueryData<Automation[]>(
+            ["automations", "list"],
+            next.map((a) => (a.id === moved ? { ...a, position } : a)),
+          );
+          api.updateAutomation(moved, { position }).catch((err: unknown) => {
+            toast.error(err);
+            void queryClient.invalidateQueries({ queryKey: ["automations"] });
+          });
+        }}
+      />
+      {dialog}
+    </>
+  );
+}
+
+function AutomationList({
+  automations,
+  onOpen,
+  newButton,
+  onReorder,
+}: {
+  automations: Automation[];
+  onOpen: (id: string) => void;
+  newButton: React.ReactNode;
+  onReorder: (next: Automation[], movedId: string, position: number) => void;
+}) {
+  const { t } = useTranslation();
   const sensors = useSensors(
     useSensor(PointerSensor, { activationConstraint: { distance: 5 } }),
     useSensor(KeyboardSensor, { coordinateGetter: sortableKeyboardCoordinates }),
   );
-
-  // The card under the pointer renders in a DragOverlay; the in-list original
-  // stays as a dimmed placeholder and the overlay animates into it on drop.
   const [dragId, setDragId] = React.useState<string | null>(null);
   const dragged = automations.find((a) => a.id === dragId) ?? null;
 
+  const groups = GROUPS.map((group) => ({
+    ...group,
+    items: automations.filter((a) => triggerKind(a) === group.kind),
+  })).filter((group) => group.items.length > 0);
+
+  // A drop lands between its new neighbours within the group; the sort key
+  // is global, so the row also keeps its place relative to other groups.
   const onDragEnd = (e: DragEndEvent) => {
     setDragId(null);
     const { active, over } = e;
     if (!over || active.id === over.id) return;
-    const from = automations.findIndex((a) => a.id === active.id);
-    const to = automations.findIndex((a) => a.id === over.id);
-    if (from < 0 || to < 0) return;
-    const next = arrayMove(automations, from, to);
-    const position = midpoint(next[to - 1]?.position, next[to + 1]?.position);
-    queryClient.setQueryData<Automation[]>(
-      ["automations", "list"],
-      next.map((a) => (a.id === active.id ? { ...a, position } : a)),
-    );
-    api.updateAutomation(String(active.id), { position }).catch((err: unknown) => {
-      toast.error(err);
-      void queryClient.invalidateQueries({ queryKey: ["automations"] });
-    });
+    const group = groups.find((g) => g.items.some((a) => a.id === active.id));
+    if (!group?.items.some((a) => a.id === over.id)) return;
+    const from = group.items.findIndex((a) => a.id === active.id);
+    const to = group.items.findIndex((a) => a.id === over.id);
+    const nextGroup = arrayMove(group.items, from, to);
+    const position = midpoint(nextGroup[to - 1]?.position, nextGroup[to + 1]?.position);
+    const next = automations
+      .map((a) => (a.id === active.id ? { ...a, position } : a))
+      .sort((a, b) => a.position - b.position);
+    onReorder(next, String(active.id), position);
   };
 
-  const openForEdit = (automation: Automation) => {
-    setFormTarget({ kind: "edit", automation });
-  };
-
+  let index = 0;
   return (
-    <div className="flex flex-col gap-4 pt-4">
-      <div className="flex items-center justify-end">
-        <Button size="sm" onClick={() => setFormTarget({ kind: "create" })}>
-          <Plus /> {t("automations.new")}
-        </Button>
-      </div>
-
-      {formTarget ? (
-        <AutomationFormDialog
-          key={formTarget.kind === "edit" ? formTarget.automation.id : "create"}
-          open
-          automation={formTarget.kind === "edit" ? formTarget.automation : null}
-          onOpenChange={(open) => {
-            if (!open) setFormTarget(null);
-          }}
-          onChanged={refreshAutomations}
-        />
-      ) : null}
-
-      {loading ? (
-        <div className="flex flex-col gap-3">
-          {[0, 1].map((i) => (
-            <Card key={i} padding="lg">
-              <div className="flex items-start justify-between gap-3">
-                <div className="flex flex-col gap-2">
-                  <Skeleton className="h-4 w-44" />
-                  <Skeleton className="h-3 w-64" />
-                </div>
-                <Skeleton className="h-8 w-24 rounded-md" />
+    <DndContext
+      sensors={sensors}
+      collisionDetection={closestCenter}
+      onDragStart={(e) => setDragId(String(e.active.id))}
+      onDragCancel={() => setDragId(null)}
+      onDragEnd={onDragEnd}
+    >
+      <div className="flex flex-col">
+        {groups.map((group, groupIndex) => (
+          <section key={group.kind} className="flex flex-col">
+            {groupIndex === 0 ? (
+              <div className={COLUMN_HEAD}>
+                <GroupLabel as="h2" count={group.items.length}>
+                  {t(group.label)}
+                </GroupLabel>
+                <div className="ml-auto">{newButton}</div>
               </div>
-            </Card>
-          ))}
-        </div>
-      ) : automations.length === 0 ? (
-        <EmptyState
-          icon={CalendarClock}
-          title={t("automations.emptyTitle")}
-          description={t("automations.emptyBody")}
-        />
-      ) : (
-        <DndContext
-          sensors={sensors}
-          collisionDetection={closestCenter}
-          onDragStart={(e) => setDragId(String(e.active.id))}
-          onDragCancel={() => setDragId(null)}
-          onDragEnd={onDragEnd}
-        >
-          <SortableContext
-            items={automations.map((a) => a.id)}
-            strategy={verticalListSortingStrategy}
-          >
-            <div className="flex flex-col gap-3">
-              {automations.map((automation, i) => (
+            ) : (
+              <GroupLabel as="h2" count={group.items.length} className="px-3 pb-0.5 pt-3">
+                {t(group.label)}
+              </GroupLabel>
+            )}
+            <SortableContext
+              items={group.items.map((a) => a.id)}
+              strategy={verticalListSortingStrategy}
+            >
+              {group.items.map((automation) => (
                 <div
                   key={automation.id}
-                  ref={automation.id === focusAutomation ? focusRef : undefined}
                   className="animate-in-up"
-                  style={{ ...stagger(i), ...rowTransition(automation.id) }}
+                  style={{ ...stagger(index++), ...rowTransition(automation.id) }}
                 >
-                  <SortableAutomationRow id={automation.id}>
-                    <AutomationCard
-                      automation={automation}
-                      flash={automation.id === focusAutomation}
-                      onChanged={refreshAutomations}
-                      onEdit={() => openForEdit(automation)}
-                    />
-                  </SortableAutomationRow>
+                  <SortableRow id={automation.id}>
+                    <AutomationRow automation={automation} onOpen={() => onOpen(automation.id)} />
+                  </SortableRow>
                 </div>
               ))}
-            </div>
-          </SortableContext>
-          <DragOverlay>
-            {dragged && (
-              <AutomationCard
-                automation={dragged}
-                onChanged={refreshAutomations}
-                onEdit={() => openForEdit(dragged)}
-              />
-            )}
-          </DragOverlay>
-        </DndContext>
-      )}
-    </div>
+            </SortableContext>
+          </section>
+        ))}
+      </div>
+      <DragOverlay>
+        {dragged && <AutomationRow automation={dragged} onOpen={() => onOpen(dragged.id)} />}
+      </DragOverlay>
+    </DndContext>
   );
 }
 
-function SortableAutomationRow({ id, children }: { id: string; children: React.ReactNode }) {
+function SortableRow({ id, children }: { id: string; children: React.ReactNode }) {
   const { t } = useTranslation();
   const { attributes, listeners, setNodeRef, transform, transition, isDragging } = useSortable({
     id,
@@ -199,7 +251,7 @@ function SortableAutomationRow({ id, children }: { id: string; children: React.R
       <button
         type="button"
         className={cn(
-          "absolute -left-7 top-5 cursor-grab touch-none p-1 text-muted-foreground/50 hover:text-muted-foreground",
+          "absolute -left-6 top-3.5 cursor-grab touch-none p-1 text-muted-foreground/50 hover:text-muted-foreground",
           // The gutter it sits in only exists once the column has margins.
           "max-sm:hidden opacity-0 transition-opacity focus-visible:opacity-100 group-hover/auto:opacity-100",
         )}

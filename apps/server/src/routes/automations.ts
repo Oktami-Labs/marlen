@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
-import type { RunStep, RunTrigger } from "@marlen/shared";
+import type { Automation, RunStep, RunTrigger } from "@marlen/shared";
 import { Type } from "@sinclair/typebox";
 import { and, asc, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { parseStoredCards } from "../agent/cards.js";
@@ -95,13 +95,33 @@ function toRunDto<
   };
 }
 
+async function latestRun(automationId: string): Promise<Automation["lastRun"]> {
+  const [run] = await db
+    .select({
+      id: schema.automationRuns.id,
+      status: schema.automationRuns.status,
+      startedAt: schema.automationRuns.startedAt,
+    })
+    .from(schema.automationRuns)
+    .where(eq(schema.automationRuns.automationId, automationId))
+    .orderBy(desc(schema.automationRuns.startedAt))
+    .limit(1);
+  return run ?? null;
+}
+
 export const automationRoutes: FastifyPluginAsyncTypebox = async (app) => {
-  app.get("/api/automations", async () => {
+  app.get("/api/automations", async (): Promise<Automation[]> => {
     const rows = await db
       .select()
       .from(schema.automations)
       .orderBy(asc(schema.automations.position), desc(schema.automations.createdAt));
-    return rows.map((row) => ({ ...row, nextRunAt: getNextRunAt(row.id) }));
+    return Promise.all(
+      rows.map(async (row) => ({
+        ...row,
+        nextRunAt: getNextRunAt(row.id),
+        lastRun: await latestRun(row.id),
+      })),
+    );
   });
 
   app.get("/api/runs", { schema: { querystring: runsQuery } }, async (req) => {

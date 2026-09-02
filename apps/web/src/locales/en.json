@@ -545,6 +545,8 @@
     "setupBanner": "Marlene isn't fully set up, the agent can't reach your mail yet.",
     "setupBannerCta": "Finish setup",
     "offlineBanner": "Can't reach your email provider right now, check your connection.",
+    "draftGone": "This draft is no longer available.",
+    "reportGone": "This run is no longer in the feed.",
     "missedBanner_one": "1 automation didn't run while the app was closed.",
     "missedBanner_other": "{{count}} automations didn't run while the app was closed.",
     "missedRun": "Run now",
@@ -558,19 +560,19 @@
     "triggerTodoAnswerDetail": "Started with your answer \"{{answer}}\" to the to-do \"{{title}}\".",
     "triggerMail": "New mail",
     "triggerMailDetail": "Started by new mail in {{accounts}}.",
-    "attentionTitle": "To do",
+    "needsYou": "Needs you",
+    "approvals": "Approvals",
+    "questions": "Questions",
+    "tasks": "Tasks",
+    "now": "Now",
+    "approvalEmailTo": "Email to {{name}}",
+    "approvalChannelTo": "{{channel}} to {{name}}",
     "attentionEmpty": "All clear. New tasks and approvals show up here.",
-    "approvalsAllAccounts": "All accounts",
-    "approvalsFilterAccount": "Filter by account",
-    "showLess": "Show less",
     "outboundSentToast": "Message sent.",
-    "todosOverdue": "Missed",
     "todosToday": "Today",
     "todosTomorrow": "Tomorrow",
-    "todosAnytime": "Anytime",
     "todosAdd": "Add todo",
     "todosAddPlaceholder": "New todo…",
-    "todosReorder": "Reorder",
     "todosDismiss": "Dismiss",
     "todosEdit": "Edit",
     "todosEditDone": "Done",
@@ -593,20 +595,12 @@
     "activityEmptyBody": "Put your inbox on autopilot: a standing instruction runs on a schedule and reports here.",
     "activityNoRunsBody": "Your automations haven't produced results yet, run one now or wait for its schedule.",
     "activityNothingToday": "Nothing today yet.",
-    "activityShowEarlier_one": "Show {{count}} earlier run",
-    "activityShowEarlier_other": "Show {{count}} earlier runs",
     "createAutomation": "Create an automation",
     "viewAutomations": "View automations",
     "deletedAutomation": "Deleted automation",
     "openInChat": "Open in chat",
-    "briefingTitle": "Briefing",
     "briefingRefresh": "Refresh",
-    "workTitle": "Marlene is working",
-    "workNow": "now",
     "workStarting": "Starting…",
-    "workStepRunning": "running",
-    "workUpNext": "Up next",
-    "workScheduled": "Scheduled",
     "workFailed": "Failed.",
     "todosAnswered": "Answer: {{answer}}"
   },
@@ -657,10 +651,10 @@
   "automations": {
     "new": "New automation",
     "reorder": "Reorder",
-    "save": "Save",
     "create": "Create",
-    "formTitle": "New automation",
+    "save": "Save",
     "editTitle": "Edit automation",
+    "formTitle": "New automation",
     "taskSection": "Task",
     "timingSection": "When it runs",
     "runSettings": "Run settings",
@@ -703,18 +697,29 @@
     "pinned": "Pinned to Home",
     "emptyTitle": "No automations yet",
     "emptyBody": "Write a standing instruction and choose when it runs.",
-    "paused": "paused",
-    "hiddenFromActivity": "Hidden from activity",
+    "paused": "Paused",
     "runNow": "Run now",
     "delete": "Delete",
     "deleteConfirm": "Delete automation \"{{name}}\"?",
-    "recentRuns": "Recent runs",
     "noRuns": "No runs yet.",
     "runStatus": {
       "running": "running",
       "success": "success",
       "error": "error"
-    }
+    },
+    "groupSchedule": "By schedule",
+    "groupMail": "On new mail",
+    "groupManual": "On demand",
+    "unpin": "Unpin from Home",
+    "pinShort": "Pin",
+    "pause": "Pause",
+    "resume": "Resume",
+    "edit": "Edit",
+    "actions": "Actions",
+    "running": "Running",
+    "runs": "Runs",
+    "nextRun": "Next run {{when}}",
+    "gone": "No longer there."
   },
   "leads": {
     "new": "New lead",
@@ -881,6 +886,7 @@
     "nav": {
       "label": "Settings sections",
       "general": "General",
+      "profile": "Profile",
       "connections": "Connections",
       "permissions": "Permissions",
       "data": "Data & app"
@@ -918,6 +924,28 @@
         "prefill": "Review in chat"
       }
     },
+    "profile": {
+      "title": "Profile",
+      "name": {
+        "label": "Name",
+        "description": "How Marlene addresses you.",
+        "placeholder": "Your name"
+      },
+      "about": {
+        "label": "About you",
+        "description": "Your role, company, and how you like to work. Marlene reads this at the start of every conversation.",
+        "placeholder": "Runs a small design studio in Hamburg. Formal with clients, first names with the team."
+      },
+      "picture": {
+        "change": "Change picture",
+        "remove": "Remove picture"
+      },
+      "identity": {
+        "title": "Identity",
+        "label": "Your addresses",
+        "none": "No email account connected yet."
+      }
+    },
     "appearance": {
       "label": "Appearance",
       "description": "Light, dark, or follow this device.",
@@ -928,6 +956,7 @@
     "accentColor": {
       "label": "Accent color",
       "description": "Choose the accent color used throughout Marlene.",
+      "yellow": "Yellow",
       "violet": "Violet",
       "blue": "Blue",
       "teal": "Teal",

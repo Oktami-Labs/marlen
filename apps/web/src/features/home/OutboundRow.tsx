@@ -1,5 +1,5 @@
 import { OUTBOUND_CHANNEL_LABELS, type Todo, type TodoRef } from "@marlen/shared";
-import { MessageSquare, Send, Trash2 } from "lucide-react";
+import { MessageCircle, Send, Trash2 } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import {
@@ -9,37 +9,34 @@ import {
   useDraftActions,
 } from "@/components/draftActions";
 import { Button } from "@/components/ui/button";
-import { ExpandButton } from "@/components/ui/disclosure-toggle";
-import { HoverActions } from "@/components/ui/hover-actions";
 import { IconChip } from "@/components/ui/icon-chip";
 import { SentRow } from "@/components/ui/list-row";
 import { Textarea } from "@/components/ui/textarea";
-import { NewDot } from "@/features/home/seen";
-import { ApprovalNote } from "@/features/home/TodoRow";
+import { NeedsRow } from "@/features/home/NeedsRow";
+import { ApprovalNote, firstLine } from "@/features/home/TodoRow";
 import { api, isNotFound } from "@/lib/api";
+import { whenLabel } from "@/lib/dates";
 import { toast } from "@/lib/toast";
 import { errorMessage, rowTransition, withViewTransition } from "@/lib/utils";
 
+/** The approval wrapping an outbound message. */
+export type OutboundApproval = Todo & { ref: Extract<TodoRef, { kind: "outbound" }> };
+
 /**
- * One outbound message awaiting approval (WhatsApp today) in the attention
- * list, the channel counterpart of the email DraftRow, on the same
- * arm→confirm→execute machinery, and editable in place the same way. Sending
+ * One outbound message awaiting approval (WhatsApp today), the channel
+ * counterpart of the email DraftRow on the same arm→confirm→execute machinery.
+ * Pressing the row unfolds the message to edit it in place. Sending
  * dispatches through POST /api/outbound/:id/send, the click is the
  * authorization.
  */
-/** The agenda item wrapping an outbound message. */
-export type OutboundApproval = Todo & { ref: Extract<TodoRef, { kind: "outbound" }> };
-
 export function OutboundRow({
   todo,
-  dateLabel,
   onChanged,
   onError,
   isNew,
   onAnswer,
 }: {
   todo: OutboundApproval;
-  dateLabel: (iso: string) => string;
   /** Called after a send/discard succeeds, so the list refetches without waiting on the event debounce. */
   onChanged: () => void;
   onError: (message: string | null) => void;
@@ -47,7 +44,7 @@ export function OutboundRow({
   isNew?: boolean;
   onAnswer: (label: string) => void;
 }) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const { ref } = todo;
   const [open, setOpen] = React.useState(false);
   // Editable body: `bodyDraft` is the live field value, `savedBody` the
@@ -122,7 +119,8 @@ export function OutboundRow({
   });
 
   const channelLabel = OUTBOUND_CHANNEL_LABELS[ref.channel] ?? ref.channel;
-  const title = ref.targetLabel || channelLabel;
+  // The message itself is the subject line; the person and the channel are the meta.
+  const title = firstLine(savedBody) || todo.title;
 
   if (discarded) return null;
 
@@ -138,42 +136,21 @@ export function OutboundRow({
   }
 
   return (
-    <div className="surface-hover group rounded-md" style={rowTransition(todo.id)}>
-      <div className="flex w-full flex-wrap items-center gap-2 px-2.5 py-2.5">
-        <button
-          type="button"
-          onClick={() => setOpen((v) => !v)}
-          className="flex min-w-0 flex-1 basis-full items-center gap-2 text-left @md:basis-0"
-        >
-          <IconChip size="sm" tone="tint-success">
-            <MessageSquare />
-          </IconChip>
-          <div className="min-w-0 flex-1">
-            <p className="flex items-center gap-1.5 text-sm font-medium">
-              {isNew && <NewDot />}
-              <span className="truncate">{title}</span>
-            </p>
-            {/* The waiting-since time sits where the email rows carry theirs, so
-                one approval list reads as one list. */}
-            <div className="flex items-baseline gap-2">
-              <p className="truncate text-xs text-muted-foreground">
-                {channelLabel}
-                {!open && <span className="text-muted-foreground/70"> · {savedBody}</span>}
-              </p>
-              <time
-                dateTime={todo.createdAt}
-                className="ml-auto shrink-0 text-2xs tabular-nums text-muted-foreground"
-              >
-                {dateLabel(todo.createdAt)}
-              </time>
-            </div>
-          </div>
-        </button>
-        <div className="ml-auto flex shrink-0 items-center gap-1">
-          {/* Keep the secondary refine action hidden until hover. */}
-          <HoverActions className="gap-1">
-            <RefineInChatButton conversationId={todo.conversationId} subject={title} />
-          </HoverActions>
+    <NeedsRow
+      style={rowTransition(todo.id)}
+      mark={
+        <IconChip size="sm" tone="tint-success">
+          <MessageCircle />
+        </IconChip>
+      }
+      title={title}
+      meta={`${t("home.approvalChannelTo", { channel: channelLabel, name: todo.title })} · ${whenLabel(todo.createdAt, i18n.language)}`}
+      isNew={isNew}
+      onPress={() => withViewTransition(() => setOpen((v) => !v))}
+      expanded={open}
+      actions={
+        <>
+          <RefineInChatButton conversationId={todo.conversationId} subject={title} />
           <Button
             variant="ghost"
             size="icon-xs"
@@ -198,33 +175,29 @@ export function OutboundRow({
           >
             <Trash2 />
           </Button>
-          <ExpandButton open={open} onToggle={() => setOpen((v) => !v)} />
-        </div>
-      </div>
-
+        </>
+      }
+    >
       <ApprovalNote todo={todo} disabled={actions.busy} onAnswer={onAnswer} />
-
       {open && (
-        <div className="px-2.5 pb-3">
-          <div className="flex flex-col gap-2 pl-8 pt-1">
-            <Textarea
-              value={bodyDraft}
-              onChange={(e) => setBodyDraft(e.target.value)}
-              disabled={actions.busy}
-              className="field-sizing-content min-h-[4.5rem] resize-none text-sm leading-relaxed text-foreground/90"
+        <>
+          <Textarea
+            value={bodyDraft}
+            onChange={(e) => setBodyDraft(e.target.value)}
+            disabled={actions.busy}
+            aria-label={t("drafts.bodyLabel")}
+            className="field-sizing-content min-h-[4.5rem] resize-none text-sm leading-relaxed text-foreground/90"
+          />
+          {dirty && (
+            <EditSaveActions
+              saving={saving}
+              busy={actions.busy}
+              onCancel={() => setBodyDraft(savedBody)}
+              onSave={() => void save()}
             />
-            {dirty && (
-              <EditSaveActions
-                saving={saving}
-                busy={actions.busy}
-                onCancel={() => setBodyDraft(savedBody)}
-                onSave={() => void save()}
-              />
-            )}
-          </div>
-        </div>
+          )}
+        </>
       )}
-
       <DraftActionDialog
         pending={actions.pending}
         busy={actions.busy}
@@ -241,6 +214,6 @@ export function OutboundRow({
           },
         }}
       />
-    </div>
+    </NeedsRow>
   );
 }

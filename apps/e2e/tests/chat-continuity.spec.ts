@@ -449,8 +449,11 @@ test("a conversation spanning two days marks them, and the header searches insid
   }, id);
 
   await openApp(page);
-  await expect(page.getByText(t("chat.groupYesterday"), { exact: true })).toBeVisible();
-  await expect(page.getByText(t("chat.groupToday"), { exact: true })).toBeVisible();
+  // Day headings are paragraphs; Home's own "Today" column head is a heading.
+  const dayHeading = (label: string) =>
+    page.getByRole("paragraph").filter({ hasText: new RegExp(`^${label}$`) });
+  await expect(dayHeading(t("chat.groupYesterday"))).toBeVisible();
+  await expect(dayHeading(t("chat.groupToday"))).toBeVisible();
 
   await page.getByRole("button", { name: t("chat.search.open") }).click();
   await page.getByPlaceholder(t("chat.search.placeholder")).fill("Termin");

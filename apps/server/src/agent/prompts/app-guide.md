@@ -16,41 +16,44 @@ Pages (sidebar, top to bottom)
 - Leads: the prospect directory.
 - Automations / Automatisierungen: standing instructions on a schedule or on demand.
 - Knowledge / Wissen: a file browser over the assistant's wiki and document library.
-- Settings / Einstellungen: AI sign-in, accounts and permissions, file access, preferences,
-  local data, About.
+- Settings / Einstellungen: profile, AI sign-in, accounts and permissions, file access,
+  preferences, local data, About.
 - Search / Suche (Cmd+K) finds chats, briefings, drafts, documents and wiki pages from
   anywhere. A light/dark toggle sits in the header; keyboard shortcuts under Cmd+Shift+7.
 
 Home / Start
 - Banners on top when relevant: setup incomplete, provider unreachable. New items since the
   last visit wear a dot and are counted, with "Mark all seen / Alles gesehen".
-- Two columns (stacked on a narrow window): what waits on the user on the left, what the
-  assistant reports and does on the right.
-- "To do / Zu erledigen": overdue items first ("Missed / Überfällig"), then drafts waiting for
-  approval ("To approve / Zur Freigabe", with an account filter once several mailboxes are
-  connected), then to-dos grouped by day ("Today / Heute", "Tomorrow / Morgen", dates,
-  "Anytime / Jederzeit"). Each group label carries its count. The plus adds a to-do; the pencil
-  edits one in place (title, due date, note, and an automation to start on completion); rows
-  drag between days; completed items collapse into a "done / erledigt" disclosure. A to-do the
-  assistant filed as a question carries answer buttons: one click completes it, records the
-  answer, and, when an automation is linked, starts that automation with the answer.
-- "Briefing": the latest report, open in full: the pinned automation's newest result, else the
-  newest morning briefing, with its day and time, a refresh button ("Refresh / Neu erstellen")
-  and open-in-chat. A report with nothing in it folds to its headline. The assistant names
-  the report's sections itself (the morning briefing uses urgent, awaiting reply, to do,
-  waiting for reply, FYI, plus folded groups for newsletters and receipts). Items say what
-  changed since the previous report ("new message / neue Nachricht", "since Mon / seit Mo."),
-  items closed since then show struck through once. The check on a row marks it handled.
-- "Marlene is working / Marlene arbeitet": today's finished runs in order, the run in flight with
-  its live steps, then what is scheduled next ("Up next / Als Nächstes"). A row unfolds into the
-  run's output, including any chart, lead or attachment list it produced; failed runs offer a
-  retry; every run has open-in-chat; earlier days sit behind
-  "Show N earlier runs / N frühere Läufe anzeigen". Why a run started shows as a badge
-  ("Caught up / Nachgeholt", "From a to-do / Aus To-do", "New mail / Neue Mail").
+- Two columns (stacked on a narrow window): what waits on the user on the left
+  ("Needs you / Braucht Sie"), the assistant's day on the right ("Today / Heute").
+- "Needs you / Braucht Sie" holds three groups, each label carrying its count from two up:
+  "Approvals / Freigaben" (drafts waiting to go out on any channel, "Email to X / E-Mail an X",
+  "WhatsApp to X"), "Questions / Fragen" (the to-dos that carry answer options) and
+  "Tasks / Aufgaben" (the rest); oldest first inside a group. An approval row opens the draft on
+  a reading screen that replaces Home, with send and discard on hover. One click on an answer
+  completes the question, records the answer, and, when an automation is linked, starts that
+  automation with the answer. The plus adds a to-do; the pencil edits one in place (title, due
+  date, note, and an automation to start on completion); completed items collapse into a
+  "done / erledigt" disclosure.
+- "Today / Heute" is one time axis, a row per event: the time in a gutter, a glyph, one line of
+  gist. Above the "Now / Jetzt" line sit the newest report first, then today's finished runs and
+  the run in flight with its live step; below it what is scheduled next, then tomorrow's runs
+  under their own label. A routine run, one that found nothing, is muted. Pressing a finished run
+  opens it; pressing a scheduled one opens its automation.
+- A run opens full width in place of Home: its report card (else its result), then the charts,
+  leads and attachments it produced, with the trigger, a refresh ("Refresh / Neu erstellen"),
+  open-in-chat and a back link to Home. The assistant names the report's sections itself (the
+  morning briefing uses urgent, awaiting reply, to do, waiting for reply, FYI, plus folded groups
+  for newsletters and receipts). Items say what changed since the previous report ("new message /
+  neue Nachricht", "since Mon / seit Mo."), items closed since then show struck through once. The
+  check on a row marks it handled. A report with nothing in it shows its headline alone.
 
 Chat
-- The composer sends on Enter (Shift+Enter for a new line). There is no file-upload control;
-  files reach the assistant via the Knowledge page or the library folder.
+- The composer sends on Enter (Shift+Enter for a new line). The paperclip attaches images and
+  files ("Attach images or files / Bilder oder Dateien anhängen"); pasting one into the composer
+  does the same. Up to 5 per message, 10 MB each and 20 MB together, as PNG, JPEG, GIF, WebP,
+  PDF, Word, Markdown, text, CSV or HTML. Material meant to last belongs on the Knowledge page
+  or in the library folder instead.
 - Typing "/" opens a command menu over the user's own skills and their schedule-less
   automations: picking a skill fills the composer with "follow this skill", picking an
   automation runs it. Waiting queued messages can be rewritten or removed before they go.
@@ -120,11 +123,16 @@ Outbound flow (email and WhatsApp)
 Automations / Automatisierungen
 - An automation is a named standing instruction plus a schedule: every day, weekdays, chosen
   days, a specific date (runs once), or "On demand only / Nur auf Abruf" (a manual button; a
-  raw cron field hides behind "Advanced / Erweitert"). Options per automation: pin its result
-  as Home's briefing, show/hide in activity, also run immediately when new mail arrives, and
-  desktop-notify when a run finishes. Cards drag to reorder, pause with a switch, and show
-  recent runs. That notify option governs "here is the result"; a run that fails, or that
-  leaves a draft waiting for approval, notifies whether or not it is on.
+  cron the picker cannot express is kept as "Custom schedule / Eigener Zeitplan"). Options per
+  automation: pin its result as Home's briefing, show/hide in activity, also run immediately
+  when new mail arrives, and desktop-notify when a run finishes. The page lists rows grouped by
+  what starts them ("By schedule / Nach Zeitplan", "On new mail / Bei neuer E-Mail", "On
+  demand / Auf Abruf"): the name, the instruction's first sentence, and at the right whether it
+  is running, failed last time, or paused, else its schedule. Rows drag to reorder inside a
+  group; the row's "..." menu runs, pins, pauses, edits or deletes; pressing a row opens its
+  settings dialog, which also lists recent runs. That notify option governs "here is the
+  result"; a run that fails, or that leaves a draft waiting for approval, notifies whether or
+  not it is on.
 - A default weekly automation ("Automationsvorschläge") looks for recurring requests in recent
   chats and files each proposal as a to-do on Home; the user has it created in chat.
 - Unattended runs read, search and draft freely, and they send from any account whose "Send /
@@ -160,6 +168,11 @@ Knowledge / Wissen
   Aim for few full pages, not many thin ones.
 
 Settings / Einstellungen (sections in order)
+- Profile / Profil: the user's name, a picture (pencil on the avatar, stored on this
+  computer only) and a free text about them (role, company, how they like to work). Name
+  and text reach the assistant with every conversation; name and picture also label the
+  sidebar's profile entry. The row below lists the connected mail addresses and links to
+  Connections.
 - AI & model / KI & Modell: sign in to a provider with a subscription (Claude, Copilot,
   ChatGPT) or an API key; pick provider and model. The sign-in stays on this computer.
 - Accounts / Konten: connect email (Gmail, Outlook / Microsoft 365, Zoho Mail, IMAP), 2,000+
@@ -183,11 +196,12 @@ Settings / Einstellungen (sections in order)
   inserted from a file.
 - File access / Dateizugriff: what the assistant may do outside its own folder — read files,
   write files, run commands; all off by default.
-- Preferences / Darstellung & Sprache: appearance (light/dark/system), language (German or
-  English, for the app and the assistant's answers), timezone, quick actions — whether
-  buttons like "Draft reply / Antwort entwerfen" send immediately or open the draft for review
-  — and "Start with the computer / Mit dem Computer starten", which launches Marlene into the
-  background at login so scheduled automations run without the app being opened first.
+- Preferences / Darstellung & Sprache: appearance (light/dark/system), accent colour (blue,
+  yellow, violet, teal, rose, amber), language (German or English, for the app and the
+  assistant's answers), timezone, quick actions — whether buttons like "Draft reply / Antwort
+  entwerfen" send immediately or open the draft for review — and "Start with the computer / Mit
+  dem Computer starten", which launches Marlene into the background at login so scheduled
+  automations run without the app being opened first.
 - Local data / Lokale Daten: download one ZIP with the database, chats, drafts, automations,
   wiki, knowledge files and diagnostic logs. Sign-ins, API keys and connected-account
   credentials are excluded.

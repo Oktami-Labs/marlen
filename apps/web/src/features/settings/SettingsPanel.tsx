@@ -9,6 +9,7 @@ import {
   ShieldCheck,
   SlidersHorizontal,
   TriangleAlert,
+  UserRound,
 } from "lucide-react";
 import * as React from "react";
 import { Trans, useTranslation } from "react-i18next";
@@ -34,8 +35,10 @@ import {
   QuickActionsControl,
   TimezoneControl,
   useCurrentTimezone,
+  useSaveState,
 } from "@/features/settings/AppPreferenceControls";
 import { FileAccessSection } from "@/features/settings/FileAccessSection";
+import { ProfileSettings } from "@/features/settings/Profile";
 import { Providers } from "@/features/settings/Providers";
 import { useAccountColors } from "@/lib/accounts";
 import { api } from "@/lib/api";
@@ -44,6 +47,7 @@ import { cn, errorMessage, withViewTransition } from "@/lib/utils";
 
 const SETTINGS_VIEWS = [
   { id: "general", icon: SlidersHorizontal },
+  { id: "profile", icon: UserRound },
   { id: "connections", icon: Cable },
   { id: "permissions", icon: ShieldCheck },
   { id: "data", icon: Database },
@@ -79,7 +83,9 @@ export function SettingsPanel({
   };
 
   const content =
-    view === "general" ? (
+    view === "profile" ? (
+      <ProfileSettings />
+    ) : view === "general" ? (
       <GeneralSettings />
     ) : view === "connections" ? (
       <ConnectionSettings status={status} onStatusChanged={onStatusChanged} />
@@ -110,7 +116,7 @@ export function SettingsPanel({
                 "relative flex w-full items-center gap-3 rounded-lg px-3 py-2 text-left text-sm font-medium transition-colors",
                 "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
                 active
-                  ? "bg-accent/10 text-accent"
+                  ? "bg-accent/10 text-accent-text"
                   : "text-muted-foreground hover:bg-accent/[0.08] hover:text-foreground",
               )}
             >
@@ -279,34 +285,6 @@ function DataExportRow() {
   );
 }
 
-function useSaveState() {
-  const [state, setState] = React.useState<"idle" | "saving" | "saved" | "error">("idle");
-  const [error, setError] = React.useState<string | null>(null);
-  const resetTimer = React.useRef<number | null>(null);
-
-  React.useEffect(
-    () => () => {
-      if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
-    },
-    [],
-  );
-
-  const run = async (save: () => Promise<void>) => {
-    if (resetTimer.current !== null) window.clearTimeout(resetTimer.current);
-    setState("saving");
-    setError(null);
-    try {
-      await save();
-      setState("saved");
-      resetTimer.current = window.setTimeout(() => setState("idle"), 1800);
-    } catch (err) {
-      setState("error");
-      setError(errorMessage(err));
-    }
-  };
-  return { state, error, run };
-}
-
 function AppearanceRow() {
   const { t } = useTranslation();
 
@@ -394,11 +372,12 @@ function QuickActionsRow() {
   return (
     <SettingRow
       bare
+      htmlFor="settings-quick-actions"
       label={t("settings.sections.quickActions.title")}
       description={t("settings.sections.quickActions.description")}
       className="rounded-lg px-2 py-2.5"
     >
-      <QuickActionsControl id="settings-quick-actions" />
+      <QuickActionsControl id="settings-quick-actions" className="w-full @md:w-52" />
     </SettingRow>
   );
 }

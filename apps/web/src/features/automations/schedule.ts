@@ -1,3 +1,4 @@
+import type { Automation } from "@marlen/shared";
 import type { ParseKeys } from "i18next";
 
 /** Narrowed translate signature: the full generic TFunction type blows TS's
@@ -147,4 +148,53 @@ export function scheduleLabel(schedule: string, t: Translate, locale: string): s
     case "manual":
       return t("automations.scheduleLabel.manual");
   }
+}
+
+export type TriggerKind = "schedule" | "mail" | "manual";
+
+/** What starts the automation: its schedule, new mail, or only the user. */
+export function triggerKind(
+  automation: Pick<Automation, "schedule" | "runOnNewMail">,
+): TriggerKind {
+  if (automation.schedule.trim() !== "") return "schedule";
+  return automation.runOnNewMail ? "mail" : "manual";
+}
+
+/** The instruction's first sentence, what a list row has room for. */
+export function firstSentence(text: string): string {
+  const line =
+    text
+      .split("\n")
+      .map((part) => part.trim())
+      .find(Boolean) ?? "";
+  const sentence = /^.*?[.!?](?=\s|$)/.exec(line);
+  return sentence ? sentence[0] : line;
+}
+
+/**
+ * What the schedule editor holds: a picker preset, or a cron the picker
+ * cannot express, kept verbatim until the user chooses a preset.
+ */
+export type ScheduleDraft =
+  | { kind: "preset"; preset: SchedulePreset }
+  | { kind: "preserved"; schedule: string };
+
+export function initialSchedule(automation: Pick<Automation, "schedule"> | null): ScheduleDraft {
+  if (!automation) return { kind: "preset", preset: { ...DEFAULT_PRESET, weekdays: [1] } };
+  const parsed = parseCron(automation.schedule);
+  return parsed
+    ? { kind: "preset", preset: parsed }
+    : { kind: "preserved", schedule: automation.schedule };
+}
+
+export function scheduleFromDraft(draft: ScheduleDraft): string {
+  return draft.kind === "preset" ? buildCron(draft.preset) : draft.schedule;
+}
+
+export function scheduleDraftValid(draft: ScheduleDraft): boolean {
+  return (
+    draft.kind === "preserved" ||
+    draft.preset.frequency !== "custom" ||
+    draft.preset.weekdays.length > 0
+  );
 }

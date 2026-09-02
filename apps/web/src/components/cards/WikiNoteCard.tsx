@@ -58,7 +58,7 @@ export function WikiNoteCard({ card }: { card: WikiNoteData }) {
         ) : (
           <Link
             to={`/knowledge?focus=wiki:${encodeURIComponent(card.pageId)}`}
-            className="min-w-0 flex-1 truncate text-xs hover:text-accent"
+            className="min-w-0 flex-1 truncate text-xs hover:text-accent-text"
             title={card.summary}
           >
             {card.summary}

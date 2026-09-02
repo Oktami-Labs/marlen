@@ -1,6 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AgentCard, ChatToolCall, LiveChatTurn } from "@marlen/shared";
-import { emitServerEvent } from "../core/events.js";
+import { coalescedEmitter, emitServerEvent } from "../core/events.js";
 
 /**
  * A turn survives its initiating HTTP stream. This bounded process-local view
@@ -9,9 +9,12 @@ import { emitServerEvent } from "../core/events.js";
  */
 const liveTurns = new Map<string, LiveChatTurn>();
 
-function publish(): void {
-  emitServerEvent("chat");
-}
+/**
+ * Streamed text arrives many times a second. Below the web's 300ms topic
+ * debounce, so an attached client refreshes exactly when it did per token:
+ * at the pauses and at the end.
+ */
+const publish = coalescedEmitter("chat", 250);
 
 export interface LiveTurnWriter {
   text(delta: string): void;
@@ -75,7 +78,9 @@ export function startLiveTurn(conversationId: string): LiveTurnWriter {
     finish() {
       if (liveTurns.get(conversationId) !== turn) return;
       liveTurns.delete(conversationId);
-      publish();
+      // The end is not coalesced: a client waiting on the turn should drop
+      // the live snapshot as soon as the durable row exists.
+      emitServerEvent("chat");
     },
   };
 }

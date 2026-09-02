@@ -31,6 +31,8 @@ export const DEMO = {
   decisionQuestion: "Rabatt für Acme GmbH gewähren?",
   decisionAnswer: "Ja, 10 %",
   statsAutomation: "Lead-Statistik",
+  statsResult:
+    "Diese Woche 19 Leads, fünf mehr als letzte Woche. Zwei A-Leads warten auf ein Angebot.",
   chartTitle: "Leads nach Status",
   waitingDraft: "Re: Angebot Rebranding – Rückfragen",
   approvalQuestion: "Donnerstag 10 Uhr vorschlagen oder Termin offen lassen?",
@@ -509,8 +511,7 @@ export function demoRows(now: Date, briefingAutomationId: string): DemoRows {
   const briefing2Result =
     "Zwei Dinge brauchen Sie heute: Acme erinnert an die Rechnung, Lisa Hofer fragt nach dem Zahlungsstatus. Jonas Weber hat auf Ihr Angebot noch nicht geantwortet.";
   const briefing1Result = "Alles ruhig. Nur das Team-Update kam herein, keine Antwort nötig.";
-  const statsResult =
-    "Diese Woche 19 Leads, fünf mehr als letzte Woche. Zwei A-Leads warten auf ein Angebot.";
+  const statsResult = DEMO.statsResult;
   const invoicesMailResult =
     "Eine überfällige Rechnung: Acme GmbH, #A-2291 (1.840 €, 34 Tage). Der Erinnerungsentwurf liegt zur Freigabe bereit.";
   const invoicesTodoResult =

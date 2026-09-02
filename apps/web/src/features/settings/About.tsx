@@ -1,6 +1,7 @@
 import { Check, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
+import { BrandMark } from "@/components/BrandMark";
 import { ChangelogDialog } from "@/components/ChangelogDialog";
 import { useUpdateState } from "@/components/UpdatePill";
 import { Button } from "@/components/ui/button";
@@ -80,7 +81,7 @@ export function AboutPanel() {
     <ListRow className="flex-col items-stretch gap-4">
       <div className="flex items-center justify-between gap-3">
         <div className="flex min-w-0 items-center gap-3">
-          <img src="/logo.svg" alt="" className="h-9 w-9 shrink-0 object-contain" />
+          <BrandMark className="h-10 w-10 text-accent" />
           <div className="min-w-0">
             <Label className="text-sm font-medium">Marlene</Label>
             <p className="text-xs text-muted-foreground">{t("settings.about.tagline")}</p>

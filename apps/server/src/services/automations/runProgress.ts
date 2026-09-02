@@ -1,5 +1,5 @@
 import type { RunStep } from "@marlen/shared";
-import { emitServerEvent } from "../../core/events.js";
+import { coalescedEmitter } from "../../core/events.js";
 
 /**
  * The live tool-call trail of the runs executing right now, so Home can show
@@ -13,27 +13,7 @@ const byRun = new Map<string, RunStep[]>();
 const MAX_STEPS = 8;
 
 /** A tool call every few seconds would refetch the feed as often; coalesce. */
-const EMIT_INTERVAL_MS = 1500;
-let emitAt = 0;
-let pending: ReturnType<typeof setTimeout> | null = null;
-
-function announce(): void {
-  const now = Date.now();
-  if (now - emitAt >= EMIT_INTERVAL_MS) {
-    emitAt = now;
-    emitServerEvent("runs");
-    return;
-  }
-  if (pending) return;
-  pending = setTimeout(
-    () => {
-      pending = null;
-      emitAt = Date.now();
-      emitServerEvent("runs");
-    },
-    EMIT_INTERVAL_MS - (now - emitAt),
-  );
-}
+const announce = coalescedEmitter("runs", 1500);
 
 export function startRunStep(runId: string, id: string, label: string): void {
   const steps = byRun.get(runId) ?? [];

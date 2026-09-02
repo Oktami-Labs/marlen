@@ -8,7 +8,7 @@ const TRIGGER_GAP = 8;
 interface UseAnchoredPopoverOptions {
   /** Horizontal alignment against the trigger: "start" hugs its left edge
    *  (for a list wider than the trigger), "center" centers under it. */
-  align?: "start" | "center";
+  align?: "start" | "center" | "end";
 }
 
 /**
@@ -34,7 +34,12 @@ export function useAnchoredPopover<
     if (!trigger || !popover) return;
     const rect = trigger.getBoundingClientRect();
     const { width, height } = popover.getBoundingClientRect();
-    const rawLeft = align === "center" ? rect.left + rect.width / 2 - width / 2 : rect.left;
+    const rawLeft =
+      align === "center"
+        ? rect.left + rect.width / 2 - width / 2
+        : align === "end"
+          ? rect.right - width
+          : rect.left;
     const left = Math.min(
       Math.max(rawLeft, VIEWPORT_MARGIN),
       window.innerWidth - width - VIEWPORT_MARGIN,

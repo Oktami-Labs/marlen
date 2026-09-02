@@ -112,7 +112,7 @@ function NodeName({ node, actions }: { node: StorageNode; actions: NodeActions }
       onClick={() =>
         node.kind === "folder" ? actions.openFolder(node.id) : actions.openFile?.(node)
       }
-      className="min-w-0 truncate text-left font-medium text-foreground transition-colors hover:text-accent"
+      className="min-w-0 truncate text-left font-medium text-foreground transition-colors hover:text-accent-text"
     >
       {node.name}
     </button>
@@ -264,7 +264,7 @@ export function NodeRows({
               <Icon
                 className={cn(
                   "h-4 w-4 shrink-0",
-                  node.kind === "folder" ? "text-accent" : "text-muted-foreground",
+                  node.kind === "folder" ? "text-accent-text" : "text-muted-foreground",
                 )}
               />
               <span className="flex min-w-0 flex-col">
@@ -334,7 +334,7 @@ export function NodeTiles({
                 strokeWidth={1.25}
                 className={cn(
                   "h-10 w-10",
-                  node.kind === "folder" ? "text-accent" : "text-muted-foreground",
+                  node.kind === "folder" ? "text-accent-text" : "text-muted-foreground",
                 )}
               />
             </div>

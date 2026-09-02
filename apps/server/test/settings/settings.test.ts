@@ -2,7 +2,7 @@ import { mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { pathToFileURL } from "node:url";
-import type { AccountSignature } from "@marlen/shared";
+import type { AccountSignature, UserProfile } from "@marlen/shared";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 let settings: typeof import("../../src/db/settings.js");
@@ -78,6 +78,58 @@ describe("settings", () => {
       if (initial) await settings.setSetting(settings.TIMEZONE_SETTING_KEY, initial);
       else await settings.deleteSetting(settings.TIMEZONE_SETTING_KEY);
     }
+  });
+
+  it("puts the saved profile in front of the model", async () => {
+    const { buildSystemPrompt } = await import("../../src/agent/prompt.js");
+    expect(await buildSystemPrompt()).not.toContain("The user you work for");
+
+    const res = await app.inject({
+      method: "PUT",
+      url: "/api/settings/profile",
+      payload: { name: "  Selin Kaya ", about: "Runs Nordwind Studio, a design agency.\n" },
+    });
+    expect(res.statusCode).toBe(200);
+    expect(res.json()).toEqual({
+      profile: {
+        name: "Selin Kaya",
+        about: "Runs Nordwind Studio, a design agency.",
+        avatar: null,
+      },
+    });
+
+    const read = await app.inject({ method: "GET", url: "/api/settings/profile" });
+    expect(read.json<{ profile: UserProfile }>().profile.name).toBe("Selin Kaya");
+
+    const prompt = await buildSystemPrompt();
+    expect(prompt).toContain("The user you work for is Selin Kaya");
+    expect(prompt).toContain("Runs Nordwind Studio, a design agency.");
+
+    const tooLong = await app.inject({
+      method: "PUT",
+      url: "/api/settings/profile",
+      payload: { name: "x".repeat(121), about: "" },
+    });
+    expect(tooLong.statusCode).toBe(400);
+  });
+
+  it("keeps a profile picture only when it is an image", async () => {
+    const pixel =
+      "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8DwHwAFAAH/q842iQAAAABJRU5ErkJggg==";
+    const avatar = (payload: { dataUri: string }) =>
+      app.inject({ method: "PUT", url: "/api/settings/profile/avatar", payload });
+
+    expect((await avatar({ dataUri: "data:text/html;base64,PHNjcmlwdD4=" })).statusCode).toBe(400);
+    expect((await avatar({ dataUri: "https://example.com/me.png" })).statusCode).toBe(400);
+
+    const saved = await avatar({ dataUri: pixel });
+    expect(saved.statusCode).toBe(200);
+    expect(saved.json<{ profile: UserProfile }>().profile.avatar).toBe(pixel);
+    const read = await app.inject({ method: "GET", url: "/api/settings/profile" });
+    expect(read.json<{ profile: UserProfile }>().profile.avatar).toBe(pixel);
+
+    const removed = await app.inject({ method: "DELETE", url: "/api/settings/profile/avatar" });
+    expect(removed.json<{ profile: UserProfile }>().profile.avatar).toBeNull();
   });
 
   it("keeps a pasted signature's formatting", async () => {

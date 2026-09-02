@@ -1,5 +1,6 @@
 import { expect, openApp, test } from "../src/fixtures.js";
 import { t } from "../src/i18n.js";
+import { gradientPng } from "../src/images.js";
 
 test("a fresh install opens the app and navigates between views", async ({ page }) => {
   await openApp(page);
@@ -140,6 +141,43 @@ test("saving a profile preference confirms the save", async ({ page, request }) 
     await expect.poll(async () => (await readTimezone()).timezone).toBe(timezone);
   } finally {
     await request.put("/api/settings/timezone", { data: { timezone: initialTimezone } });
+  }
+});
+
+test("the profile saves on blur and names the sidebar entry", async ({ page, request }) => {
+  await openApp(page, "/settings?section=profile");
+  const profileButton = page.getByRole("button", { name: t("sidebar.openProfileMenu") });
+  await expect(profileButton).toContainText(t("sidebar.localProfile"));
+
+  try {
+    const name = page.getByRole("textbox", { name: t("settings.profile.name.label") });
+    await name.fill("Selin Kaya");
+    await name.press("Enter");
+    await expect(page.getByText(t("common.saved"), { exact: true })).toBeVisible();
+    await expect(profileButton).toContainText("Selin Kaya");
+    await expect(
+      page.getByTestId("settings-workspace").getByText("SK", { exact: true }),
+    ).toBeVisible();
+
+    const about = page.getByRole("textbox", { name: t("settings.profile.about.label") });
+    await about.fill("Inhaberin von Nordwind Studio.");
+    await about.blur();
+    await expect
+      .poll(async () => (await (await request.get("/api/settings/profile")).json()).profile)
+      .toEqual({ name: "Selin Kaya", about: "Inhaberin von Nordwind Studio.", avatar: null });
+
+    // A chosen picture replaces the initials here and in the sidebar.
+    await page
+      .getByTestId("settings-workspace")
+      .locator('input[type="file"]')
+      .setInputFiles(await gradientPng(page));
+    await expect(profileButton.locator("img")).toBeVisible();
+    await page.getByRole("button", { name: t("settings.profile.picture.remove") }).click();
+    await expect(profileButton.locator("img")).toHaveCount(0);
+    await expect(profileButton).toContainText("SK");
+  } finally {
+    await request.put("/api/settings/profile", { data: { name: "", about: "" } });
+    await request.delete("/api/settings/profile/avatar");
   }
 });
 

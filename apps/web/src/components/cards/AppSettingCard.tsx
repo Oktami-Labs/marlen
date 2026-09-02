@@ -43,7 +43,7 @@ const APP_SETTING_PRESENTATIONS = {
     icon: Zap,
     titleKey: "settings.sections.quickActions.title",
     descriptionKey: "settings.sections.quickActions.description",
-    Control: QuickActionsControl,
+    Control: () => <QuickActionsControl className="w-full" />,
   },
   launch_at_login: {
     icon: Power,

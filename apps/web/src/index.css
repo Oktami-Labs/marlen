@@ -35,9 +35,12 @@
   --primary: oklch(0.2978 0.0297 277.11);
   --primary-foreground: oklch(0.9905 0.0025 265);
 
-  --accent: oklch(0.535 0.2876 286.97);
+  /* Blue, the default preset. A hue preset reads as text on its own, so the
+     accent doubles as --accent-text; see the yellow preset for the split. */
+  --accent: oklch(0.535 0.19 255);
   --accent-foreground: oklch(0.9905 0.0025 265);
-  --accent-soft: oklch(0.575 0.2876 286.97);
+  --accent-soft: oklch(0.575 0.19 255);
+  --accent-text: oklch(0.535 0.19 255);
 
   /* Muted semantic pastels (text tones; backgrounds mixed at call site). */
   --success: oklch(0.5725 0.125 165);
@@ -48,10 +51,9 @@
   --filetype-l: 0.5725;
   --filetype-c: 0.1375;
 
-  --ring: oklch(0.535 0.2876 286.97);
+  --ring: oklch(0.535 0.19 255);
   /* All dividers use this token without opacity modifiers. */
   --border: color-mix(in oklch, var(--foreground) 12%, transparent);
-  --sidebar: oklch(1 0 0);
 
   --radius: 0.7rem;
   --grain-opacity: 0.018;
@@ -75,9 +77,10 @@
   --primary: oklch(0.9335 0.004 255);
   --primary-foreground: oklch(0.259 0.008 260);
 
-  --accent: oklch(0.6987 0.2104 286.13);
+  --accent: oklch(0.6987 0.15 255);
   --accent-foreground: oklch(0.24 0.01 260);
-  --accent-soft: oklch(0.6587 0.2104 286.13);
+  --accent-soft: oklch(0.6587 0.15 255);
+  --accent-text: oklch(0.6987 0.15 255);
 
   --success: oklch(0.734 0.1375 168);
   --warning: oklch(0.78 0.1375 68);
@@ -87,9 +90,8 @@
   --filetype-l: 0.734;
   --filetype-c: 0.1375;
 
-  --ring: oklch(0.6987 0.2104 286.13);
+  --ring: oklch(0.6987 0.15 255);
   --border: color-mix(in oklch, var(--foreground) 12%, transparent);
-  --sidebar: oklch(0.12 0 0);
 
   --grain-opacity: 0.028;
 
@@ -111,7 +113,6 @@
   --color-foreground: var(--foreground);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2-fill);
-  --color-sidebar: var(--sidebar);
   --color-primary: var(--primary);
   --color-primary-foreground: var(--primary-foreground);
   --color-secondary: var(--secondary-fill);
@@ -120,6 +121,7 @@
   --color-muted-foreground: var(--muted-foreground);
   --color-accent: var(--accent);
   --color-accent-foreground: var(--accent-foreground);
+  --color-accent-text: var(--accent-text);
   --color-success: var(--success);
   --color-warning: var(--warning);
   --color-destructive: var(--destructive);
@@ -142,13 +144,12 @@
   --shadow-2xl: 0 0 #0000;
 }
 
-:root {
+/* The hue presets share one lightness and read as text on their own, so their
+   accent doubles as --accent-text. */
+:root[data-accent-color="violet"] {
   --theme-hue: 293;
   --theme-accent-chroma: 0.235;
   --theme-dark-accent-chroma: 0.18;
-  --accent: oklch(0.535 var(--theme-accent-chroma) var(--theme-hue));
-  --accent-soft: oklch(0.575 var(--theme-accent-chroma) var(--theme-hue));
-  --ring: oklch(0.535 var(--theme-accent-chroma) var(--theme-hue));
 }
 
 :root[data-accent-color="blue"] {
@@ -175,10 +176,51 @@
   --theme-dark-accent-chroma: 0.13;
 }
 
-.dark {
+:root:is(
+    [data-accent-color="violet"],
+    [data-accent-color="blue"],
+    [data-accent-color="teal"],
+    [data-accent-color="rose"],
+    [data-accent-color="amber"]
+  ) {
+  --accent: oklch(0.535 var(--theme-accent-chroma) var(--theme-hue));
+  --accent-soft: oklch(0.575 var(--theme-accent-chroma) var(--theme-hue));
+  --accent-foreground: oklch(0.9905 0.0025 265);
+  --accent-text: var(--accent);
+  --ring: var(--accent);
+}
+
+.dark:is(
+    [data-accent-color="violet"],
+    [data-accent-color="blue"],
+    [data-accent-color="teal"],
+    [data-accent-color="rose"],
+    [data-accent-color="amber"]
+  ) {
   --accent: oklch(0.6987 var(--theme-dark-accent-chroma) var(--theme-hue));
   --accent-soft: oklch(0.6587 var(--theme-dark-accent-chroma) var(--theme-hue));
-  --ring: oklch(0.6987 var(--theme-dark-accent-chroma) var(--theme-hue));
+  --accent-foreground: oklch(0.24 0.01 260);
+  --accent-text: var(--accent);
+  --ring: var(--accent);
+}
+
+/* Yellow (#FFCF42) is a fill that carries dark ink; as text or a hairline it
+   takes --accent-text, an ochre that clears 4.5:1 on white and the yellow
+   itself in the dark. */
+:root[data-accent-color="yellow"] {
+  --accent: oklch(0.8733 0.1586 89.1);
+  --accent-soft: oklch(0.9 0.15 91);
+  --accent-foreground: oklch(0.22 0.02 80);
+  --accent-text: oklch(0.5 0.12 80);
+  --ring: oklch(0.5 0.12 80);
+}
+
+.dark[data-accent-color="yellow"] {
+  --accent: oklch(0.8733 0.1586 89.1);
+  --accent-soft: oklch(0.84 0.15 88);
+  --accent-foreground: oklch(0.22 0.02 80);
+  --accent-text: oklch(0.86 0.15 88);
+  --ring: oklch(0.86 0.15 88);
 }
 
 @layer base {
@@ -238,6 +280,14 @@
     background: var(--surface);
     border-radius: var(--radius);
   }
+  @media (min-width: 48rem) {
+    .workspace-frame {
+      box-shadow: 0 1px 4px oklch(0 0 0 / 5%);
+    }
+    .dark .workspace-frame {
+      box-shadow: 0 1px 6px oklch(0 0 0 / 30%);
+    }
+  }
   /* The chat's reading column. Transcript, queue, composer and version line all
      carry it, so they line up at any panel width; the width itself is set once,
      on the chat root, and is unset (full bleed) in the side panel. */
@@ -270,6 +320,16 @@
     border-radius: var(--radius);
     border: 1px solid var(--border);
     --scroll-edge-fill: var(--surface);
+  }
+  /* The one line on the workspace, where the page ends and the docked chat
+     begins. Eight percent ink rather than the border token: a seam in the
+     paper, not an edge. */
+  .seam {
+    background: color-mix(in oklch, var(--foreground) 8%, transparent);
+  }
+  /* The present moment on Home's day axis. */
+  .now-line {
+    background: color-mix(in oklch, var(--accent-text) 45%, transparent);
   }
   .scroll-edge {
     background: linear-gradient(to bottom, var(--scroll-edge-fill, var(--surface)), transparent);
@@ -342,7 +402,7 @@
   .field-paper:focus-visible {
     outline: none;
     background: transparent;
-    border-bottom-color: var(--accent);
+    border-bottom-color: var(--accent-text);
     box-shadow: none;
   }
 
@@ -352,7 +412,7 @@
   }
   .tint-accent {
     background: color-mix(in oklch, var(--accent) 14%, transparent);
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .tint-success {
     background: color-mix(in oklch, var(--success) 15%, transparent);
@@ -375,7 +435,7 @@
   /* sRGB mixing matches alpha compositing without showing content through toasts. */
   .tint-pop-accent {
     background: color-mix(in srgb, var(--accent) 13%, var(--surface));
-    color: var(--accent);
+    color: var(--accent-text);
   }
   .tint-pop-success {
     background: color-mix(in srgb, var(--success) 14%, var(--surface));
@@ -572,7 +632,7 @@
 @keyframes stream-word {
   from {
     opacity: 0;
-    color: var(--accent);
+    color: var(--accent-text);
   }
   to {
     opacity: 1;
@@ -617,8 +677,8 @@
 /* Bump the query version when logo.svg changes to invalidate Chromium's mask cache. */
 .agent-avatar-mark {
   background-color: currentColor;
-  -webkit-mask: url("/logo.svg?v=2") no-repeat center / contain;
-  mask: url("/logo.svg?v=2") no-repeat center / contain;
+  -webkit-mask: url("/logo.svg?v=6") no-repeat center / contain;
+  mask: url("/logo.svg?v=6") no-repeat center / contain;
 }
 .agent-avatar::before {
   content: "";
@@ -808,7 +868,7 @@
   left: -10rem;
   background: radial-gradient(
     closest-side,
-    color-mix(in oklch, var(--accent) 14%, transparent),
+    color-mix(in oklch, var(--accent) 8%, transparent),
     transparent 72%
   );
   animation: aurora-a 70s ease-in-out infinite alternate;
@@ -818,7 +878,7 @@
   right: -12rem;
   background: radial-gradient(
     closest-side,
-    color-mix(in oklch, var(--accent-soft) 11%, transparent),
+    color-mix(in oklch, var(--accent-soft) 6%, transparent),
     transparent 72%
   );
   animation: aurora-b 90s ease-in-out infinite alternate;

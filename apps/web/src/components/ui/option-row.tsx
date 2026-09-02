@@ -39,7 +39,7 @@ export function OptionRow({
       type="button"
       className={cn(
         "group flex w-full items-center gap-2.5 rounded-lg px-3 py-2.5 text-left transition-colors disabled:opacity-50",
-        selected ? "bg-accent/10 text-accent" : REST_FILL[fill],
+        selected ? "bg-accent/10 text-accent-text" : REST_FILL[fill],
         className,
       )}
       {...props}

@@ -2,6 +2,7 @@ import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { ChatMessage, Conversation, ConversationListResponse } from "@marlen/shared";
+import Database from "better-sqlite3";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 let app: Awaited<ReturnType<typeof import("../../src/app.js").buildApp>>;
@@ -229,5 +230,63 @@ describe("conversation routes", () => {
     } finally {
       turnRecorder._setSessionsForTest(null);
     }
+  });
+});
+
+describe("attachment migration", () => {
+  it("adds durable message order when the attachment table lacks position", async () => {
+    const { SCHEMA_STEPS } = await import("../../src/db/schemaSteps.js");
+    const repairIndex = SCHEMA_STEPS.findIndex((step) =>
+      step.includes("chat_attachments_before_position"),
+    );
+    const repairStep = SCHEMA_STEPS[repairIndex] ?? "";
+    expect(repairStep).not.toBe("");
+
+    const raw = new Database(":memory:");
+    raw.exec(`
+      CREATE TABLE chat_attachments (
+        id TEXT PRIMARY KEY,
+        message_id TEXT NOT NULL,
+        conversation_id TEXT NOT NULL,
+        name TEXT NOT NULL,
+        mime_type TEXT NOT NULL,
+        kind TEXT NOT NULL,
+        size INTEGER NOT NULL,
+        data BLOB NOT NULL,
+        extracted_text TEXT,
+        created_at TEXT NOT NULL
+      );
+      CREATE INDEX idx_chat_attachments_conversation
+        ON chat_attachments(conversation_id);
+    `);
+    const insert = raw.prepare(`
+      INSERT INTO chat_attachments (
+        id, message_id, conversation_id, name, mime_type, kind,
+        size, data, extracted_text, created_at
+      ) VALUES (?, 'message-1', 'conversation-1', ?, 'text/plain', 'document', ?, ?, ?, ?)
+    `);
+    insert.run("attachment-1", "first.txt", 5, Buffer.from("first"), "first", "2026-09-02");
+    insert.run("attachment-2", "second.txt", 6, Buffer.from("second"), "second", "2026-09-02");
+
+    raw.exec(repairStep);
+
+    expect(
+      raw
+        .prepare(
+          "SELECT id, position, CAST(data AS TEXT) AS data FROM chat_attachments ORDER BY position",
+        )
+        .all(),
+    ).toEqual([
+      { id: "attachment-1", position: 0, data: "first" },
+      { id: "attachment-2", position: 1, data: "second" },
+    ]);
+    expect(
+      raw
+        .prepare(
+          "SELECT name FROM sqlite_master WHERE type = 'index' AND name = 'idx_chat_attachments_message_position'",
+        )
+        .get(),
+    ).toEqual({ name: "idx_chat_attachments_message_position" });
+    raw.close();
   });
 });

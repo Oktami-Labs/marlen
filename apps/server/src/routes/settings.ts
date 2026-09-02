@@ -1,5 +1,12 @@
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
-import { isLanguage, SUPPORTED_LANGUAGES } from "@marlen/shared";
+import {
+  isLanguage,
+  SUPPORTED_LANGUAGES,
+  USER_PROFILE_ABOUT_MAX,
+  USER_PROFILE_AVATAR_MAX_CHARS,
+  USER_PROFILE_NAME_MAX,
+  type UserProfile,
+} from "@marlen/shared";
 import { Type } from "@sinclair/typebox";
 import { resetSessions } from "../agent/sessionCache.js";
 import { badRequest } from "../core/errors.js";
@@ -10,19 +17,36 @@ import {
   getAccountSignatures,
   getFileAccessSettings,
   getLanguageSetting,
+  getProfile,
   getTimezoneSetting,
   isValidTimezone,
   setAccountColors,
   setAccountPermissions,
   setAccountSignatures,
   setFileAccessSettings,
+  setProfileAvatar,
 } from "../db/settings.js";
-import { setLanguagePreference, setTimezonePreference } from "../services/appPreferences.js";
+import {
+  setLanguagePreference,
+  setProfilePreference,
+  setTimezonePreference,
+} from "../services/appPreferences.js";
 import { fetchInlineImage } from "../services/signatureImage.js";
 
 const languageBody = Type.Object({ language: Type.String() });
 
 const timezoneBody = Type.Object({ timezone: Type.String() });
+
+const profileBody = Type.Object({
+  name: Type.String({ maxLength: USER_PROFILE_NAME_MAX }),
+  about: Type.String({ maxLength: USER_PROFILE_ABOUT_MAX }),
+});
+
+const profileAvatarBody = Type.Object({
+  dataUri: Type.String({ maxLength: USER_PROFILE_AVATAR_MAX_CHARS }),
+});
+
+const IMAGE_DATA_URI = /^data:image\/(?:png|jpeg|webp);base64,[A-Za-z0-9+/]+=*$/;
 
 const accountPermissionsBody = Type.Object({
   permissions: Type.Array(
@@ -111,6 +135,39 @@ export const settingsRoutes: FastifyPluginAsyncTypebox = async (app) => {
     }
     await setTimezonePreference(timezone);
     return { timezone };
+  });
+
+  app.get(
+    "/api/settings/profile",
+    async (): Promise<{ profile: UserProfile }> => ({
+      profile: await getProfile(),
+    }),
+  );
+
+  app.put(
+    "/api/settings/profile",
+    { schema: { body: profileBody } },
+    async (req): Promise<{ profile: UserProfile }> => {
+      await setProfilePreference({ name: req.body.name.trim(), about: req.body.about.trim() });
+      return { profile: await getProfile() };
+    },
+  );
+
+  app.put(
+    "/api/settings/profile/avatar",
+    { schema: { body: profileAvatarBody } },
+    async (req): Promise<{ profile: UserProfile }> => {
+      if (!IMAGE_DATA_URI.test(req.body.dataUri)) {
+        throw badRequest("avatar must be a png, jpeg or webp data URI");
+      }
+      await setProfileAvatar(req.body.dataUri);
+      return { profile: await getProfile() };
+    },
+  );
+
+  app.delete("/api/settings/profile/avatar", async (): Promise<{ profile: UserProfile }> => {
+    await setProfileAvatar(null);
+    return { profile: await getProfile() };
   });
 
   app.get("/api/settings/permissions", async () => ({

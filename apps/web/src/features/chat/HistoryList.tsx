@@ -302,7 +302,7 @@ export function HistoryList({
             >
               {c.running && (
                 <Spinner
-                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent"
+                  className="mt-0.5 h-3.5 w-3.5 shrink-0 text-accent-text"
                   aria-label={t("chat.working")}
                 />
               )}

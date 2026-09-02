@@ -4,8 +4,9 @@ import * as React from "react";
 export type ThemePref = AppearancePreference;
 
 export const ACCENT_COLOR_PRESETS = [
-  { id: "violet", labelKey: "settings.accentColor.violet" },
   { id: "blue", labelKey: "settings.accentColor.blue" },
+  { id: "yellow", labelKey: "settings.accentColor.yellow" },
+  { id: "violet", labelKey: "settings.accentColor.violet" },
   { id: "teal", labelKey: "settings.accentColor.teal" },
   { id: "rose", labelKey: "settings.accentColor.rose" },
   { id: "amber", labelKey: "settings.accentColor.amber" },
@@ -40,9 +41,9 @@ function isAccentColor(value: string | null): value is AccentColor {
 }
 
 function readAccentColor(): AccentColor {
-  if (typeof window === "undefined") return "violet";
+  if (typeof window === "undefined") return "blue";
   const saved = localStorage.getItem(ACCENT_COLOR_STORAGE_KEY);
-  return isAccentColor(saved) ? saved : "violet";
+  return isAccentColor(saved) ? saved : "blue";
 }
 
 /** Apply a preference from either a mounted control or a live agent action. */
@@ -54,14 +55,21 @@ export function applyThemePreference(pref: ThemePref): void {
   for (const listener of prefListeners) listener(pref);
 }
 
-export function applyAccentColor(color: AccentColor): void {
-  if (typeof window === "undefined") return;
+function reflectAccentColor(color: AccentColor): void {
   document.documentElement.dataset.accentColor = color;
-  localStorage.setItem(ACCENT_COLOR_STORAGE_KEY, color);
   for (const listener of accentColorListeners) listener(color);
 }
 
-applyAccentColor(readAccentColor());
+/** A chosen accent: reflected, persisted, broadcast. */
+export function applyAccentColor(color: AccentColor): void {
+  if (typeof window === "undefined") return;
+  reflectAccentColor(color);
+  localStorage.setItem(ACCENT_COLOR_STORAGE_KEY, color);
+}
+
+// Boot reflects the saved or default accent without persisting it, so a
+// default that changes in a release reaches every install that never chose.
+if (typeof window !== "undefined") reflectAccentColor(readAccentColor());
 
 /**
  * Three-way theme preference (light/dark/system). Persists to localStorage
@@ -110,10 +118,6 @@ export function useAccentColor() {
   const [color, setColor] = React.useState<AccentColor>(readAccentColor);
 
   React.useEffect(() => {
-    applyAccentColor(color);
-  }, [color]);
-
-  React.useEffect(() => {
     const listener = (next: AccentColor) => {
       if (next !== color) setColor(next);
     };
@@ -123,5 +127,10 @@ export function useAccentColor() {
     };
   }, [color]);
 
-  return [color, setColor] as const;
+  const choose = React.useCallback((next: AccentColor) => {
+    setColor(next);
+    applyAccentColor(next);
+  }, []);
+
+  return [color, choose] as const;
 }

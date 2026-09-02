@@ -25,6 +25,7 @@ export function CursorTooltip() {
     let timer: number | undefined;
     let pending: HTMLElement | null = null;
     let shown: HTMLElement | null = null;
+    let hovered: HTMLElement | null = null;
     let point = { x: 0, y: 0 };
 
     const hide = () => {
@@ -35,9 +36,12 @@ export function CursorTooltip() {
       setTooltip(null);
     };
 
-    const handleMouseMove = (e: MouseEvent) => {
-      const target = e.target as HTMLElement;
-      const el = target.closest(TOOLTIP_SELECTOR) as HTMLElement | null;
+    // Which element the cursor is over changes only on pointerover, so the
+    // selector walk runs there and not once per pixel of movement.
+    const handlePointerOver = (e: PointerEvent) => {
+      const el = (e.target as HTMLElement).closest(TOOLTIP_SELECTOR) as HTMLElement | null;
+      if (el === hovered) return;
+      hovered = el;
       const text = el && tooltipTextOf(el);
       if (!el || !text) {
         if (shown || pending) hide();
@@ -50,14 +54,7 @@ export function CursorTooltip() {
         el.removeAttribute("title");
       }
 
-      point = { x: e.clientX, y: e.clientY };
-      if (el === shown) {
-        setTooltip({ text, ...point });
-        return;
-      }
-      // Moving within the same element keeps waiting out the dwell it started.
-      if (el === pending) return;
-
+      if (el === shown || el === pending) return;
       window.clearTimeout(timer);
       pending = el;
       timer = window.setTimeout(() => {
@@ -69,14 +66,26 @@ export function CursorTooltip() {
       }, HOVER_DELAY_MS);
     };
 
+    // A shown tooltip follows the cursor and keeps reading its element's text,
+    // which a label swap under the cursor may have changed.
+    const handleMouseMove = (e: MouseEvent) => {
+      point = { x: e.clientX, y: e.clientY };
+      if (!shown) return;
+      const text = tooltipTextOf(shown);
+      if (text) setTooltip({ text, ...point });
+      else hide();
+    };
+
     const handleMouseDown = () => hide();
 
+    window.addEventListener("pointerover", handlePointerOver);
     window.addEventListener("mousemove", handleMouseMove);
     document.addEventListener("mouseleave", hide);
     document.addEventListener("mousedown", handleMouseDown);
 
     return () => {
       window.clearTimeout(timer);
+      window.removeEventListener("pointerover", handlePointerOver);
       window.removeEventListener("mousemove", handleMouseMove);
       document.removeEventListener("mouseleave", hide);
       document.removeEventListener("mousedown", handleMouseDown);

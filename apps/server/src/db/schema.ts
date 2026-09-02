@@ -175,18 +175,25 @@ export const libraryDocuments = sqliteTable("library_documents", {
   indexedAt: text("indexed_at").notNull(),
 });
 
-export const automationRuns = sqliteTable("automation_runs", {
-  id: text("id").primaryKey(),
-  automationId: text("automation_id").notNull(),
-  /** Stable durable transcript shared by this automation's runs. */
-  conversationId: text("conversation_id").notNull().default(""),
-  status: text("status", { enum: ["running", "success", "error"] }).notNull(),
-  result: text("result").notNull().default(""),
-  cards: text("cards"),
-  trigger: text("trigger"),
-  startedAt: text("started_at").notNull(),
-  finishedAt: text("finished_at"),
-});
+export const automationRuns = sqliteTable(
+  "automation_runs",
+  {
+    id: text("id").primaryKey(),
+    automationId: text("automation_id").notNull(),
+    /** Stable durable transcript shared by this automation's runs. */
+    conversationId: text("conversation_id").notNull().default(""),
+    status: text("status", { enum: ["running", "success", "error"] }).notNull(),
+    result: text("result").notNull().default(""),
+    cards: text("cards"),
+    trigger: text("trigger"),
+    startedAt: text("started_at").notNull(),
+    finishedAt: text("finished_at"),
+  },
+  (table) => [
+    index("idx_runs_automation").on(table.automationId),
+    index("idx_runs_started").on(table.startedAt),
+  ],
+);
 
 /**
  * Durable outcome of one report item in a repeating automation. Work that

@@ -8,6 +8,7 @@ import Fastify, {
   type FastifyInstance,
   type FastifyReply,
   type FastifyRequest,
+  LogController,
 } from "fastify";
 // Populate the provider registries once for the whole process; this is the
 // single place the register modules are imported.
@@ -58,7 +59,13 @@ export async function buildApp(): Promise<FastifyInstance> {
   // maxParamLength exceeds the longest provider id in a path param: Outlook
   // Graph ids run ~140-170 chars (immutable ids longer), and the router's
   // 100-char default would 404 such routes with no handler ever running.
-  const app = Fastify({ loggerInstance, routerOptions: { maxParamLength: 512 } });
+  // Per-request "incoming"/"completed" lines cost a serialization pass each on
+  // a chatty local UI; failures still log through the error handler.
+  const app = Fastify({
+    loggerInstance,
+    routerOptions: { maxParamLength: 512 },
+    logController: new LogController({ disableRequestLogging: true }),
+  });
   registerErrorHandler(app);
 
   // The database handle follows the app's lifecycle: close() releases it so the
@@ -120,7 +127,17 @@ export async function buildApp(): Promise<FastifyInstance> {
   // In dev, Vite serves it instead.
   const webDist = env.webDistPath ?? resolve(here, "../../web/dist");
   if (existsSync(webDist)) {
-    await app.register(fastifyStatic, { root: webDist });
+    await app.register(fastifyStatic, {
+      root: webDist,
+      // A hashed bundle never changes under its name; the HTML that names the
+      // current hashes must always be revalidated.
+      setHeaders: (reply, filePath) => {
+        reply.header(
+          "Cache-Control",
+          /[\\/]assets[\\/]/.test(filePath) ? "public, max-age=31536000, immutable" : "no-cache",
+        );
+      },
+    });
     app.setNotFoundHandler((req, reply) => {
       if (req.raw.url?.startsWith("/api/")) apiNotFound(req, reply);
       else reply.sendFile("index.html");

@@ -67,6 +67,22 @@ export interface AccountColor {
   hex: string;
 }
 
+/**
+ * Who the assistant works for, as the user wrote it. The name and text ride in
+ * the system prompt; the picture is a data URI shown only in the app's own UI.
+ */
+export interface UserProfile {
+  name: string;
+  about: string;
+  avatar: string | null;
+}
+
+export type UserProfileText = Pick<UserProfile, "name" | "about">;
+
+export const USER_PROFILE_NAME_MAX = 120;
+export const USER_PROFILE_ABOUT_MAX = 2000;
+export const USER_PROFILE_AVATAR_MAX_CHARS = 400_000;
+
 export interface AccountSignature {
   accountId: string;
   html: string;
@@ -251,6 +267,8 @@ export interface Automation {
   position: number;
   createdAt: string;
   nextRunAt?: string | null;
+  /** The newest run, for the list's state marks; not on a create or update response. */
+  lastRun?: Pick<AutomationRun, "id" | "status" | "startedAt"> | null;
 }
 
 export type RunTrigger =

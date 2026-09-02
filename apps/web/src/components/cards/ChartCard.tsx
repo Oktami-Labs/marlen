@@ -82,6 +82,26 @@ export function ChartPlot({
 }
 
 /**
+ * One animation-frame loop shared by every rolling value on screen: a chart
+ * with a dozen bars schedules one frame, and React batches the dozen state
+ * writes it makes into one render.
+ */
+const frameSubscribers = new Set<(now: number) => void>();
+let frameHandle = 0;
+function onFrame(now: number): void {
+  frameHandle = 0;
+  for (const subscriber of [...frameSubscribers]) subscriber(now);
+  if (frameSubscribers.size > 0) frameHandle = requestAnimationFrame(onFrame);
+}
+function subscribeFrame(subscriber: (now: number) => void): () => void {
+  frameSubscribers.add(subscriber);
+  if (!frameHandle) frameHandle = requestAnimationFrame(onFrame);
+  return () => {
+    frameSubscribers.delete(subscriber);
+  };
+}
+
+/**
  * Rolls a value from 0 to its final number while its bar grows. Integer
  * targets stay integers mid-flight so the format never flickers decimals.
  */
@@ -95,15 +115,13 @@ function AnimatedValue({ value, fmt }: { value: number; fmt: (v: number) => stri
       return;
     }
     const start = performance.now();
-    let raf = 0;
-    const tick = (now: number) => {
+    const unsubscribe = subscribeFrame((now) => {
       const p = Math.min(1, (now - start) / 700);
       const eased = 1 - (1 - p) ** 3;
       setShown(Number.isInteger(value) ? Math.round(value * eased) : value * eased);
-      if (p < 1) raf = requestAnimationFrame(tick);
-    };
-    raf = requestAnimationFrame(tick);
-    return () => cancelAnimationFrame(raf);
+      if (p >= 1) unsubscribe();
+    });
+    return unsubscribe;
   }, [value]);
   return <>{fmt(shown)}</>;
 }

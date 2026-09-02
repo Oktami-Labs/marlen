@@ -8,6 +8,8 @@ interface ResizeHandleProps {
   max: number;
   onPointerDown: React.PointerEventHandler<HTMLDivElement>;
   onKeyDown?: React.KeyboardEventHandler<HTMLDivElement>;
+  /** Draw the workspace's one line at rest, the grip only on hover, focus or drag. */
+  seam?: boolean;
   className?: string;
 }
 
@@ -19,6 +21,7 @@ export function ResizeHandle({
   max,
   onPointerDown,
   onKeyDown,
+  seam = false,
   className,
 }: ResizeHandleProps) {
   return (
@@ -34,11 +37,19 @@ export function ResizeHandle({
       onPointerDown={onPointerDown}
       onKeyDown={onKeyDown}
       className={cn(
-        "group w-2 shrink-0 cursor-col-resize touch-none items-center justify-center",
+        "group relative w-2.5 shrink-0 cursor-col-resize touch-none items-center justify-center",
         className,
       )}
     >
-      <div className="h-8 w-1 rounded-full bg-foreground/10 transition-colors group-hover:bg-foreground/30 group-active:bg-accent/60" />
+      {seam && (
+        <div aria-hidden className="seam absolute inset-y-0 left-1/2 w-px -translate-x-1/2" />
+      )}
+      <div
+        className={cn(
+          "relative h-8 w-1 rounded-full transition-colors group-hover:bg-foreground/30 group-focus-visible:bg-foreground/30 group-active:bg-accent/60",
+          seam ? "bg-transparent" : "bg-foreground/10",
+        )}
+      />
     </div>
   );
 }

@@ -4,6 +4,8 @@ import type {
   AccountSignature,
   AccountVoice,
   FileAccessSettings,
+  UserProfile,
+  UserProfileText,
 } from "@marlen/shared";
 import { isLanguage, type Language } from "@marlen/shared";
 import { eq } from "drizzle-orm";
@@ -98,6 +100,28 @@ export async function getTimezoneSetting(): Promise<string | null> {
 /** The user's timezone: the setting, else the machine's. */
 export async function userTimezone(): Promise<string> {
   return (await getTimezoneSetting()) ?? Intl.DateTimeFormat().resolvedOptions().timeZone;
+}
+
+const PROFILE_NAME_KEY = "profile.name";
+const PROFILE_ABOUT_KEY = "profile.about";
+const PROFILE_AVATAR_KEY = "profile.avatar";
+
+export async function getProfile(): Promise<UserProfile> {
+  return {
+    name: (await getSetting(PROFILE_NAME_KEY)) ?? "",
+    about: (await getSetting(PROFILE_ABOUT_KEY)) ?? "",
+    avatar: (await getSetting(PROFILE_AVATAR_KEY)) || null,
+  };
+}
+
+export async function setProfileText(text: UserProfileText): Promise<void> {
+  await setSetting(PROFILE_NAME_KEY, text.name);
+  await setSetting(PROFILE_ABOUT_KEY, text.about);
+}
+
+export async function setProfileAvatar(dataUri: string | null): Promise<void> {
+  if (dataUri) await setSetting(PROFILE_AVATAR_KEY, dataUri);
+  else await deleteSetting(PROFILE_AVATAR_KEY);
 }
 
 /**

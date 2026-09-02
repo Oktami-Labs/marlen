@@ -10,20 +10,29 @@ it. Named helpers keep the effect consistent across call sites.
 
 1. **No borders, outlines, or strokes at rest.** No `border`, no `divide-*`, no
    outlined buttons, no hairline dividers. Separation is tone and whitespace.
-   Five exceptions, and nothing else: the `:focus-visible` ring; `border-border`
+   Seven exceptions, and nothing else: the `:focus-visible` ring; `border-border`
    as a divider *inside* dense content (thread rails, markdown tables/blockquotes/
    hr, an expanded row's meta); `CardShell`, so agent work products read as
    discrete blocks on the white chat rail; `.surface-pop`, because a
-   scrimless panel over same-tone content has no other edge; and `.field-paper`,
+   scrimless panel over same-tone content has no other edge; `.field-paper`,
    the draft's own fields, which must stay bare paper and so can only say "type
-   here" with a writing line under them. Always the plain hairline, never with
-   an opacity modifier.
+   here" with a writing line under them; `.seam`, the one full-height 1px line
+   between the page and the docked chat (`ResizeHandle seam`), because the two
+   share one white surface and whitespace alone cannot say where one ends, drawn
+   at 8% foreground ink (`color-mix(in oklch, var(--foreground) 8%, transparent)`)
+   and used nowhere else; and `.now-line`, the accent rule on Home's day axis
+   between what has happened and what is scheduled, because the present moment
+   is a point on that axis and not a row. Every other hairline is the plain
+   `border-border`, never with an opacity modifier.
 2. **No card-in-card.** A surface is never nested in a surface. Group with a
    heading and whitespace. One elevated panel holds plain rows, not more panels.
-3. **No drop shadows.** Nothing casts a blur, at rest or floating. Elevation is
+3. **No drop shadows on content or controls.** Elevation inside the workspace is
    tone: the `.scrim` backdrop, and `.surface-pop`'s brighter dark-mode tone. The
-   `--shadow-*` tokens are nulled in `index.css` so a stray utility renders
-   nothing. Only the `:focus-visible` ring uses `box-shadow`, at zero blur.
+   desktop `.workspace-frame` is the one blurred-shadow exception, separating
+   the shared white workspace from the grey window; it is absent on the
+   edge-to-edge mobile layout. The `--shadow-*` tokens are nulled in `index.css`
+   so a stray utility renders nothing. Only the `:focus-visible` ring uses any
+   other `box-shadow`, at zero blur.
 
 ## Component conventions
 
@@ -49,7 +58,8 @@ clean call sites; when you add one, add it to this list.
 - **Person marks:** `AvatarMark` (`ui/avatar-mark.tsx`), the round initials mark
   standing for a person on a message, a draft row, or a card header. Its tone is
   the item's type color, never a per-sender color: mail stays as neutral as the
-  rest of the app.
+  rest of the app. The user's own mark (sidebar, Settings → Profile) shows their
+  picture via `src` once they set one; nobody else's ever does.
 - **Mail header:** `MessageHeader` + `RecipientLine` (`components/MessageHeader.tsx`).
   Every email surface opens the same way: the counterpart's avatar and name, the
   recipient lines under it, the timestamp on the right. Addresses are read as
@@ -65,6 +75,11 @@ clean call sites; when you add one, add it to this list.
   parts you type in. Every other control in the app stays a filled `surface-2`
   field. An approval row never edits in place; it opens the letter.
 - **App logos:** `AppIcon` with a mail-glyph fallback.
+- **Brand mark:** `BrandMark` (`components/BrandMark.tsx`), the orca drawn inline
+  with its body in `currentColor` and a white belly; the caller gives it
+  `text-accent`. It stands bare on the rail, the setup page and About, never on
+  a disc. The `AgentAvatar` is the one place the silhouette sits on an accent
+  circle.
 - **Received message body:** `EmailBody` (`components/EmailBody.tsx`). It renders the
   sender's own HTML in a sandboxed frame that sizes itself to its content,
   blocks remote images until the reader asks, and collapses quoted history.
@@ -130,45 +145,60 @@ clean call sites; when you add one, add it to this list.
   the content area. No suggestion/template chips.
 - **Resizable panels:** `ResizeHandle` is the pointer and keyboard grip for
   docked side panels. Pair it with `useResizableWidth`; do not hand-roll a splitter.
+  With `seam` it draws the workspace's one line at rest and shows the grip on hover.
 - **Form actions** are right-aligned, primary rightmost.
 
 ## Surfaces
 
-The canvas is true grey in both themes, so raised things lift and recessed things
-sink. Standalone rises, tucked-inside sinks. That alternation is the whole model.
+The window is grey and the workspace is white, in both themes. The nav rail sits
+on the grey `background`; the page and the docked chat share one white `surface`,
+rounded and inset from the window, with the `.seam` as the only line between
+them. On that white surface nothing is a raised panel: groups are separated by
+whitespace and their `GroupLabel`, rows are bare, and a row's hover fill is
+`surface-2`. Standing on the grey window, a thing rises (`surface`); standing on
+the white workspace, a thing recesses (`surface-2`). That is the whole model.
 
 | Token | Role | Use for |
 | --- | --- | --- |
-| `surface` | **Raised** (white / lighter dark panel) | Anything standing on its own: a feed row, an empty state, a grouped block, an agent card |
-| `background` | The canvas | Page body, main column, chat column |
-| `surface-2` / `muted` | **Recessed** | Inputs, chips, hover fills, code blocks, anything inside a raised surface |
+| `background` | The window | The nav rail and the frame around the workspace |
+| `surface` | The workspace | The page canvas, the docked chat, a dialog over the scrim, an agent card on the chat rail |
+| `surface-2` / `muted` | **Recessed** | Inputs, chips, hover fills, code blocks, anything that must read as a control on the workspace |
 
-Never stack `surface` on `surface`. Sibling rows on the canvas each rise; rows
-*inside* a grouped card stay bare. Raised holds recessed holds raised is the max
-depth. A Home section is one raised panel holding plain rows with their group
-labels inside (`surface-hover` on the row), never a card per row: five cards
-under five overlines is what makes a short list read as clutter.
+Never stack `surface` on `surface`: a white panel on the white workspace has no
+edge and says nothing. Home is the model, two columns of bare rows under group
+labels with no panel around either. Pages built for the earlier grey canvas
+still carry `.surface` panels and render flat until they are brought to this
+shape; do not add new ones.
 
 A neutral control's fill is relative to what is behind it, and this is automatic
-via derived variables (`--surface-2-fill`, `--secondary-fill`). Use
-`bg-surface-2`/`bg-secondary`/`.field`/`.tint-neutral`. Never hand-pick a grey to
-make a control read; if contrast is short, fix the fill variables in `index.css`.
+via derived variables (`--surface-2-fill`, `--secondary-fill`): the workspace
+carries `.surface-fills`, so `bg-surface-2`/`bg-secondary`/`.field`/`.tint-neutral`
+recess to grey there and rise to white on the grey window. Never hand-pick a grey
+to make a control read; if contrast is short, fix the fill variables in `index.css`.
 
 Anchored floating panels (select menus, color picker) use `.surface-pop`, not
 `.surface`. Dialogs keep `.surface`; the scrim separates them.
 
 The cursor tooltip is the exception to both: no scrim, no border, so it carries
-its own `.tooltip-chip` tone, a fill far enough from white panels and the grey
-canvas to read over either.
+its own `.tooltip-chip` tone, a fill far enough from the white workspace and the
+grey window to read over either.
 
 ## Color
 
 - **Neutrals are true grey**, chroma 0, never tinted toward the accent.
-- **The selected preset is the single accent.** Violet is the default. The CTA
-  and the user's chat bubble are filled with it (the bubble face is the
-  `.bubble-accent` gradient). Beyond that it marks the logo, the nav rail's
-  active item and hover tint, links, the switch's on-state, matched search text,
-  and the focus ring. Never wash a panel or page in it.
+- **The selected preset is the single accent.** Blue is the default for now.
+  The accent is a fill: the CTA, the user's chat bubble (the `.bubble-accent`
+  gradient), the agent avatar, the switch's on-state, the selected day, the
+  brand mark's body, and the pale tints behind the rail's active item, selected
+  rows and matched search text; `accent-foreground` sits on it. Everything that
+  says accent as text or a hairline takes `accent-text` (`text-accent-text`, the
+  `--accent-text` token): links, the active nav label, the now line, the new
+  dot, the initials on `.tint-accent`, the streaming word and the focus ring.
+  The hue presets (blue, violet, teal, rose, amber) set both tokens to one
+  colour; the yellow preset, `#FFCF42` (`oklch(0.8733 0.1586 89.1)`), cannot be
+  read on white and so carries dark ink on its fills and a deep ochre as
+  `accent-text` in light, the yellow itself in dark. Never paint text in
+  `text-accent`, and never wash a panel or page in the accent.
 - **Ink** (`--primary`) is the selected/pressed tone: the active `Chip`, the
   skip-link. Not a CTA fill.
 - **Type tints on icon chips**, one tone per type, chip only, never the row
@@ -292,16 +322,21 @@ read as one idea.
   its rail stays at the leading edge and its content remains one vertical
   reading column at every width. Other pages start at `max-w-3xl` and relax to
   `max-w-6xl` on large canvases. Home can reach `max-w-7xl`. The canvas decides,
-  not the viewport, since the sidebar and chat panel eat variable width. Home is the one
-  two-column page (what waits on you, what the agent does itself): it steps up
-  from `@3xl` instead, so the second column appears as soon as the canvas can
-  hold two rows rather than only on a wide display. The agenda is one time
-  axis: Missed, the days ahead, Anytime. Every kind of item sits on it, a
-  draft awaiting approval under the day it was drafted; never a group per
-  kind, which would wedge a second axis into the first.
-- Chrome frames the canvas: the nav rail, chat column, and the frame behind the
-  working canvas are `sidebar`. On desktop the grey canvas is inset and rounded
-  (`rounded-2xl`); on mobile it runs edge to edge.
+  not the viewport, since the sidebar and chat panel eat variable width.
+- Home is the one two-column page: what needs you on the left, the day on the
+  right, `minmax(0, 1.22fr) minmax(0, 1fr)` with a 14px gap from `@2xl`, the
+  step at which both columns still stand beside the docked chat at the default
+  window; with the chat collapsed the same layout simply widens. Nothing folds
+  or hides, the page scrolls. Each column has one axis and never borrows the
+  other's. The left column groups by kind (approvals, questions, tasks), oldest
+  first inside a group, with the time on the row. The right column is the day,
+  one time axis split by the now line: what the agent did above it, what is
+  scheduled below it, tomorrow under its own label. A task never sits on the day
+  axis and a run never sits in a kind group.
+- The window frames the workspace: the nav rail and the frame are `background`;
+  the workspace (the page plus the docked chat) is one `surface`, inset 12px
+  from the top, bottom and right of the window and `rounded-2xl` on desktop,
+  edge to edge on mobile. The page title and the chat header share one baseline.
 - Three columns need room: the chat panel docks from `lg` and is a drawer below
   it, and the header's controls size against the canvas (`@container` on `main`),
   never the window.

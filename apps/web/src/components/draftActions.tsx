@@ -101,7 +101,7 @@ export function RefineInChatButton({
     <Button
       variant="ghost"
       size={label ? "sm" : "icon-xs"}
-      className="icon-refine hover:bg-accent/10 hover:text-accent"
+      className="icon-refine hover:bg-accent/10 hover:text-accent-text"
       onClick={(e) => {
         e.stopPropagation();
         revealChat();

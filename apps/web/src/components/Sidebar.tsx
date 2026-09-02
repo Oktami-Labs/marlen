@@ -1,14 +1,17 @@
 import { type AppStatus, isSetupComplete } from "@marlen/shared";
+import { useQuery } from "@tanstack/react-query";
 import { type LucideIcon, TriangleAlert, X } from "lucide-react";
 import { createPortal } from "react-dom";
 import { useTranslation } from "react-i18next";
 import { Link, useLocation, useNavigate } from "react-router-dom";
+import { BrandMark } from "@/components/BrandMark";
 import { UpdatePill, useUpdateState } from "@/components/UpdatePill";
 import { AvatarMark } from "@/components/ui/avatar-mark";
 import { Button } from "@/components/ui/button";
 import { OptionRow } from "@/components/ui/option-row";
 import { PRIMARY_NAV_ITEMS, SETTINGS_NAV_ITEM } from "@/lib/nav";
 import { useAnchoredPopover } from "@/lib/useAnchoredPopover";
+import { profileQuery } from "@/lib/useServerPreferences";
 import { cn, withViewTransition } from "@/lib/utils";
 
 interface SidebarProps {
@@ -22,7 +25,7 @@ interface SidebarProps {
  *  hover tint, focus ring and collapsed centring stay identical. */
 const railItemClass = cn(
   "group relative flex w-full items-center rounded-lg text-sm font-medium transition-colors",
-  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-sidebar",
+  "focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 focus-visible:ring-offset-background",
 );
 const railItemCollapsedClass = "md:justify-center md:px-0";
 
@@ -73,7 +76,7 @@ function SidebarNavLink({
         isWarning
           ? "text-warning hover:bg-accent/[0.08]"
           : active
-            ? "text-accent"
+            ? "text-accent-text"
             : "text-muted-foreground hover:bg-accent/[0.08] hover:text-foreground",
       )}
     >
@@ -101,6 +104,8 @@ function ProfileMenu({
   const { t } = useTranslation();
   const navigate = useNavigate();
   const { open, setOpen, pos, triggerRef, popoverRef } = useAnchoredPopover<HTMLDivElement>();
+  const { data: profile } = useQuery(profileQuery);
+  const label = profile?.name || t("sidebar.localProfile");
   const SettingsIcon = SETTINGS_NAV_ITEM.icon;
 
   return (
@@ -113,19 +118,19 @@ function ProfileMenu({
         aria-expanded={open}
         className={cn(
           railItemClass,
-          "gap-2 px-2 py-1.5 text-left hover:bg-accent/[0.08]",
+          "gap-2 px-3 py-1 text-left hover:bg-accent/[0.08]",
           collapsed && railItemCollapsedClass,
-          active ? "text-accent" : "text-foreground",
+          active ? "text-accent-text" : "text-foreground",
         )}
       >
         <AvatarMark
-          name={t("sidebar.localProfile")}
+          name={label}
+          src={profile?.avatar}
           tone={active ? "tint-accent" : "tint-neutral"}
-          size="sm"
+          size="md"
+          className="h-10 w-10 text-xs"
         />
-        <span className={cn("min-w-0 flex-1 truncate", collapsed && "md:hidden")}>
-          {t("sidebar.localProfile")}
-        </span>
+        <span className={cn("min-w-0 flex-1 truncate", collapsed && "md:hidden")}>{label}</span>
       </button>
 
       {open &&
@@ -164,7 +169,7 @@ export function Sidebar({ status, collapsed, onClose }: SidebarProps) {
   const setupIncomplete = status !== null && !isSetupComplete(status);
 
   return (
-    <aside className="surface-fills flex h-dvh w-64 shrink-0 flex-col overflow-hidden bg-sidebar md:w-full">
+    <aside className="flex h-dvh w-64 shrink-0 flex-col overflow-hidden bg-background md:w-full">
       <div
         // titlebar-pad/drag are inert unless the desktop shell floats the
         // window controls over this corner (macOS); then this row clears them
@@ -180,10 +185,9 @@ export function Sidebar({ status, collapsed, onClose }: SidebarProps) {
           className="flex min-w-0 shrink-0 items-center gap-2"
           title="Go to Homepage"
         >
-          <img
-            src="/logo.svg"
-            alt="Marlene Logo"
-            className="h-8 w-auto object-contain transition-opacity duration-150 hover:opacity-80 motion-reduce:transition-none"
+          <BrandMark
+            label="Marlene Logo"
+            className="h-9 w-auto text-accent transition-opacity duration-150 hover:opacity-80 motion-reduce:transition-none"
           />
           <span
             className={cn(

@@ -106,7 +106,9 @@ export async function executeAutomationRun(
     trigger: opts.trigger ? JSON.stringify(opts.trigger) : null,
     startedAt: new Date().toISOString(),
   });
+  // The automations list carries each automation's newest run.
   emitServerEvent("runs");
+  emitServerEvent("automations");
 
   const timeoutMs =
     opts.timeoutMs !== undefined && opts.timeoutMs > 0 ? opts.timeoutMs : DEFAULT_TIMEOUT_MS;
@@ -191,6 +193,7 @@ export async function executeAutomationRun(
       })
       .where(eq(schema.automationRuns.id, runId));
     emitServerEvent("runs");
+    emitServerEvent("automations");
     // Approval work always notifies, independent of completion preferences.
     if (automation.notifyOnCompletion || leftApprovals(cardsJson)) {
       emitRunNotification({
@@ -221,6 +224,7 @@ export async function executeAutomationRun(
       })
       .where(eq(schema.automationRuns.id, runId));
     emitServerEvent("runs");
+    emitServerEvent("automations");
     emitRunNotification({
       runId,
       automationId,

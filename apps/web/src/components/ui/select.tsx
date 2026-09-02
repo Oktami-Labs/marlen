@@ -254,8 +254,8 @@ export function Select({
                     "relative flex cursor-pointer select-none items-center rounded-sm px-2 py-1.5 text-sm outline-none",
                     isSelected
                       ? isActive
-                        ? "bg-accent/26 text-accent"
-                        : "bg-accent/18 text-accent"
+                        ? "bg-accent/26 text-accent-text"
+                        : "bg-accent/18 text-accent-text"
                       : isActive
                         ? "bg-surface-2 text-foreground"
                         : "text-foreground",

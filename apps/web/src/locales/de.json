@@ -545,6 +545,8 @@
     "setupBanner": "Marlene ist noch nicht fertig eingerichtet. Der Assistent erreicht Ihre E-Mails noch nicht.",
     "setupBannerCta": "Einrichtung abschließen",
     "offlineBanner": "Ihr E-Mail-Anbieter ist gerade nicht erreichbar. Prüfen Sie Ihre Verbindung.",
+    "draftGone": "Dieser Entwurf ist nicht mehr verfügbar.",
+    "reportGone": "Dieser Lauf ist nicht mehr in der Übersicht.",
     "missedBanner_one": "1 Automatisierung lief nicht, während die App geschlossen war.",
     "missedBanner_other": "{{count}} Automatisierungen liefen nicht, während die App geschlossen war.",
     "missedRun": "Jetzt ausführen",
@@ -558,19 +560,19 @@
     "triggerTodoAnswerDetail": "Gestartet mit Ihrer Antwort „{{answer}}“ auf das To-do „{{title}}“.",
     "triggerMail": "Neue Mail",
     "triggerMailDetail": "Gestartet durch neue Mail in {{accounts}}.",
-    "attentionTitle": "Zu erledigen",
+    "needsYou": "Braucht Sie",
+    "approvals": "Freigaben",
+    "questions": "Fragen",
+    "tasks": "Aufgaben",
+    "now": "Jetzt",
+    "approvalEmailTo": "E-Mail an {{name}}",
+    "approvalChannelTo": "{{channel}} an {{name}}",
     "attentionEmpty": "Alles erledigt. Neue Aufgaben und Freigaben erscheinen hier.",
-    "approvalsAllAccounts": "Alle Konten",
-    "approvalsFilterAccount": "Nach Konto filtern",
-    "showLess": "Weniger anzeigen",
     "outboundSentToast": "Nachricht gesendet.",
-    "todosOverdue": "Überfällig",
     "todosToday": "Heute",
     "todosTomorrow": "Morgen",
-    "todosAnytime": "Jederzeit",
     "todosAdd": "Aufgabe hinzufügen",
     "todosAddPlaceholder": "Neue Aufgabe…",
-    "todosReorder": "Verschieben",
     "todosDismiss": "Verwerfen",
     "todosEdit": "Bearbeiten",
     "todosEditDone": "Fertig",
@@ -593,20 +595,12 @@
     "activityEmptyBody": "Lassen Sie Ihr Postfach für sich arbeiten: Eine feste Anweisung läuft nach Zeitplan und berichtet hier.",
     "activityNoRunsBody": "Noch keine Ergebnisse. Führen Sie eine Automatisierung aus oder warten Sie auf den nächsten Termin.",
     "activityNothingToday": "Heute noch nichts.",
-    "activityShowEarlier_one": "{{count}} früheren Lauf anzeigen",
-    "activityShowEarlier_other": "{{count}} frühere Läufe anzeigen",
     "createAutomation": "Automatisierung erstellen",
     "viewAutomations": "Automatisierungen ansehen",
     "deletedAutomation": "Gelöschte Automatisierung",
     "openInChat": "Im Chat öffnen",
-    "briefingTitle": "Briefing",
     "briefingRefresh": "Neu erstellen",
-    "workTitle": "Marlene arbeitet",
-    "workNow": "jetzt",
     "workStarting": "Startet…",
-    "workStepRunning": "läuft",
-    "workUpNext": "Als Nächstes",
-    "workScheduled": "Geplant",
     "workFailed": "Fehlgeschlagen.",
     "todosAnswered": "Antwort: {{answer}}"
   },
@@ -657,10 +651,10 @@
   "automations": {
     "new": "Neue Automatisierung",
     "reorder": "Verschieben",
-    "save": "Speichern",
     "create": "Erstellen",
-    "formTitle": "Neue Automatisierung",
+    "save": "Speichern",
     "editTitle": "Automatisierung bearbeiten",
+    "formTitle": "Neue Automatisierung",
     "taskSection": "Aufgabe",
     "timingSection": "Ausführung",
     "runSettings": "Lauf-Einstellungen",
@@ -703,18 +697,29 @@
     "pinned": "Auf der Startseite angeheftet",
     "emptyTitle": "Noch keine Automatisierungen",
     "emptyBody": "Schreiben Sie eine feste Anweisung und wählen Sie, wann sie läuft.",
-    "paused": "pausiert",
-    "hiddenFromActivity": "Nicht in der Aktivität",
+    "paused": "Pausiert",
     "runNow": "Jetzt ausführen",
     "delete": "Löschen",
     "deleteConfirm": "Automatisierung „{{name}}“ löschen?",
-    "recentRuns": "Letzte Ausführungen",
     "noRuns": "Noch keine Ausführungen.",
     "runStatus": {
       "running": "läuft",
       "success": "erfolgreich",
       "error": "Fehler"
-    }
+    },
+    "groupSchedule": "Nach Zeitplan",
+    "groupMail": "Bei neuer E-Mail",
+    "groupManual": "Auf Abruf",
+    "unpin": "Von der Startseite lösen",
+    "pinShort": "Anheften",
+    "pause": "Pausieren",
+    "resume": "Fortsetzen",
+    "edit": "Bearbeiten",
+    "actions": "Aktionen",
+    "running": "Läuft",
+    "runs": "Läufe",
+    "nextRun": "Nächster Lauf {{when}}",
+    "gone": "Nicht mehr vorhanden."
   },
   "leads": {
     "new": "Neuer Lead",
@@ -881,6 +886,7 @@
     "nav": {
       "label": "Bereiche der Einstellungen",
       "general": "Allgemein",
+      "profile": "Profil",
       "connections": "Verbindungen",
       "permissions": "Zugriff",
       "data": "Daten & App"
@@ -918,6 +924,28 @@
         "prefill": "Im Chat prüfen"
       }
     },
+    "profile": {
+      "title": "Profil",
+      "name": {
+        "label": "Name",
+        "description": "So spricht Marlene Sie an.",
+        "placeholder": "Ihr Name"
+      },
+      "about": {
+        "label": "Über Sie",
+        "description": "Ihre Rolle, Ihr Unternehmen und wie Sie arbeiten. Marlene liest das zu Beginn jedes Gesprächs.",
+        "placeholder": "Führt ein kleines Designstudio in Hamburg. Mit Kunden per Sie, im Team per Du."
+      },
+      "picture": {
+        "change": "Bild ändern",
+        "remove": "Bild entfernen"
+      },
+      "identity": {
+        "title": "Identität",
+        "label": "Ihre Adressen",
+        "none": "Noch kein E-Mail-Konto verbunden."
+      }
+    },
     "appearance": {
       "label": "Erscheinungsbild",
       "description": "Hell, dunkel oder nach Geräteeinstellung.",
@@ -928,6 +956,7 @@
     "accentColor": {
       "label": "Akzentfarbe",
       "description": "Legt die Akzentfarbe in Marlene fest.",
+      "yellow": "Gelb",
       "violet": "Violett",
       "blue": "Blau",
       "teal": "Türkis",

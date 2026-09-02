@@ -51,6 +51,8 @@ import type {
   ThinkingLevel,
   Todo,
   TodoStatus,
+  UserProfile,
+  UserProfileText,
   VoiceLearnRun,
   WhatsAppStatus,
   WikiPage,
@@ -142,6 +144,14 @@ export const api = {
   timezone: () => get<{ timezone: string | null }>("/api/settings/timezone"),
   setTimezone: (timezone: string) =>
     http<{ timezone: string }>("PUT", "/api/settings/timezone", { timezone }),
+
+  profile: () => get<{ profile: UserProfile }>("/api/settings/profile"),
+  setProfile: (text: UserProfileText) =>
+    http<{ profile: UserProfile }>("PUT", "/api/settings/profile", text),
+  setProfileAvatar: (dataUri: string) =>
+    http<{ profile: UserProfile }>("PUT", "/api/settings/profile/avatar", { dataUri }),
+  removeProfileAvatar: () =>
+    http<{ profile: UserProfile }>("DELETE", "/api/settings/profile/avatar"),
 
   accountPermissions: () => get<{ permissions: AccountPermissions[] }>("/api/settings/permissions"),
   setAccountPermissions: (permissions: AccountPermissions[]) =>
