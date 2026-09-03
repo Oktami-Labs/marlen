@@ -12,10 +12,10 @@ stays on your computer.
 
 Grab the macOS or Windows installer from the
 [latest release](https://github.com/Oktami-Labs/marlen/releases/latest).
-That public repo carries only the releases, the download site
+That repo is this one: it carries the source, the releases, the download site
 ([marlen.email](https://marlen.email), its `gh-pages` branch) and the issue
-tracker; the source lives here, privately. Installed apps update from its
-releases, and `release.yml` publishes there with a token
+tracker. Installed apps update from its releases, which `release.yml` builds
+when a `v*` tag lands
 ([apps/desktop/README.md → Cutting a release](apps/desktop/README.md#cutting-a-release)).
 
 Builds are not code-signed yet, which shapes both installing and updating:
