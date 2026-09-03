@@ -1,5 +1,5 @@
 import type { Automation, RunFeedItem } from "@marlen/shared";
-import { CalendarClock, CircleAlert, Inbox, Newspaper, Sparkle, Zap } from "lucide-react";
+import { CalendarClock, CircleAlert, Inbox, Newspaper, Zap } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
 import { useNavigate } from "react-router-dom";
@@ -36,7 +36,7 @@ function useNow(): number {
   return now;
 }
 
-/** The gutter reads the clock for today; a row from another day (yesterday's report) shows its weekday. */
+/** The gutter reads the clock for today; a run still going since another day shows its weekday. */
 function gutterLabel(iso: string, lang: string): string {
   return isToday(iso) ? timeLabel(iso, lang) : weekdayLabel(iso, lang);
 }
@@ -51,15 +51,15 @@ function scheduledRuns(automations: Automation[] | null): { automation: Automati
 
 /**
  * "Heute": the agent's day on one time axis. What it did sits above the now
- * line, the latest report first; what is scheduled sits below it, and
- * tomorrow's runs under their own label. A row is one line: the time in a
- * mono gutter, a glyph for the kind of thing, the gist. A routine run, one
- * that found nothing, is muted. Every row kind renders through `DayRow`, so
- * calendar or message events can join the axis without a new component.
+ * line, what is scheduled below it, and tomorrow's runs under their own
+ * label. A row is one line: the time in a mono gutter, a glyph for the kind
+ * of thing, the gist. A routine run, one that found nothing, is muted. Every
+ * row kind renders through `DayRow`, so calendar or message events can join
+ * the axis without a new component.
  */
 export function DaySection({
   runs,
-  report,
+  hiddenRunIds,
   automations,
   onOpenRun,
   onNavigate,
@@ -67,8 +67,8 @@ export function DaySection({
 }: {
   /** Null while the first fetch is in flight. */
   runs: RunFeedItem[] | null;
-  /** The run the day leads with; its row opens the report. */
-  report: RunFeedItem | null;
+  /** Runs the pinned band already shows in full, so the day never says a thing twice. */
+  hiddenRunIds: ReadonlySet<string>;
   automations: Automation[] | null;
   /** Opens a run's page in place of Home. */
   onOpenRun: (runId: string) => void;
@@ -87,10 +87,10 @@ export function DaySection({
     () =>
       (runs ?? [])
         .filter(
-          (run) => run.status !== "running" && run.id !== report?.id && isToday(run.startedAt),
+          (run) => run.status !== "running" && !hiddenRunIds.has(run.id) && isToday(run.startedAt),
         )
         .sort((a, b) => a.startedAt.localeCompare(b.startedAt)),
-    [runs, report?.id],
+    [runs, hiddenRunIds],
   );
   const running = React.useMemo(
     () => (runs ?? []).filter((run) => run.status === "running"),
@@ -115,7 +115,7 @@ export function DaySection({
 
   const upcoming = scheduled.filter(({ at }) => at >= now && at < tomorrowStart);
   const tomorrow = scheduled.filter(({ at }) => at >= tomorrowStart && at < tomorrowStart + DAY_MS);
-  const past = (report ? 1 : 0) + finished.length + running.length;
+  const past = finished.length + running.length;
 
   if (past + upcoming.length + tomorrow.length === 0) {
     const hasAutomations = (automations?.length ?? 0) > 0;
@@ -142,7 +142,7 @@ export function DaySection({
     navigate(`/automations?automation=${encodeURIComponent(automation.id)}`);
 
   let index = 0;
-  const runRow = (run: RunFeedItem, isReport: boolean) => (
+  const runRow = (run: RunFeedItem) => (
     <SeenOnInteract
       key={run.id}
       seen={seen}
@@ -155,10 +155,10 @@ export function DaySection({
         <DayRow
           at={run.startedAt}
           time={gutterLabel(run.startedAt, lang)}
-          icon={runIcon(run, isReport)}
-          title={runTitle(run, isReport, t("home.deletedAutomation"))}
-          tooltip={isReport ? (run.automationName ?? t("home.deletedAutomation")) : runSummary(run)}
-          muted={!isReport && routineRun(run)}
+          icon={runIcon(run)}
+          title={runTitle(run, t("home.deletedAutomation"))}
+          tooltip={runSummary(run)}
+          muted={routineRun(run)}
           isNew={isNew}
           onPress={() => onOpenRun(run.id)}
         />
@@ -169,8 +169,7 @@ export function DaySection({
   return (
     <section className="flex flex-col">
       {head}
-      {report && runRow(report, true)}
-      {finished.map((run) => runRow(run, false))}
+      {finished.map((run) => runRow(run))}
       {running.map((run) => (
         <RunningRow key={run.id} run={run} lang={lang} style={stagger(index++)} />
       ))}
@@ -216,12 +215,11 @@ export function DaySection({
   );
 }
 
-/** The report row reads its headline; every other run leads with its name so
- *  the name survives the clip, and the gist follows in quieter ink. */
-function runTitle(run: RunFeedItem, isReport: boolean, deletedLabel: string): React.ReactNode {
+/** A run leads with its name so the name survives the clip, and the gist
+ *  follows in quieter ink. */
+function runTitle(run: RunFeedItem, deletedLabel: string): React.ReactNode {
   const name = run.automationName ?? deletedLabel;
   const gist = runSummary(run);
-  if (isReport) return gist || name;
   return (
     <>
       {name}
@@ -231,9 +229,8 @@ function runTitle(run: RunFeedItem, isReport: boolean, deletedLabel: string): Re
 }
 
 /** The glyph for a run: what led to it, or that it failed. */
-export function runIcon(run: RunFeedItem, isReport: boolean): React.ReactNode {
+export function runIcon(run: RunFeedItem): React.ReactNode {
   if (run.status === "error") return <CircleAlert className="text-destructive" />;
-  if (isReport) return <Sparkle />;
   switch (run.trigger?.kind) {
     case "mail":
       return <Inbox />;

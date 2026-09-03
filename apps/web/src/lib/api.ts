@@ -41,6 +41,7 @@ import type {
   OnOfficeStatus,
   OutboundDraft,
   OutboundStatus,
+  PinnedRun,
   PipedreamApp,
   PipedreamConfigInput,
   PipedreamStatus,
@@ -254,8 +255,7 @@ export const api = {
     const suffix = qs.toString() ? `?${qs.toString()}` : "";
     return get<{ items: RunFeedItem[]; total: number }>(`/api/runs${suffix}`);
   },
-  pinnedRun: () =>
-    get<{ run: RunFeedItem | null; automation: Automation | null }>("/api/runs/pinned"),
+  pinnedRuns: () => get<{ items: PinnedRun[] }>("/api/runs/pinned"),
   missedRuns: () => get<{ items: MissedAutomation[] }>("/api/runs/missed"),
   runMissed: () => http<{ started: MissedAutomation[] }>("POST", "/api/runs/catch-up"),
   handleReportItem: (runId: string, key: string) =>

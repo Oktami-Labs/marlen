@@ -5,7 +5,7 @@ import { t } from "../src/i18n.js";
 /** Runs only in the `demo` project (`pnpm demo`); the default suite skips @demo. */
 test.use({ seeded: true });
 
-test("home: what needs you by kind, the day around its now line, the report behind its row @demo", async ({
+test("home: the pinned band on top, what needs you by kind, the day around its now line @demo", async ({
   page,
 }) => {
   await openApp(page);
@@ -46,13 +46,35 @@ test("home: what needs you by kind, the day around its now line, the report behi
   ).toBeVisible();
   await page.waitForTimeout(1800);
 
-  // The briefing leads the day; its row opens the report in place of Home.
-  await page.getByRole("button", { name: DEMO.briefingHeadline }).click();
-  await expect(page).toHaveURL(/\?report=/);
+  // The pinned automations lead the page, read without a click. The band's header
+  // is the button that opens the run, and only it is named the automation alone:
+  // a report body can repeat the name, and the day axis prefixes its rows a time.
+  await expect(
+    page.getByRole("button", { name: DEMO.briefingAutomation, exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(DEMO.briefingHeadline)).toBeVisible();
   await expect(page.getByRole("heading", { name: DEMO.waitingSection })).toBeVisible();
   await expect(page.getByText(DEMO.waitingOn)).toBeVisible();
   await expect(page.getByText(DEMO.resolved)).toBeVisible();
-  await page.waitForTimeout(2200);
+  await page.waitForTimeout(1600);
+
+  // The arrows page to the next pinned automation, the band folds to its header.
+  await page.getByRole("button", { name: t("home.pinnedNext") }).click();
+  await expect(
+    page.getByRole("button", { name: DEMO.weeklyAutomation, exact: true }),
+  ).toBeVisible();
+  await expect(page.getByText(DEMO.weeklyChartTitle)).toBeVisible();
+  await page.waitForTimeout(1600);
+  await page.getByRole("button", { name: t("common.collapse"), exact: true }).click();
+  await expect(page.getByText(DEMO.weeklyChartTitle)).toHaveCount(0);
+  await page.waitForTimeout(1200);
+  await page.getByRole("button", { name: t("common.expand"), exact: true }).click();
+  await expect(page.getByText(DEMO.weeklyChartTitle)).toBeVisible();
+
+  // Its header opens the whole run in place of Home.
+  await page.getByRole("button", { name: DEMO.weeklyAutomation, exact: true }).click();
+  await expect(page).toHaveURL(/\?report=/);
+  await page.waitForTimeout(1800);
   await page.getByRole("button", { name: t("views.home.title"), exact: true }).click();
   await expect(page).not.toHaveURL(/report=/);
   await expect(page.getByText(t("home.now"), { exact: true })).toBeVisible();

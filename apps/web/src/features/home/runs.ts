@@ -16,17 +16,9 @@ export function findReportCard(run: RunFeedItem): ReportCardData | undefined {
   return match ? (match.card as ReportCardData) : undefined;
 }
 
-/**
- * The run the day leads with: the pinned automation's latest result when one
- * is pinned, else the newest run whose turn published a report. The feed
- * arrives newest first.
- */
-export function pickReport(
-  pinned: RunFeedItem | null | undefined,
-  runs: RunFeedItem[] | null,
-): RunFeedItem | null {
-  if (pinned) return pinned;
-  return (runs ?? []).find((run) => run.status === "success" && findReportCard(run)) ?? null;
+/** Whether a run of this automation is in flight, which lights its refresh action. */
+export function isAutomationRunning(runs: RunFeedItem[] | null, automationId: string): boolean {
+  return (runs ?? []).some((run) => run.automationId === automationId && run.status === "running");
 }
 
 /** The run's one-line gist: the report's own headline, else the result's first

@@ -8,14 +8,18 @@ import { ErrorBanner, Notice } from "@/components/ui/feedback";
 import { DraftReader, draftStack } from "@/features/drafts/DraftReader";
 import { DaySection } from "@/features/home/DaySection";
 import { NeedsYouSection } from "@/features/home/NeedsYouSection";
+import { PinnedReports } from "@/features/home/PinnedReports";
 import { ReportPage } from "@/features/home/ReportPage";
-import { freshRuns, pickReport } from "@/features/home/runs";
+import { freshRuns } from "@/features/home/runs";
 import { todoSeenKey, useSeen } from "@/features/home/seen";
 import { useAccountColors } from "@/lib/accounts";
 import { api } from "@/lib/api";
 import type { View } from "@/lib/nav";
 import { toast } from "@/lib/toast";
 import { errorMessage } from "@/lib/utils";
+
+/** No pinned run to hide yet, one stable identity so the day list doesn't resort. */
+const EMPTY_IDS: ReadonlySet<string> = new Set();
 
 export function HomePanel({
   setupIncomplete,
@@ -33,7 +37,7 @@ export function HomePanel({
   // todos list: the server files and closes those rows while answering this request.
   const draftsQuery = useQuery({ queryKey: ["drafts", "review"], queryFn: () => api.drafts() });
   const runsQuery = useQuery({ queryKey: ["runs", "feed"], queryFn: () => api.runsFeed() });
-  const pinnedQuery = useQuery({ queryKey: ["runs", "pinned"], queryFn: () => api.pinnedRun() });
+  const pinnedQuery = useQuery({ queryKey: ["runs", "pinned"], queryFn: () => api.pinnedRuns() });
   const automationsQuery = useQuery({
     queryKey: ["automations", "list"],
     queryFn: () => api.automations(),
@@ -70,14 +74,18 @@ export function HomePanel({
   const openRun = (runId: string) => setSearchParams({ report: runId });
   const closePage = () => setSearchParams({}, { replace: true });
 
-  // The report leaves the day list only once both lists are in; split earlier,
-  // its row would sit lower for a beat and then jump to the top.
+  // A pinned run leaves the day list only once both lists are in; split
+  // earlier, its row would show for a beat and then vanish from the axis.
   const loaded = runs !== null && !pinnedQuery.isPending;
-  const pinned = pinnedQuery.data?.run;
-  const report = loaded ? pickReport(pinned, runs) : null;
+  const pinned = pinnedQuery.data?.items ?? null;
+  const bandRuns = React.useMemo(
+    () => new Set((pinned ?? []).flatMap((item) => (item.run ? [item.run.id] : []))),
+    [pinned],
+  );
   const reportRun = reportParam
     ? (runs?.find((run) => run.id === reportParam) ??
-      (pinned?.id === reportParam ? pinned : undefined))
+      pinned?.find((item) => item.run?.id === reportParam)?.run ??
+      undefined)
     : undefined;
 
   const todos = todosQuery.data ?? [];
@@ -147,6 +155,8 @@ export function HomePanel({
         </Notice>
       ) : null}
 
+      <PinnedReports items={pinned} runs={runs} colors={colors} onOpenRun={openRun} seen={seen} />
+
       {/* What needs you beside the day. Two columns from `@2xl`, the step at which
           both still stand beside the docked chat; stacked below that. */}
       <div
@@ -164,7 +174,7 @@ export function HomePanel({
         />
         <DaySection
           runs={runs}
-          report={report}
+          hiddenRunIds={loaded ? bandRuns : EMPTY_IDS}
           automations={automations}
           onOpenRun={openRun}
           onNavigate={onNavigate}

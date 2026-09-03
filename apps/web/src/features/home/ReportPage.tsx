@@ -2,13 +2,10 @@ import type { AccountColor, RunFeedItem } from "@marlen/shared";
 import { ChevronLeft, RefreshCw } from "lucide-react";
 import * as React from "react";
 import { useTranslation } from "react-i18next";
-import { AgentCardView } from "@/components/cards";
-import { ReportCard } from "@/components/cards/ReportCard";
 import { OpenRunInChatButton } from "@/components/OpenRunInChatButton";
 import { RunTriggerBadge } from "@/components/RunTriggerBadge";
 import { Button } from "@/components/ui/button";
-import { Markdown } from "@/components/ui/markdown";
-import { findReportCard, homeCards } from "@/features/home/runs";
+import { RunReport } from "@/features/home/RunReport";
 import { api } from "@/lib/api";
 import { dayTimeLabel } from "@/lib/dates";
 import type { View } from "@/lib/nav";
@@ -36,9 +33,6 @@ export function ReportPage({
   const { t, i18n } = useTranslation();
   const [starting, setStarting] = React.useState(false);
 
-  const report = findReportCard(run);
-  const quiet = !!report && report.sections.length === 0;
-  const cards = homeCards(run);
   const running = (runs ?? []).some(
     (r) => r.automationId === run.automationId && r.status === "running",
   );
@@ -90,25 +84,7 @@ export function ReportPage({
         />
       </div>
 
-      <div className="flex flex-col gap-3 px-3">
-        {quiet ? (
-          <p className="text-sm text-muted-foreground">
-            {report.headline ?? t("chat.cards.report.empty")}
-          </p>
-        ) : report ? (
-          <ReportCard card={report} colors={colors} runId={run.id} bare />
-        ) : run.result ? (
-          <Markdown content={run.result} className="text-sm text-foreground/90" />
-        ) : (
-          run.status === "error" && (
-            <p className="text-sm text-muted-foreground">{t("home.workFailed")}</p>
-          )
-        )}
-      </div>
-
-      {cards.map(({ toolCallId, card }) => (
-        <AgentCardView key={toolCallId} card={card} colors={colors} />
-      ))}
+      <RunReport run={run} colors={colors} />
     </div>
   );
 }

@@ -258,7 +258,7 @@ export interface Automation {
   schedule: string;
   enabled: boolean;
   showInActivity: boolean;
-  /** At most one automation may be pinned; its latest successful run leads Home. */
+  /** Pinned automations lead Home: their latest results page through the band above the columns. */
   pinned: boolean;
   leadId: string | null;
   runOnNewMail: boolean;
@@ -313,6 +313,12 @@ export interface RunFeedItem extends AutomationRun {
   automationName: string | null;
   /** Present only while `status` is "running"; the tail of what it has done so far. */
   steps?: RunStep[];
+}
+
+/** One pinned automation and the result Home reads on it; `run` is null until one succeeded. */
+export interface PinnedRun {
+  automation: Automation;
+  run: RunFeedItem | null;
 }
 
 export interface MissedAutomation {

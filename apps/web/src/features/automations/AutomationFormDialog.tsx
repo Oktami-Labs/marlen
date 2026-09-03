@@ -25,13 +25,14 @@ import { toast } from "@/lib/toast";
 
 type Fields = Pick<
   Automation,
-  "name" | "instruction" | "showInActivity" | "runOnNewMail" | "notifyOnCompletion"
+  "name" | "instruction" | "showInActivity" | "pinned" | "runOnNewMail" | "notifyOnCompletion"
 >;
 
 const EMPTY: Fields = {
   name: "",
   instruction: "",
   showInActivity: true,
+  pinned: false,
   runOnNewMail: false,
   notifyOnCompletion: false,
 };
@@ -198,6 +199,18 @@ export function AutomationFormDialog({
                     id="automation-activity"
                     checked={fields.showInActivity}
                     onCheckedChange={(value) => setField("showInActivity", value)}
+                  />
+                </SettingRow>
+                <SettingRow
+                  bare
+                  htmlFor="automation-pinned"
+                  label={t("automations.pin")}
+                  description={t("automations.pinHint")}
+                >
+                  <Switch
+                    id="automation-pinned"
+                    checked={fields.pinned}
+                    onCheckedChange={(value) => setField("pinned", value)}
                   />
                 </SettingRow>
                 <SettingRow

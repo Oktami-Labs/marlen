@@ -15,7 +15,7 @@ interface DefaultAutomation {
   schedule: string;
   enabled: boolean;
   showInActivity: boolean;
-  /** At most one default may set this (the pinned Home hero). */
+  /** Seeds the automation onto Home's pinned band. */
   pinned: boolean;
   runOnNewMail: boolean;
   notifyOnCompletion: boolean;

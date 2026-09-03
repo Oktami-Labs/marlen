@@ -3,7 +3,7 @@ import { eq } from "drizzle-orm";
 import { badRequest, conflict, requireRow } from "../../core/errors.js";
 import { emitServerEvent } from "../../core/events.js";
 import { deleteConversationCascade } from "../../db/conversationStore.js";
-import { db, lazyTransaction, schema, sqlite } from "../../db/index.js";
+import { db, schema } from "../../db/index.js";
 import { isRunInFlight, isValidCron, refreshSchedule, unschedule } from "./scheduler.js";
 
 export type AutomationRow = typeof schema.automations.$inferSelect;
@@ -32,15 +32,6 @@ export interface AutomationPatch {
   notifyOnCompletion?: boolean;
   position?: number;
 }
-
-/**
- * At most one automation is pinned. Unpinning every other row and pinning this
- * one run as one transaction, so concurrent pins can't both leave a row pinned.
- */
-const pinExclusively = lazyTransaction((id: string) => {
-  sqlite.prepare("UPDATE automations SET pinned = 0 WHERE id != ?").run(id);
-  sqlite.prepare("UPDATE automations SET pinned = 1 WHERE id = ?").run(id);
-});
 
 export async function createAutomation(input: AutomationInput): Promise<AutomationRow> {
   const name = input.name.trim();
@@ -74,7 +65,6 @@ export async function createAutomation(input: AutomationInput): Promise<Automati
     createdAt: new Date().toISOString(),
   };
   await db.insert(schema.automations).values(automation);
-  if (automation.pinned) pinExclusively(automation.id);
   await refreshSchedule(automation.id);
   // Run views (feed, pinned, missed) embed automation fields, so an
   // automation mutation is also a runs-data mutation.
@@ -112,9 +102,7 @@ export async function updateAutomation(id: string, patch: AutomationPatch): Prom
   if (patch.position !== undefined) updates.position = patch.position;
   if (Object.keys(updates).length === 0) throw badRequest("nothing to update");
 
-  // Must run before any mutation: a pinned:true update for a nonexistent id
-  // would otherwise unpin every real automation via pinExclusively and still
-  // report not found.
+  // Reports a bad id before the update, the schedule refresh and the events.
   await requireRow(
     db
       .select({ id: schema.automations.id })
@@ -124,7 +112,6 @@ export async function updateAutomation(id: string, patch: AutomationPatch): Prom
   );
 
   await db.update(schema.automations).set(updates).where(eq(schema.automations.id, id));
-  if (updates.pinned === true) pinExclusively(id);
   await refreshSchedule(id);
   emitServerEvent("automations");
   emitServerEvent("runs");

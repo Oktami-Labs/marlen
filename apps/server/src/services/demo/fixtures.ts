@@ -31,6 +31,8 @@ export const DEMO = {
   decisionQuestion: "Rabatt für Acme GmbH gewähren?",
   decisionAnswer: "Ja, 10 %",
   statsAutomation: "Lead-Statistik",
+  weeklyAutomation: "Wochenrückblick",
+  weeklyChartTitle: "Ungelesene E-Mails pro Tag",
   statsResult:
     "Diese Woche 19 Leads, fünf mehr als letzte Woche. Zwei A-Leads warten auf ein Angebot.",
   chartTitle: "Leads nach Status",
@@ -251,7 +253,8 @@ export function demoRows(now: Date, briefingAutomationId: string): DemoRows {
     },
     {
       id: "demo-automation-weekly",
-      name: "Wochenrückblick",
+      name: DEMO.weeklyAutomation,
+      pinned: true,
       instruction:
         "Fasse die Woche zusammen: erledigte Projekte, neue Anfragen, offene Rechnungen. Zeige die ungelesenen Mails pro Tag als Diagramm.",
       schedule: "0 17 * * 5",
@@ -536,7 +539,7 @@ export function demoRows(now: Date, briefingAutomationId: string): DemoRows {
   const weeklyChart: AgentCard = {
     kind: "chart",
     chartType: "line",
-    title: "Ungelesene E-Mails pro Tag",
+    title: DEMO.weeklyChartTitle,
     points: [
       { label: "Mo", value: 12 },
       { label: "Di", value: 9 },

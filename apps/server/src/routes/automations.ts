@@ -1,5 +1,5 @@
 import type { FastifyPluginAsyncTypebox } from "@fastify/type-provider-typebox";
-import type { Automation, RunStep, RunTrigger } from "@marlen/shared";
+import type { Automation, PinnedRun, RunStep, RunTrigger } from "@marlen/shared";
 import { Type } from "@sinclair/typebox";
 import { and, asc, desc, eq, isNull, ne, or, sql } from "drizzle-orm";
 import { parseStoredCards } from "../agent/cards.js";
@@ -165,28 +165,34 @@ export const automationRoutes: FastifyPluginAsyncTypebox = async (app) => {
 
   // Deliberately bypasses both /api/runs filters: pinning overrides showInActivity,
   // and there is no pagination limit, so an old pinned run never falls out of view.
-  app.get("/api/runs/pinned", async () => {
-    const [automation] = await db
+  // In the automations list's own order, which is the order Home pages through.
+  app.get("/api/runs/pinned", async (): Promise<{ items: PinnedRun[] }> => {
+    const automations = await db
       .select()
       .from(schema.automations)
-      .where(eq(schema.automations.pinned, true));
-    if (!automation) return { run: null, automation: null };
+      .where(eq(schema.automations.pinned, true))
+      .orderBy(asc(schema.automations.position), desc(schema.automations.createdAt));
 
-    const [run] = await runsSelectBase()
-      .where(
-        and(
-          eq(schema.automationRuns.automationId, automation.id),
-          eq(schema.automationRuns.status, "success"),
-          ne(schema.automationRuns.result, ""),
-        ),
-      )
-      .orderBy(desc(schema.automationRuns.startedAt))
-      .limit(1);
+    const items = await Promise.all(
+      automations.map(async (automation) => {
+        const [run] = await runsSelectBase()
+          .where(
+            and(
+              eq(schema.automationRuns.automationId, automation.id),
+              eq(schema.automationRuns.status, "success"),
+              ne(schema.automationRuns.result, ""),
+            ),
+          )
+          .orderBy(desc(schema.automationRuns.startedAt))
+          .limit(1);
+        return {
+          automation: { ...automation, nextRunAt: getNextRunAt(automation.id) },
+          run: run ? toRunDto(run) : null,
+        };
+      }),
+    );
 
-    return {
-      run: run ? toRunDto(run) : null,
-      automation: { ...automation, nextRunAt: getNextRunAt(automation.id) },
-    };
+    return { items };
   });
 
   app.get("/api/runs/missed", async () => {

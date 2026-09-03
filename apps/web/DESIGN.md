@@ -328,13 +328,19 @@ read as one idea.
 - Home is the one two-column page: what needs you on the left, the day on the
   right, `minmax(0, 1.22fr) minmax(0, 1fr)` with a 14px gap from `@2xl`, the
   step at which both columns still stand beside the docked chat at the default
-  window; with the chat collapsed the same layout simply widens. Nothing folds
-  or hides, the page scrolls. Each column has one axis and never borrows the
-  other's. The left column groups by kind (approvals, questions, tasks), oldest
-  first inside a group, with the time on the row. The right column is the day,
-  one time axis split by the now line: what the agent did above it, what is
+  window; with the chat collapsed the same layout simply widens. No column
+  folds or hides, the page scrolls. Each column has one axis and never borrows
+  the other's. The left column groups by kind (approvals, questions, tasks),
+  oldest first inside a group, with the time on the row. The right column is the
+  day, one time axis split by the now line: what the agent did above it, what is
   scheduled below it, tomorrow under its own label. A task never sits on the day
   axis and a run never sits in a kind group.
+- Above both columns lies the pinned band: the latest result of every pinned
+  automation, read in full without a click, one on screen at a time with arrows
+  paging through them in the automations list's own order. It is bare on the
+  workspace like the rest of Home, no panel around it; its header row carries the
+  name, the time and its controls, and folding the band leaves that row alone,
+  remembered across sessions. A result shown there never also sits on the day axis.
 - The window frames the workspace: the nav rail and the frame are `background`;
   the workspace (the page plus the docked chat) is one `surface`, inset 12px
   from the top, bottom and right of the window and `rounded-2xl` on desktop,

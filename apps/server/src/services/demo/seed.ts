@@ -37,14 +37,8 @@ export interface DemoSeedSummary {
   documentErrors: number;
 }
 
-/** The runs attach to the pinned automation (the Home briefing), else to a briefing of our own. */
+/** The runs attach to the real briefing automation, else to a briefing of our own. */
 async function briefingAutomationId(): Promise<string> {
-  const [pinned] = await db
-    .select({ id: schema.automations.id })
-    .from(schema.automations)
-    .where(eq(schema.automations.pinned, true))
-    .limit(1);
-  if (pinned) return pinned.id;
   const [named] = await db
     .select({ id: schema.automations.id })
     .from(schema.automations)

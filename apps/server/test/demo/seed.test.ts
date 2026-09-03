@@ -3,11 +3,11 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type {
   Automation,
-  AutomationRun,
   ChatMessage,
   ConversationListResponse,
   Lead,
   LibraryStatus,
+  PinnedRun,
   Todo,
   WikiPage,
 } from "@marlen/shared";
@@ -63,8 +63,12 @@ async function counts() {
 
 describe("demo seed", () => {
   it("puts the persona in front of every panel", async () => {
-    const pinned = await get<{ run: AutomationRun | null }>("/api/runs/pinned");
-    const report = pinned.run?.cards?.[0]?.card;
+    const pinned = await get<{ items: PinnedRun[] }>("/api/runs/pinned");
+    expect(pinned.items.map((item) => item.automation.name)).toEqual([
+      DEMO.briefingAutomation,
+      DEMO.weeklyAutomation,
+    ]);
+    const report = pinned.items[0]?.run?.cards?.[0]?.card;
     if (report?.kind !== "report") throw new Error("the pinned run carries no report card");
     expect(report.headline).toBe(DEMO.briefingHeadline);
     expect(report.sections.map((section) => section.label)).toContain(DEMO.waitingSection);
@@ -132,6 +136,8 @@ describe("demo seed", () => {
     expect(automations.map((automation) => automation.name)).toEqual(
       expect.arrayContaining([DEMO.briefingAutomation, DEMO.statsAutomation]),
     );
-    expect(automations.filter((automation) => automation.pinned)).toHaveLength(1);
+    expect(automations.filter((automation) => automation.pinned).map((a) => a.name)).toEqual(
+      expect.arrayContaining([DEMO.briefingAutomation, DEMO.weeklyAutomation]),
+    );
   });
 });

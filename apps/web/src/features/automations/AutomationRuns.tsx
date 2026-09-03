@@ -126,7 +126,7 @@ function RunRow({
               muted ? "text-muted-foreground/70" : "text-muted-foreground",
             )}
           >
-            {runIcon(run, false)}
+            {runIcon(run)}
           </span>
           <span
             className={cn(
