@@ -7,6 +7,22 @@ export type ChangelogEntry = {
 /** Hand-maintained release notes, newest first. */
 export const CHANGELOG: ChangelogEntry[] = [
   {
+    version: "0.5.1",
+    date: "2026-09-03",
+    notes: {
+      en: [
+        "Home leads with the pinned automations. Any number can be pinned now, and each one's latest result stands in full above both columns, read without a click. The arrows page from one to the next, the header row carries the name, the time and a button to run it again, and the whole band folds away to that row and stays folded until you open it again.",
+        "A result the band shows is no longer repeated on the day, so nothing is said twice. Pressing its name still opens the whole run with everything it produced, and an automation you pinned that has not produced anything yet keeps its place and says so.",
+        "An automation's settings now carry the pin as a switch beside the other options, so you can set it while you write the automation instead of looking for it in the row's menu.",
+      ],
+      de: [
+        "Die Startseite beginnt mit den angehefteten Automatisierungen. Sie können jetzt beliebig viele anheften, und das neueste Ergebnis jeder einzelnen steht vollständig über beiden Spalten, ohne Klick zu lesen. Die Pfeile blättern von einer zur nächsten, die Kopfzeile trägt den Namen, die Uhrzeit und eine Schaltfläche zum erneuten Ausführen, und das ganze Band klappt auf diese Zeile zusammen und bleibt so, bis Sie es wieder öffnen.",
+        "Was im Band steht, erscheint nicht noch einmal im Tagesverlauf, nichts wird also doppelt gesagt. Ein Klick auf den Namen öffnet weiterhin den ganzen Lauf mit allem, was er hervorgebracht hat, und eine angeheftete Automatisierung, die noch nichts geliefert hat, behält ihren Platz und sagt das.",
+        "In den Einstellungen einer Automatisierung steht das Anheften jetzt als Schalter neben den übrigen Optionen, Sie können es also gleich beim Schreiben festlegen, statt es im Menü der Zeile zu suchen.",
+      ],
+    },
+  },
+  {
     version: "0.5.0",
     date: "2026-09-03",
     notes: {

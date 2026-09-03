@@ -26,6 +26,12 @@ Home / Start
   last visit wear a dot and are counted, with "Mark all seen / Alles gesehen".
 - Two columns (stacked on a narrow window): what waits on the user on the left
   ("Needs you / Braucht Sie"), the assistant's day on the right ("Today / Heute").
+- Above both columns lies the pinned band: the latest result of every pinned automation, read in
+  full without a click. One is on screen at a time, the arrows page through them in the
+  automations list's order, and the count reads "2/3". The header row carries the automation's
+  name, the time of that result and a refresh; pressing the name opens the whole run. The band
+  folds to that row and stays folded until unfolded again. A pinned automation that has never
+  succeeded keeps its header and says so. What the band shows is not repeated on the day axis.
 - "Needs you / Braucht Sie" holds three groups, each label carrying its count from two up:
   "Approvals / Freigaben" (drafts waiting to go out on any channel, "Email to X / E-Mail an X",
   "WhatsApp to X"), "Questions / Fragen" (the to-dos that carry answer options) and
@@ -36,10 +42,10 @@ Home / Start
   date, note, and an automation to start on completion); completed items collapse into a
   "done / erledigt" disclosure.
 - "Today / Heute" is one time axis, a row per event: the time in a gutter, a glyph, one line of
-  gist. Above the "Now / Jetzt" line sit the newest report first, then today's finished runs and
-  the run in flight with its live step; below it what is scheduled next, then tomorrow's runs
-  under their own label. A routine run, one that found nothing, is muted. Pressing a finished run
-  opens it; pressing a scheduled one opens its automation.
+  gist. Above the "Now / Jetzt" line sit today's finished runs and the run in flight with its
+  live step; below it what is scheduled next, then tomorrow's runs under their own label. A
+  routine run, one that found nothing, is muted. Pressing a finished run opens it; pressing a
+  scheduled one opens its automation.
 - A run opens full width in place of Home: its report card (else its result), then the charts,
   leads and attachments it produced, with the trigger, a refresh ("Refresh / Neu erstellen"),
   open-in-chat and a back link to Home. The assistant names the report's sections itself (the
@@ -124,15 +130,15 @@ Automations / Automatisierungen
 - An automation is a named standing instruction plus a schedule: every day, weekdays, chosen
   days, a specific date (runs once), or "On demand only / Nur auf Abruf" (a manual button; a
   cron the picker cannot express is kept as "Custom schedule / Eigener Zeitplan"). Options per
-  automation: pin its result as Home's briefing, show/hide in activity, also run immediately
-  when new mail arrives, and desktop-notify when a run finishes. The page lists rows grouped by
-  what starts them ("By schedule / Nach Zeitplan", "On new mail / Bei neuer E-Mail", "On
-  demand / Auf Abruf"): the name, the instruction's first sentence, and at the right whether it
-  is running, failed last time, or paused, else its schedule. Rows drag to reorder inside a
-  group; the row's "..." menu runs, pins, pauses, edits or deletes; pressing a row opens its
-  settings dialog, which also lists recent runs. That notify option governs "here is the
-  result"; a run that fails, or that leaves a draft waiting for approval, notifies whether or
-  not it is on.
+  automation: pin its result to Home's band (any number may be pinned), show/hide in activity,
+  also run immediately when new mail arrives, and desktop-notify when a run finishes. The page
+  lists rows grouped by what starts them ("By schedule / Nach Zeitplan", "On new mail / Bei
+  neuer E-Mail", "On demand / Auf Abruf"): the name, the instruction's first sentence, and at
+  the right whether it is running, failed last time, or paused, else its schedule. Rows drag to
+  reorder inside a group; the row's "..." menu runs, pins, pauses, edits or deletes; pressing a
+  row opens its settings dialog, which also lists recent runs. That notify option governs "here
+  is the result"; a run that fails, or that leaves a draft waiting for approval, notifies
+  whether or not it is on.
 - A default weekly automation ("Automationsvorschläge") looks for recurring requests in recent
   chats and files each proposal as a to-do on Home; the user has it created in chat.
 - Unattended runs read, search and draft freely, and they send from any account whose "Send /
