@@ -76,7 +76,6 @@
   a.btn.primary { background: var(--accent); color: var(--accent-ink); }
   a.btn.primary .size { opacity: .8; }
   a.btn.primary:hover { filter: brightness(1.06); }
-  a.btn.disabled { pointer-events: none; opacity: .5; }
   a.btn:focus-visible, footer a:focus-visible {
     outline: none; box-shadow: 0 0 0 2px var(--bg), 0 0 0 4px var(--ring);
   }
@@ -106,13 +105,13 @@
   <div class="card">
     <p class="meta" id="meta">Lade aktuelle Version …</p>
     <div class="buttons" id="buttons">
-      <a class="btn disabled" data-os="mac" href="#">
+      <a class="btn" data-os="mac" href="https://github.com/Oktami-Labs/marlen/releases/latest">
         <svg class="glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M16.37 1.43c0 1.14-.42 2.2-1.12 2.99-.76.87-1.99 1.54-3.14 1.45-.14-1.13.42-2.32 1.1-3.08.76-.87 2.07-1.5 3.16-1.36zM19.5 17.02c-.53 1.24-.79 1.79-1.47 2.88-.95 1.53-2.29 3.44-3.95 3.45-1.47.02-1.85-.95-3.85-.94-2 .01-2.42.96-3.89.94-1.66-.01-2.93-1.73-3.88-3.26-2.66-4.29-2.94-9.31-1.3-11.98C2.44 6.75 4.28 5.64 6.01 5.64c1.76 0 2.87.97 4.33.97 1.41 0 2.27-.97 4.31-.97 1.54 0 3.18.84 4.34 2.29-3.81 2.08-3.19 7.52.51 9.09z"/></svg>
-        <span class="label">Download für macOS</span><span class="size">.dmg</span>
+        <span class="label">macOS · Apple Silicon</span><span class="size">.dmg</span>
       </a>
-      <a class="btn disabled" data-os="windows" href="#">
+      <a class="btn" data-os="windows" href="https://github.com/Oktami-Labs/marlen/releases/latest">
         <svg class="glyph" viewBox="0 0 24 24" fill="currentColor" aria-hidden="true"><path d="M3 5.1 10.4 4v7.1H3zM11.6 3.85 21 2.5v8.6h-9.4zM3 12.9h7.4V20L3 18.9zM11.6 12.9H21v8.6l-9.4-1.35z"/></svg>
-        <span class="label">Download für Windows</span><span class="size">.exe</span>
+        <span class="label">Windows · x64</span><span class="size">.exe</span>
       </a>
     </div>
   </div>
@@ -138,11 +137,13 @@
     const meta = document.getElementById("meta");
     let release;
     try {
-      const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`);
+      const res = await fetch(`https://api.github.com/repos/${REPO}/releases/latest`, {
+        signal: AbortSignal.timeout(8000),
+      });
       if (!res.ok) throw new Error(res.status);
       release = await res.json();
     } catch {
-      meta.textContent = "Noch kein Release veröffentlicht. Schau bald wieder vorbei.";
+      meta.textContent = "Versionsdetails sind gerade nicht erreichbar. Die Downloads findest du auf GitHub.";
       return;
     }
     const os = detectOS();
@@ -154,7 +155,6 @@
       const asset = release.assets.find((a) => a.name.endsWith(SUFFIX[key]));
       if (!asset) continue;
       btn.href = asset.browser_download_url;
-      btn.classList.remove("disabled");
       btn.querySelector(".size").textContent = `${SUFFIX[key]} · ${mb(asset.size)}`;
       if (key === os) {
         btn.classList.add("primary");
