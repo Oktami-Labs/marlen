@@ -9,8 +9,9 @@ scheduled automations and a general-purpose chat. Everything runs and stays on
 your computer.
 
 This repo carries the releases, the [marlen.email](https://marlen.email)
-download site (its `gh-pages` branch) and the issue tracker. The source is not
-public.
+download site (its `gh-pages` branch) and the issue tracker. Current source is
+private. Older source snapshots remain available through historic tags; those
+tags and release links are preserved.
 
 ## Download
 
@@ -18,15 +19,11 @@ Grab the macOS or Windows installer from the
 [latest release](https://github.com/Oktami-Labs/marlen/releases/latest), or from
 [marlen.email](https://marlen.email), which always points at it.
 
-Builds are not code-signed yet, which shapes both installing and updating:
-
-- **macOS.** Allow the app once via System Settings → Privacy & Security →
-  "Open Anyway". Updates then have to be **installed by hand**: download the new
-  release and replace the app. macOS refuses to swap an unsigned bundle, so the
-  in-app updater can find a new version but not install it. When that happens,
-  the app says so and links to the release.
-- **Windows.** SmartScreen warns on first run (More info → Run anyway). Updates
-  after that install themselves when a new release is published.
+- **macOS, Apple Silicon.** Current releases are signed and notarized. If you
+  use an older unsigned build, install the latest download once to move onto
+  signed builds and enable in-app updates.
+- **Windows, x64.** Builds are unsigned and may show SmartScreen on first run.
+  Updates download in the app after a new release is published.
 
 ## Problems and requests
 
